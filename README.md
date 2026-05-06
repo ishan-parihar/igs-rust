@@ -1,5 +1,9 @@
 # IGS MCP Server (Rust)
 
+[![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
+[![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
+[![Crates.io](https://img.shields.io/crates/v/rmcp?label=rmcp)](https://crates.io/crates/rmcp)
+
 Intelligence Gathering System - Rust implementation using [rmcp](https://crates.io/crates/rmcp) (modelcontextprotocol/rust-sdk) and [TOON](https://lib.rs/crates/toon-format) for token-efficient AI agent output.
 
 ## Overview
