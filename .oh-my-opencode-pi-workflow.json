@@ -1,8 +1,0 @@
-{
-  "updatedAt": 1778094246882,
-  "uncheckedTodos": [],
-  "lastAgentSummary": "Found 11 scraping sources. Let me test all of them with the Rust server: **11/11 scraping sources passed** (8 with items, 3 empty but no error). Let me investigate the 3 empty ones: The 3 empty sources have custom selectors not covered by generic fallbacks. Let me fix the parser: Now let me also update `parse_by_source` to handle `list_url` from parser_config, and add JSON array parsing for sources like `nse_circulars`: Let me add the missing specialized parser functions: The `scraper::Html` in `parse_newslaundry` is non-Send across an `await`. Let me fix by isolating the scraping: Now let me rebuild and re-test all scraping sources: 11/11 scraping sources pass with 0 errors. Let me investigate the 4 empty ones to fix them: Now I see the issue. The TS parsers use very specific structures. Let me add proper specialized implementations: 0 errors! Let me add the OFAC specialized parser and fix newslaundry: 0 errors! Let me build and test all scraping sources: The main issue is clear: **article14** and **mca_notifications** are `active: False` in the config (intentionally disabled). Let me fix the logging to help debug the remaining 2, and verify everything: The code is broken. Let me …",
-  "recentBackgroundTaskIds": [
-    "pantheon_lkg7qyjn"
-  ]
-}
