@@ -143,3 +143,7 @@ Built using `rmcp` for type-safe tool definitions, the server is optimized for e
 ## License
 
 MIT
+
+---
+
+Developed by [Ishan Parihar](https://github.com/ishanparihar) — If you find this useful, [consider supporting](https://rzp.io/rzp/ishan-parihar)
