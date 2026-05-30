@@ -1,199 +1,351 @@
-# IGS MCP Server (Rust)
+# IGS — Intelligence Gathering System
 
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
 
-**Intelligence Gathering System** — Rust MCP server with 30 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser integration, and a CLI.
-
-## Overview
-
-IGS monitors intelligence from 411 curated sources across global news, geopolitics, tech, research, and regional topics. It provides both an MCP server (for AI agents) and a CLI (for direct use).
+MCP server + CLI for intelligence gathering. 42 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
 
 | Metric | Value |
 |--------|-------|
-| Tools | 30 (pools, sources, news, reddit, research, web, insights, intelligence) |
+| Tools | 42 (30 core + 12 Lightpanda browser automation) |
 | Sources | 411 across 47 countries |
 | Pools | 18 (geopolitics, tech, India, defense, health, etc.) |
-| Parsers | 7 (rss, ofac, who_dons, newslaundry, semantic_scholar, generic_html, auto-detect) |
-| Binary | ~7 MB (release-stripped), ~5 MB RSS idle |
-| Output | TOON (default, ~40-60% fewer tokens) or JSON |
+| Binary | Single `igs` binary (~19 MB musl static) |
+| Output | TOON (default, ~40% fewer tokens) or JSON |
 
-## The Problem
+---
 
-Raw intelligence gathering hits a "token wall." Monitoring hundreds of global sources produces massive unstructured data that exhausts LLM context windows. Naive text extraction destroys structural hierarchy, while standard JSON adds significant token overhead. IGS solves this by delivering structured, token-efficient intelligence to AI agents.
+## Installation
 
-## Features
-
-| Domain | Tools | What it does |
-|--------|-------|-------------|
-| **Pools** | `pools.list`, `pools.upsert`, `pools.delete` | Manage source groupings (18 pools) |
-| **Sources** | `sources.list/upsert/delete`, `sources.autodiscover`, `sources.enableGenericScraper` | CRUD + auto-discovery for 411 sources |
-| **Geo** | `sources.countries`, `sources.cities`, `sources.domains` | List countries/cities/domains with source counts |
-| **Parsers** | `parsers.list` | List available parser keys (rss, ofac, who_dons, etc.) |
-| **News** | `news.fetch`, `news.testSource`, `news.enrich` | Fetch news with pool/country/city/domain/keyword/time filtering. Offline NLP enrichment (topics, entities, sentiment, summary). |
-| **Reddit** | `reddit.search` | Search Reddit posts via JSON API |
-| **Research** | `research.search`, `research.paper`, `research.download` | arXiv + Semantic Scholar search, paper details, PDF download |
-| **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | Tavily/Firecrawl search, HTML→markdown scraping, Lightpanda BFS crawl, sitemap discovery |
-| **Insights** | `insights.findConnections`, `insights.findAllConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | Cross-article entity analysis with SQLite persistence |
-| **Intelligence** | `intelligence.collect` | Full pipeline: fetch→enrich→index in one call |
-| **Lightpanda Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` | Full browser automation via Lightpanda MCP sub-server. Persistent session, JS execution, form filling, navigation. |
-
-### Token-Efficient Output (TOON)
-
-Bulk data tools default to [TOON](https://toonformat.dev) output — a compact alternative to JSON that reduces token usage by ~40-60%. JSON available via `format: "json"` parameter.
-
-### Lightpanda Headless Browser
-
-IGS has two levels of Lightpanda integration:
-
-**Level 1 — CLI subprocess** (`web.crawl`, `web.scrape`): Fetches pages via `lightpanda fetch --dump markdown`. Stateless, single-page.
-
-**Level 2 — MCP sub-server** (`lightpanda.*` tools): Spawns `lightpanda mcp` as a persistent subprocess. Stateful session — navigate, interact, extract across multiple calls. Supports JavaScript execution, form filling, clicking, scrolling, structured data extraction.
-
-The binary auto-downloads to `~/.config/igs-mcp/bin/` and checks for updates daily.
-
-### Intelligence Pipeline
-
-`intelligence.collect` chains `news.fetch` → `news.enrich` → `insights.indexArticles` in one call. After indexing, use `insights.findConnections` or `insights.trendingEntities` for cross-article analysis.
-
-## Quick Start
-
-### Prerequisites
-
-- Rust 1.75+
-- (Optional) Tavily or Firecrawl API keys for web search
-- (Optional) Lightpanda enabled for JS-rendered crawling
-
-### Build & Run
+### Option 1: Download Release
 
 ```bash
-### MCP Server
-cargo build --release
-./target/release/igs mcp
+# Download latest release
+curl -L -o igs.tar.gz https://github.com/ishan-parihar/igs-rust-mcp/releases/latest/download/igs-v0.3.0-x86_64-linux-musl.tar.gz
 
-# CLI
+# Extract
+tar -xzf igs.tar.gz
+
+# Move to PATH
+sudo mv igs /usr/local/bin/
+sudo ln -sf /usr/local/bin/igs /usr/local/bin/igs-mcp  # backward compat
+
+# Verify
+igs --version
+igs status
+```
+
+### Option 2: Install Script
+
+```bash
+curl -sSL https://raw.githubusercontent.com/ishan-parihar/igs-rust-mcp/master/scripts/install.sh | bash
+```
+
+### Option 3: Build from Source
+
+```bash
+git clone https://github.com/ishan-parihar/igs-rust-mcp.git
+cd igs-rust-mcp
+cargo build --release
 ./target/release/igs status
 ```
 
-### CLI Usage
+---
+
+## Quick Start
+
+### As MCP Server (for AI agents)
 
 ```bash
-igs status                                          # System status
-igs pools list                                      # List all pools
-igs sources list --pool GLOBAL_TECH_CYBER           # List sources in pool
-igs sources countries                               # Countries with source counts
-igs news fetch --pools GLOBAL_TECH_CYBER --limit 10 # Fetch news
-igs news test --id reuters                          # Test a source
-igs reddit search --query "AI safety"               # Reddit search
-igs research search --query "transformer"           # Academic papers
-igs web search --query "rust async"                 # Web search (Tavily)
-igs web scrape --url https://example.com            # Scrape URL to markdown
-igs web crawl --url https://example.com --max-depth 2  # BFS crawl (Lightpanda)
-igs web map --url https://example.com               # Sitemap discovery
-igs parsers                                         # List parser keys
-
-# Output format
-igs --format json news fetch --pools GLOBAL_TECH_CYBER --limit 5  # JSON output
-igs --format toon news fetch --pools GLOBAL_TECH_CYBER --limit 5  # TOON output (default)
+# Start the MCP server on stdio
+igs mcp
 ```
 
-### MCP Configuration (Claude Desktop / Cursor)
+Configure in **Claude Desktop** (`~/.config/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "igs": {
-      "command": "/absolute/path/to/igs-rust-mcp/target/release/igs",
+      "command": "igs",
       "args": ["mcp"]
     }
   }
 }
 ```
 
+Configure in **Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "igs": {
+      "command": "igs",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### As CLI
+
+```bash
+# System status
+igs status
+
+# Fetch news
+igs news fetch --pools GLOBAL_TECH_CYBER --limit 10
+
+# Search Reddit
+igs reddit search --query "AI safety"
+
+# Search academic papers
+igs research search --query "transformer architecture"
+
+# Web search (requires Tavily API key)
+igs web search --query "rust async runtime"
+
+# Scrape a URL to markdown
+igs web scrape --url https://example.com
+
+# Crawl a website (requires Lightpanda enabled)
+igs web crawl --url https://example.com --max-depth 2
+
+# Browser automation (requires Lightpanda enabled)
+igs browser goto --url https://example.com
+igs browser markdown
+igs browser links
+
+# List available pools, sources, parsers
+igs pools list
+igs sources list --pool GLOBAL_TECH_CYBER
+igs sources countries
+igs parsers
+```
+
+### Output Format
+
+All bulk data tools default to [TOON](https://toonformat.dev) (token-efficient). Use `--format json` for standard JSON:
+
+```bash
+igs --format json news fetch --pools GLOBAL_TECH_CYBER --limit 5
+igs --format toon news fetch --pools GLOBAL_TECH_CYBER --limit 5
+```
+
+---
+
+## Configuration
+
+### Config Directory
+
+IGS auto-creates `~/.config/igs-mcp/` on first run with default config files:
+
+```
+~/.config/igs-mcp/
+├── settings.yml      # Main configuration
+├── pools.yml         # 18 pool definitions
+├── sources.yml       # 411 source definitions
+├── countries.yml     # 47 country metadata
+├── insights.db       # SQLite database (auto-created)
+├── cache/            # Feed cache (auto-managed)
+└── bin/              # Lightpanda binary (auto-downloaded)
+```
+
+Override with: `export IGS_CONFIG_DIR=/path/to/config`
+
+### settings.yml
+
+```yaml
+# HTTP client
+http:
+  userAgent: IGS-MCP/0.1
+  timeoutMs: 15000
+  retries: 2
+  concurrency: 6
+  perHost: 2
+
+# Feed caching
+cache:
+  enabled: true
+  ttlMs: 1800000        # 30 minutes
+  queryTtlMs: 600000    # 10 minutes
+
+# Web search (requires API key)
+tavily:
+  enabled: false
+  apiKey: ${TAVILY_API_KEY}
+
+firecrawl:
+  enabled: false
+  apiKey: ${FIRECRAWL_API_KEY}
+
+# Lightpanda headless browser (auto-downloads binary)
+lightpanda:
+  enabled: false
+  auto_update: true
+  obey_robots: true
+  timeout_ms: 30000
+  max_concurrent: 10
+
+# NLP enrichment (offline, no API calls)
+nlp:
+  enabled: true
+  max_topics: 8
+  max_entities: 20
+  dedup_threshold: 0.3
+
+# Intelligence pipeline
+pipeline:
+  default_pool: GLOBAL_TECH_CYBER
+  default_limit: 50
+  persist_insights: true
+
+# Output format
+output:
+  default_format: toon  # "toon" or "json"
+```
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IGS_CONFIG_DIR` | `~/.config/igs-mcp/` | Config directory override |
-| `RUST_LOG` | `info` | Log level (e.g., `debug`, `trace`) |
+| `IGS_CONFIG_DIR` | `~/.config/igs-mcp/` | Config directory |
+| `RUST_LOG` | `info` | Log level (`debug`, `trace`) |
+| `TAVILY_API_KEY` | — | Tavily web search API key |
+| `FIRECRAWL_API_KEY` | — | Firecrawl API key |
 
-### Config Files
+---
 
-Auto-bootstrapped from `./config/` to `~/.config/igs-mcp/` on first run:
+## Tools
 
-| File | Purpose |
-|------|---------|
-| `settings.yml` | HTTP, cache, NLP, pipeline, output, Tavily/Firecrawl, Lightpanda settings |
-| `pools.yml` | 18 pool definitions |
-| `sources.yml` | 411 source definitions |
-| `countries.yml` | 47 country metadata |
+### Core Tools (30)
 
-### Settings Sections
+| Domain | Tools | Description |
+|--------|-------|-------------|
+| **Pools** | `pools.list`, `pools.upsert`, `pools.delete` | Manage source groupings |
+| **Sources** | `sources.list/upsert/delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains` | CRUD + auto-discovery + geo |
+| **Parsers** | `parsers.list` | List available parser keys |
+| **News** | `news.fetch`, `news.testSource`, `news.enrich` | Fetch, test, NLP enrichment |
+| **Reddit** | `reddit.search` | Search Reddit posts |
+| **Research** | `research.search`, `research.paper`, `research.download` | arXiv + Semantic Scholar |
+| **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | Search, scrape, crawl, sitemap |
+| **Insights** | `insights.findConnections`, `insights.findAllConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | Cross-article analysis |
+| **Intelligence** | `intelligence.collect` | Full pipeline: fetch→enrich→index |
 
-`settings.yml` has 9 configuration sections:
+### Lightpanda Browser Tools (12)
 
-| Section | Key settings |
-|---------|-------------|
-| `http` | userAgent, timeoutMs, retries, concurrency, perHost |
-| `cache` | enabled, dir, ttlMs, queryTtlMs |
-| `time` | timezone |
-| `tavily` | enabled, apiKey, searchDepth |
-| `firecrawl` | enabled, apiKey |
-| `lightpanda` | enabled, auto_update, obey_robots, timeout_ms, proxy, max_concurrent |
-| `nlp` | enabled, max_topics, max_entities, dedup_threshold |
-| `pipeline` | default_pool, default_limit, persist_insights |
-| `output` | default_format (toon/json), toon_indent |
+| Tool | Description |
+|------|-------------|
+| `lightpanda.goto` | Navigate to URL (JS rendering) |
+| `lightpanda.markdown` | Get page as markdown |
+| `lightpanda.links` | Extract links |
+| `lightpanda.evaluate` | Execute JavaScript |
+| `lightpanda.semantic_tree` | AI-friendly DOM tree |
+| `lightpanda.structuredData` | Extract JSON-LD, OpenGraph |
+| `lightpanda.detectForms` | Find forms |
+| `lightpanda.click` | Click element |
+| `lightpanda.fill` | Fill form field |
+| `lightpanda.scroll` | Scroll page |
+| `lightpanda.waitForSelector` | Wait for element |
+| `lightpanda.interactiveElements` | Find clickable items |
+
+### CLI Browser Commands
+
+```bash
+igs browser goto --url https://example.com
+igs browser markdown
+igs browser links
+igs browser evaluate --expression "document.title"
+igs browser semantic-tree --include-text
+igs browser structured-data
+igs browser detect-forms
+igs browser click --selector "button.submit"
+igs browser fill --selector "input[name=email]" --value "user@example.com"
+igs browser scroll --direction down --pixels 500
+igs browser wait-for-selector --selector ".content" --timeout-ms 5000
+igs browser interactive-elements
+```
+
+---
+
+## Lightpanda Integration
+
+IGS uses [Lightpanda](https://github.com/lightpanda-io/browser) in two ways:
+
+### Level 1: CLI Subprocess (web.scrape, web.crawl)
+
+Stateless — fetches a single page via `lightpanda fetch --dump markdown`. Used by `web.scrape` with `provider: "lightpanda"` and `web.crawl`.
+
+```bash
+# Scrape with JS rendering
+igs web scrape --url https://spa-site.com --provider lightpanda
+
+# Crawl with BFS
+igs web crawl --url https://example.com --max-depth 2 --max-pages 20
+```
+
+### Level 2: MCP Sub-Server (lightpanda.* tools)
+
+Stateful — spawns `lightpanda mcp` as a persistent subprocess. The page stays loaded between calls. Supports JavaScript execution, form interaction, navigation.
+
+```bash
+# Navigate and extract
+igs browser goto --url https://example.com
+igs browser markdown
+igs browser evaluate --expression "document.querySelectorAll('h1').length"
+
+# Form interaction
+igs browser goto --url https://example.com/login
+igs browser detect-forms
+igs browser fill --selector "input[name=username]" --value "admin"
+igs browser click --selector "button[type=submit]" --wait-for-navigation true
+igs browser markdown
+```
+
+The Lightpanda binary auto-downloads to `~/.config/igs-mcp/bin/` and checks for updates daily.
+
+---
 
 ## Architecture
 
 ```
 src/
-├── main.rs            MCP server entry point (rmcp stdio transport)
-├── cli.rs             CLI binary (clap-based subcommands)
-├── lib.rs             Module declarations
-├── server.rs          IgsMcpServer, tool router, InsightStorage (SQLite-backed)
-├── config.rs          YAML config loading/saving
-├── types.rs           Shared types (Settings, NewsItem, ResearchPaper, etc.)
-├── http.rs            HttpClient with retry, exponential backoff, per-host concurrency
-├── cache.rs           Dual-tier caching (feed cache + query cache)
-├── parsers.rs         7 parser types + keyword/time filtering + dedup
-├── lightpanda.rs      Lightpanda binary manager (daily version check, auto-download)
-├── persistence.rs     SQLite persistence for InsightStorage
+├── cli.rs               Single binary entry point (clap + MCP server)
+├── lib.rs               Module declarations
+├── server.rs            IgsMcpServer, tool router, InsightStorage (SQLite)
+├── config.rs            YAML config loading
+├── types.rs             Shared types (Settings, NewsItem, etc.)
+├── http.rs              HttpClient with retry, backoff, per-host concurrency
+├── cache.rs             Dual-tier caching
+├── parsers.rs           7 parser types + filtering + dedup
+├── lightpanda.rs        Lightpanda binary manager
+├── lightpanda_mcp.rs    Lightpanda MCP client (JSON-RPC 2.0)
+├── persistence.rs       SQLite persistence
 └── tools/
-    ├── mod.rs         Module re-exports
-    ├── types.rs       All tool I/O types (42 structs, all JsonSchema)
-    ├── helpers.rs     urlencoding, NLP (topics/entities/sentiment), toon_encode
-    ├── pools.rs       Pool CRUD
-    ├── sources.rs     Source CRUD + autodiscover + geo
-    ├── parsers.rs     Parser listing
-    ├── news.rs        News fetch + enrichment
-    ├── reddit.rs      Reddit search
-    ├── research.rs    Academic paper search + details + download
-    ├── web.rs         Web search/scrape/crawl/map
-    ├── insights.rs    Cross-article entity analysis
-    └── intelligence.rs Pipeline: fetch→enrich→index
+    ├── types.rs         All tool I/O types
+    ├── helpers.rs       NLP, urlencoding, toon_encode
+    ├── pools.rs         Pool CRUD
+    ├── sources.rs       Source CRUD + autodiscover + geo
+    ├── parsers.rs       Parser listing
+    ├── news.rs          News fetch + enrichment
+    ├── reddit.rs        Reddit search
+    ├── research.rs      Academic papers
+    ├── web.rs           Web search/scrape/crawl/map
+    ├── insights.rs      Cross-article analysis
+    ├── intelligence.rs  Pipeline
+    └── lp_mcp.rs        Lightpanda MCP tool wrappers
 ```
+
+---
 
 ## Docker
 
 ```bash
-docker build -t igs-rust-mcp .
-docker run -v ~/.config/igs-mcp:/root/.config/igs-mcp igs-rust-mcp
+docker build -t igs .
+docker run -v ~/.config/igs-mcp:/root/.config/igs -e IGS_CONFIG_DIR=/root/.config/igs igs mcp
 ```
 
-Multi-stage: `rust:1.85-slim-bookworm` builder → `debian:bookworm-slim` runtime. Final image ~15–20 MB.
-
-## Size & Performance
-
-| Metric | Value |
-|--------|-------|
-| Binary | ~14 MB (debug), ~7 MB (release-stripped) |
-| RSS (idle) | ~5 MB |
-| Docker image | ~15–20 MB |
-| Sources | 411 across 47 countries |
-| Pools | 18 |
-| Tools | 30 |
-| Startup | < 100 ms |
+---
 
 ## License
 
