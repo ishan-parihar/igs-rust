@@ -1,15 +1,17 @@
 use clap::{Parser, Subcommand};
+use igs_rust_mcp::server::IgsMcpServer;
 use igs_rust_mcp::tools::{news, pools, sources, reddit, research, web, helpers::toon_encode, parsers as parsers_tools};
 use igs_rust_mcp::tools::types::*;
+use rmcp::ServiceExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "igs", version, about = "IGS — Intelligence Gathering System CLI")]
+#[command(name = "igs", version, about = "IGS — Intelligence Gathering System")]
 struct Cli {
     /// Output format: "toon" (default) or "json"
-    #[arg(long, default_value = "toon")]
+    #[arg(long, default_value = "toon", global = true)]
     format: String,
 
     #[command(subcommand)]
@@ -18,6 +20,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Start MCP server on stdio (for Claude Desktop, Cursor, AI agents)
+    Mcp,
     /// Pool management
     Pools {
         #[command(subcommand)]
@@ -342,6 +346,16 @@ async fn main() -> anyhow::Result<()> {
     let fmt = &cli.format;
 
     match cli.command {
+        Commands::Mcp => {
+            // MCP server mode — takes over stdin/stdout, no CLI output
+            let server = IgsMcpServer::new();
+            let service = server.serve(rmcp::transport::stdio()).await.inspect_err(|e| {
+                tracing::error!("MCP server error: {:?}", e);
+            })?;
+            service.waiting().await?;
+            return Ok(());
+        }
+
         Commands::Status => {
             let settings = igs_rust_mcp::config::load_settings().await?;
             println!("IGS Intelligence Gathering System");
