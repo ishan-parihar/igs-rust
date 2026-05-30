@@ -1,36 +1,95 @@
+# IGS MCP Server — Settings Configuration
+# All values shown are defaults unless noted otherwise.
+# Environment variable substitution: ${VAR_NAME} is replaced at runtime.
+
+# ─── HTTP Client ──────────────────────────────────────────────
 http:
   userAgent: IGS-MCP/0.1 (+https://example.local)
-  timeoutMs: 15000
-  retries: 2
-  backoffBaseMs: 500
-  backoffFactor: 2.0
-  concurrency: 6
-  perHost: 2
+  timeoutMs: 15000           # Per-request timeout in ms
+  retries: 2                 # Number of retries on failure
+  backoffBaseMs: 500         # Base delay for exponential backoff
+  backoffFactor: 2.0         # Multiplier for backoff (500, 1000, 2000, ...)
+  concurrency: 6             # Max concurrent HTTP requests globally
+  perHost: 2                 # Max concurrent requests per host
 
+# ─── Caching ──────────────────────────────────────────────────
 cache:
   enabled: true
-  dir: cache
-  honorEtags: true
-  ttlMs: 1800000   # 30 minutes TTL fallback when no validators
-  queryTtlMs: 600000  # 10 minutes query cache for identical timeframe requests
-  maxItemsPerSource: 300
+  dir: cache                 # Relative to config dir, or absolute path
+  honorEtags: true           # Use ETag/Last-Modified conditional requests
+  ttlMs: 1800000             # Feed cache TTL: 30 minutes
+  queryTtlMs: 600000         # Query cache TTL: 10 minutes
+  maxItemsPerSource: 300     # Max items stored per source
 
+# ─── Time ─────────────────────────────────────────────────────
 time:
-  timezone: local  # use system local timezone for input/output
+  timezone: local            # "local" or IANA tz like "America/New_York"
 
+# ─── Web Search Providers ─────────────────────────────────────
+
+# Tavily — AI-powered web search
+# Get API key: https://tavily.com
 tavily:
-  enabled: false  # Set to true and provide API key to enable realtime web search
-  apiKey: ${TAVILY_API_KEY}  # Get API key from https://tavily.com
-  searchDepth: basic  # basic, advanced, fast, or ultra-fast
-  defaultTopic: general  # general, news, or finance
+  enabled: false
+  apiKey: ${TAVILY_API_KEY}  # Environment variable reference
+  searchDepth: basic         # basic, advanced, fast, ultra-fast
+  defaultTopic: general      # general, news, finance
   timeoutMs: 30000
 
+# Firecrawl — Web scraping and crawling API
+# Get API key: https://firecrawl.dev
 firecrawl:
-  enabled: false  # Set to true and provide API key to enable web scraping/crawling
-  apiKey: ${FIRECRAWL_API_KEY}  # Get API key from https://firecrawl.dev
+  enabled: false
+  apiKey: ${FIRECRAWL_API_KEY}
   timeoutMs: 60000
   defaultFormats:
     - markdown
     - html
     - screenshot
     - links
+
+# ─── Lightpanda Headless Browser ──────────────────────────────
+# Binary auto-downloads to ~/.config/igs-mcp/bin/lightpanda
+# Updated once per day when auto_update is true
+lightpanda:
+  enabled: true              # Enable Lightpanda for web.crawl and web.scrape(provider=lightpanda)
+  auto_update: true          # Check for updates once per day
+  prefer_nightly: false      # Use nightly builds instead of stable releases
+  obey_robots: true          # Respect robots.txt when crawling
+  timeout_ms: 30000          # --wait-ms: how long to wait for page to settle
+  # proxy: "http://proxy:8080"           # HTTP proxy URL
+  # proxy_bearer_token: "token"          # Bearer token for proxy auth
+  # user_agent_suffix: "IGS-crawler"     # Suffix appended to Lightpanda's User-Agent
+  max_concurrent: 10         # --http-max-concurrent: max parallel HTTP requests during page load
+  max_response_size: 0       # --http-max-response-size: 0 = no limit
+  insecure_tls: false        # --insecure-disable-tls-host-verification
+
+# ─── NLP Enrichment ──────────────────────────────────────────
+# All NLP is offline (no external API calls)
+nlp:
+  enabled: true
+  max_topics: 8              # Max topics to extract per article
+  max_entities: 20           # Max entities to extract per article
+  min_entity_length: 2       # Min character length for entity detection
+  dedup_threshold: 0.3       # Jaccard similarity threshold for deduplication
+  # stop_words_language: en  # Future: multi-language support
+
+# ─── Intelligence Pipeline ───────────────────────────────────
+pipeline:
+  default_pool: GLOBAL_TECH_CYBER  # Default pool for intelligence.collect
+  default_limit: 50                # Default max items to fetch
+  auto_index: true                 # Automatically index articles after enrich
+  persist_insights: true           # Persist insight engine to disk (SQLite)
+
+# ─── Monitoring (Future) ─────────────────────────────────────
+# Scheduled polling and alerts — not yet implemented
+# monitoring:
+#   enabled: false
+#   poll_interval_ms: 300000   # 5 minutes
+#   alert_threshold: 5         # Min entity mentions to trigger alert
+
+# ─── Output Format ────────────────────────────────────────────
+output:
+  default_format: toon       # "toon" (token-efficient) or "json"
+  toon_indent: 2             # TOON indentation spaces
+  max_items_per_response: 500  # Truncate results beyond this

@@ -163,14 +163,14 @@ else:
 
 # ── 2. Sources ──────────────────────────────────────────────
 print("\n── Sources ──")
-r = call(proc, "sources.list", rid=4)
+r = call(proc, "sources.list", {"format": "json"}, rid=4)
 if r and "sources" in r:
     n = len(r["sources"])
     ok(f"sources.list ({n} sources)", "")
 else:
     fail("sources.list")
 
-r = call(proc, "sources.list", {"active_only": True}, 5)
+r = call(proc, "sources.list", {"active_only": True, "format": "json"}, 5)
 if r and "sources" in r:
     n2 = len(r["sources"])
     ok(f"sources.list(active={n2})", "")
@@ -197,17 +197,17 @@ else:
 
 # ── 5. Geo ──────────────────────────────────────────────────
 print("\n── Geo ──")
-r = call(proc, "sources.countries", rid=8)
+r = call(proc, "sources.countries", {"format": "json"}, rid=8)
 if r and "countries" in r:
     cc = len(r["countries"])
     check(cc > 0, f"sources.countries ({cc})")
 else:
     fail("sources.countries")
 
-r = call(proc, "sources.cities", rid=9)
+r = call(proc, "sources.cities", {"format": "json"}, rid=9)
 check(r and "cities" in r, "sources.cities")
 
-r = call(proc, "sources.domains", rid=10)
+r = call(proc, "sources.domains", {"format": "json"}, rid=10)
 if r and "domains" in r:
     dc = len(r["domains"])
     check(dc > 0, f"sources.domains ({dc})")
@@ -217,14 +217,14 @@ else:
 # ── 6. News ─────────────────────────────────────────────────
 print("\n── News ──")
 r = call(
-    proc, "sources.list", {"active_only": True, "pools": ["GLOBAL_TECH_CYBER"]}, 11
+    proc, "sources.list", {"active_only": True, "pools": ["GLOBAL_TECH_CYBER"], "format": "json"}, 11
 )
 test_src = None
 if r and "sources" in r and r["sources"]:
     test_src = r["sources"][0]["id"]
     print(f"        first TECH source: {test_src}")
 if test_src:
-    r = call(proc, "news.testSource", {"id": test_src, "cache_mode": "bypass"}, 12)
+    r = call(proc, "news.testSource", {"id": test_src, "cache_mode": "bypass", "format": "json"}, 12)
     if r and "items" in r:
         check(r.get("count", 0) > 0, f"news.testSource({test_src},{r['count']})")
     else:
@@ -235,7 +235,7 @@ else:
 r = call(
     proc,
     "news.fetch",
-    {"pools": ["GLOBAL_TECH_CYBER"], "limit": 3, "cache_mode": "bypass"},
+    {"pools": ["GLOBAL_TECH_CYBER"], "limit": 3, "cache_mode": "bypass", "format": "json"},
     13,
 )
 if r and "items" in r:
@@ -258,7 +258,8 @@ r = call(
                 "pool_id": "tech",
                 "content_snippet": "Apple announced a breakthrough AI processor",
             }
-        ]
+        ],
+        "format": "json",
     },
     14,
 )
@@ -273,7 +274,7 @@ else:
 
 # ── 7. Reddit ───────────────────────────────────────────────
 print("\n── Reddit ──")
-r = call(proc, "reddit.search", {"query": "rust programming", "limit": 3}, 15)
+r = call(proc, "reddit.search", {"query": "rust programming", "limit": 3, "format": "json"}, 15)
 if r and "posts" in r:
     check(r.get("count", 0) > 0, f"reddit.search({r['count']})")
 else:
@@ -281,7 +282,7 @@ else:
 
 # ── 8. Research ─────────────────────────────────────────────
 print("\n── Research ──")
-r = call(proc, "research.search", {"query": "machine learning", "limit": 2}, 15)
+r = call(proc, "research.search", {"query": "machine learning", "limit": 2, "format": "json"}, 15)
 if r and "papers" in r:
     check(r.get("count", 0) > 0, f"research.search({r['count']})")
 else:
@@ -289,20 +290,20 @@ else:
 
 # ── 9. Web ──────────────────────────────────────────────────
 print("\n── Web ──")
-r = call(proc, "web.scrape", {"url": "https://example.com"}, 16)
+r = call(proc, "web.scrape", {"url": "https://example.com", "format": "json"}, 16)
 if r and r.get("success"):
     ok("web.scrape", "")
 else:
     fail("web.scrape")
 
-r = call(proc, "web.map", {"url": "https://example.com"}, 17)
+r = call(proc, "web.map", {"url": "https://example.com", "format": "json"}, 17)
 if r and r.get("success"):
     ok("web.map", "")
     show(r, ["count"])
 else:
     fail("web.map")
 
-r = call(proc, "web.search", {"query": "test"}, 18)
+r = call(proc, "web.search", {"query": "test", "format": "json"}, 18)
 if r is not None:
     if "_error" not in r:
         ok("web.search", "")
@@ -357,13 +358,13 @@ if r and r.get("count", 0) > 0:
 else:
     fail("insights.findConnections")
 
-r = call(proc, "insights.findAllConnections", {"min_domains": 1}, 21)
+r = call(proc, "insights.findAllConnections", {"min_domains": 1, "format": "json"}, 21)
 if r and r.get("total_found", 0) > 0:
     ok("insights.findAllConnections", "")
 else:
     fail("insights.findAllConnections")
 
-r = call(proc, "insights.trendingEntities", {"min_current_mentions": 1}, 22)
+r = call(proc, "insights.trendingEntities", {"min_current_mentions": 1, "format": "json"}, 22)
 if r and "trending" in r:
     ok("insights.trendingEntities", "")
 else:
@@ -386,6 +387,18 @@ if r and r["stats"]["total_articles"] == 0:
     ok("insights.getStats(cleared)", "")
 else:
     fail("insights.getStats(cleared)")
+
+# Test intelligence.collect pipeline
+r = call(
+    proc,
+    "intelligence.collect",
+    {"pools": ["GLOBAL_TECH_CYBER"], "limit": 3, "cache_mode": "bypass", "skip_enrich": True, "skip_index": True, "format": "json"},
+    rid=26,
+)
+if r and r.get("fetched", 0) > 0:
+    ok("intelligence.collect", f"{r['fetched']} fetched")
+else:
+    fail("intelligence.collect")
 
 # Cleanup
 proc.stdin.close()
