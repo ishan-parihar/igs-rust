@@ -2,51 +2,103 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
-[![Crates.io](https://img.shields.io/crates/v/rmcp?label=rmcp)](https://crates.io/crates/rmcp)
 
-Intelligence Gathering System - Rust implementation using [rmcp](https://crates.io/crates/rmcp) (modelcontextprotocol/rust-sdk) and [TOON](https://lib.rs/crates/toon-format) for token-efficient AI agent output.
+**Intelligence Gathering System** — Rust MCP server with 30 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser integration, and a CLI.
 
 ## Overview
 
-IGS MCP monitors intelligence from 223+ curated RSS/HTTP sources across global news, geopolitics, tech, research, and regional topics. Built in Rust for performance and low memory footprint (~14 MB binary, ~5 MB RSS).
+IGS monitors intelligence from 411 curated sources across global news, geopolitics, tech, research, and regional topics. It provides both an MCP server (for AI agents) and a CLI (for direct use).
+
+| Metric | Value |
+|--------|-------|
+| Tools | 30 (pools, sources, news, reddit, research, web, insights, intelligence) |
+| Sources | 411 across 47 countries |
+| Pools | 18 (geopolitics, tech, India, defense, health, etc.) |
+| Parsers | 7 (rss, ofac, who_dons, newslaundry, semantic_scholar, generic_html, auto-detect) |
+| Binary | ~7 MB (release-stripped), ~5 MB RSS idle |
+| Output | TOON (default, ~40-60% fewer tokens) or JSON |
 
 ## The Problem
-Raw intelligence gathering often hits a "token wall." When monitoring hundreds of global sources, the sheer volume of unstructured data—especially from PDFs and verbose JSON APIs—rapidly exhausts the LLM's context window. Naive text extraction destroys structural hierarchy (like tables and headers), while standard JSON wrappers add significant token overhead without adding semantic value. The challenge was to build a system that could ingest massive, fragmented datasets and deliver them to an AI agent in a format that is both structurally rich and token-minimal.
 
+Raw intelligence gathering hits a "token wall." Monitoring hundreds of global sources produces massive unstructured data that exhausts LLM context windows. Naive text extraction destroys structural hierarchy, while standard JSON adds significant token overhead. IGS solves this by delivering structured, token-efficient intelligence to AI agents.
 
-### Features
+## Features
 
-| Domain       | Tools                                                                                | What it does                                                                                                                                      |
-| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **News**     | `news.fetch`, `news.testSource`, `news.enrich`                                       | Fetch from 200+ RSS/HTML/JSON sources with pool/country/city/domain/keyword/time filtering. Offline NLP enrichment (topics, entities, sentiment). |
-| **Pools**    | `pools.list`, `pools.upsert`, `pools.delete`                                         | Manage monitoring pool categories                                                                                                                 |
-| **Sources**  | `sources.list/upsert/delete`, `sources.autodiscover`, `sources.enableGenericScraper` | Manage RSS/HTTP sources with autodiscovery                                                                                                        |
-| **Geo**      | `sources.countries`, `sources.cities`, `sources.domains`                             | List countries/cities/domains with available source counts                                                                                        |
-| **Parsers**  | `parsers.list`                                                                       | List available parser ids                                                                                                                         |
-| **Reddit**   | `reddit.search`                                                                      | Search Reddit posts and comments                                                                                                                  |
-| **Research** | `research.search`, `research.paper`, `research.download`                             | Search arXiv + Semantic Scholar, get paper details, download PDFs                                                                                 |
-| **Web**      | `web.search`, `web.scrape`, `web.map`                                                | Web search (Tavily/Firecrawl), scrape, sitemap discovery                                                                                          |
-| **Insights** | `insights.*` (6 tools)                                                               | Cross-domain entity connection engine, trending detection                                                                                         |
+| Domain | Tools | What it does |
+|--------|-------|-------------|
+| **Pools** | `pools.list`, `pools.upsert`, `pools.delete` | Manage source groupings (18 pools) |
+| **Sources** | `sources.list/upsert/delete`, `sources.autodiscover`, `sources.enableGenericScraper` | CRUD + auto-discovery for 411 sources |
+| **Geo** | `sources.countries`, `sources.cities`, `sources.domains` | List countries/cities/domains with source counts |
+| **Parsers** | `parsers.list` | List available parser keys (rss, ofac, who_dons, etc.) |
+| **News** | `news.fetch`, `news.testSource`, `news.enrich` | Fetch news with pool/country/city/domain/keyword/time filtering. Offline NLP enrichment (topics, entities, sentiment, summary). |
+| **Reddit** | `reddit.search` | Search Reddit posts via JSON API |
+| **Research** | `research.search`, `research.paper`, `research.download` | arXiv + Semantic Scholar search, paper details, PDF download |
+| **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | Tavily/Firecrawl search, HTML→markdown scraping, Lightpanda BFS crawl, sitemap discovery |
+| **Insights** | `insights.findConnections`, `insights.findAllConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | Cross-article entity analysis with SQLite persistence |
+| **Intelligence** | `intelligence.collect` | Full pipeline: fetch→enrich→index in one call |
+| **Lightpanda Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` | Full browser automation via Lightpanda MCP sub-server. Persistent session, JS execution, form filling, navigation. |
 
-### Token-Efficient Output
+### Token-Efficient Output (TOON)
 
-Large data sets are formatted using [TOON (Token-Oriented Object Notation)](https://lib.rs/crates/toon-format), a compact alternative to JSON that reduces token usage for AI agent consumption by ~40–60%.
+Bulk data tools default to [TOON](https://toonformat.dev) output — a compact alternative to JSON that reduces token usage by ~40-60%. JSON available via `format: "json"` parameter.
+
+### Lightpanda Headless Browser
+
+IGS has two levels of Lightpanda integration:
+
+**Level 1 — CLI subprocess** (`web.crawl`, `web.scrape`): Fetches pages via `lightpanda fetch --dump markdown`. Stateless, single-page.
+
+**Level 2 — MCP sub-server** (`lightpanda.*` tools): Spawns `lightpanda mcp` as a persistent subprocess. Stateful session — navigate, interact, extract across multiple calls. Supports JavaScript execution, form filling, clicking, scrolling, structured data extraction.
+
+The binary auto-downloads to `~/.config/igs-mcp/bin/` and checks for updates daily.
+
+### Intelligence Pipeline
+
+`intelligence.collect` chains `news.fetch` → `news.enrich` → `insights.indexArticles` in one call. After indexing, use `insights.findConnections` or `insights.trendingEntities` for cross-article analysis.
 
 ## Quick Start
 
 ### Prerequisites
 
 - Rust 1.75+
-- (Optional) Tavily or Firecrawl API keys for web search/scrape
+- (Optional) Tavily or Firecrawl API keys for web search
+- (Optional) Lightpanda enabled for JS-rendered crawling
 
 ### Build & Run
 
 ```bash
+# MCP server
 cargo build --release
 ./target/release/igs-mcp
+
+# CLI
+cargo build --release --bin igs
+./target/release/igs status
 ```
 
-### Claude Desktop Configuration
+### CLI Usage
+
+```bash
+igs status                                          # System status
+igs pools list                                      # List all pools
+igs sources list --pool GLOBAL_TECH_CYBER           # List sources in pool
+igs sources countries                               # Countries with source counts
+igs news fetch --pools GLOBAL_TECH_CYBER --limit 10 # Fetch news
+igs news test --id reuters                          # Test a source
+igs reddit search --query "AI safety"               # Reddit search
+igs research search --query "transformer"           # Academic papers
+igs web search --query "rust async"                 # Web search (Tavily)
+igs web scrape --url https://example.com            # Scrape URL to markdown
+igs web crawl --url https://example.com --max-depth 2  # BFS crawl (Lightpanda)
+igs web map --url https://example.com               # Sitemap discovery
+igs parsers                                         # List parser keys
+
+# Output format
+igs --format json news fetch --pools GLOBAL_TECH_CYBER --limit 5  # JSON output
+igs --format toon news fetch --pools GLOBAL_TECH_CYBER --limit 5  # TOON output (default)
+```
+
+### MCP Configuration (Claude Desktop / Cursor)
 
 ```json
 {
@@ -60,85 +112,88 @@ cargo build --release
 
 ### Environment Variables
 
-| Variable         | Default              | Description                        |
-| ---------------- | -------------------- | ---------------------------------- |
-| `IGS_CONFIG_DIR` | `~/.config/igs-mcp/` | Config directory override          |
-| `RUST_LOG`       | `info`               | Log level (e.g., `debug`, `trace`) |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IGS_CONFIG_DIR` | `~/.config/igs-mcp/` | Config directory override |
+| `RUST_LOG` | `info` | Log level (e.g., `debug`, `trace`) |
 
 ### Config Files
 
-Config YAML files are auto-bootstrapped from `./config/` to `~/.config/igs-mcp/` on first run:
+Auto-bootstrapped from `./config/` to `~/.config/igs-mcp/` on first run:
 
-| File            | Purpose                                       |
-| --------------- | --------------------------------------------- |
-| `settings.yml`  | HTTP client, cache, Tavily/Firecrawl API keys |
-| `pools.yml`     | Pool definitions and categories               |
-| `sources.yml`   | 223+ RSS/HTTP/JSON source definitions         |
-| `countries.yml` | Country metadata for geo-filtering            |
+| File | Purpose |
+|------|---------|
+| `settings.yml` | HTTP, cache, NLP, pipeline, output, Tavily/Firecrawl, Lightpanda settings |
+| `pools.yml` | 18 pool definitions |
+| `sources.yml` | 411 source definitions |
+| `countries.yml` | 47 country metadata |
 
-### Web Search Setup
+### Settings Sections
 
-Edit `~/.config/igs-mcp/settings.yml` to add API keys:
+`settings.yml` has 9 configuration sections:
 
-```yaml
-tavily:
-  enabled: true
-  api_key: "<YOUR_TAVILY_API_KEY>"
-
-firecrawl:
-  enabled: true
-  api_key: "<YOUR_FIRECRAWL_API_KEY>"
-```
+| Section | Key settings |
+|---------|-------------|
+| `http` | userAgent, timeoutMs, retries, concurrency, perHost |
+| `cache` | enabled, dir, ttlMs, queryTtlMs |
+| `time` | timezone |
+| `tavily` | enabled, apiKey, searchDepth |
+| `firecrawl` | enabled, apiKey |
+| `lightpanda` | enabled, auto_update, obey_robots, timeout_ms, proxy, max_concurrent |
+| `nlp` | enabled, max_topics, max_entities, dedup_threshold |
+| `pipeline` | default_pool, default_limit, persist_insights |
+| `output` | default_format (toon/json), toon_indent |
 
 ## Architecture
 
 ```
 src/
-├── main.rs      ── Entry point (tokio + rmcp stdio transport)
-├── lib.rs       ── Module declarations
-├── server.rs    ── MCP server handler + 29 #[tool] methods + TOON helpers
-├── config.rs    ── YAML config loading (pools, sources, settings, countries)
-├── types.rs     ── Shared types (Pool, Source, NewsItem, ResearchPaper, etc.)
-├── http.rs      ── HTTP client with retry + semaphore concurrency + feed cache
-├── cache.rs     ── File-based feed cache + query cache with TTL
-└── parsers.rs   ── RSS/Atom, JSON Feed, generic HTML parsers + keyword/time filters
+├── main.rs            MCP server entry point (rmcp stdio transport)
+├── cli.rs             CLI binary (clap-based subcommands)
+├── lib.rs             Module declarations
+├── server.rs          IgsMcpServer, tool router, InsightStorage (SQLite-backed)
+├── config.rs          YAML config loading/saving
+├── types.rs           Shared types (Settings, NewsItem, ResearchPaper, etc.)
+├── http.rs            HttpClient with retry, exponential backoff, per-host concurrency
+├── cache.rs           Dual-tier caching (feed cache + query cache)
+├── parsers.rs         7 parser types + keyword/time filtering + dedup
+├── lightpanda.rs      Lightpanda binary manager (daily version check, auto-download)
+├── persistence.rs     SQLite persistence for InsightStorage
+└── tools/
+    ├── mod.rs         Module re-exports
+    ├── types.rs       All tool I/O types (42 structs, all JsonSchema)
+    ├── helpers.rs     urlencoding, NLP (topics/entities/sentiment), toon_encode
+    ├── pools.rs       Pool CRUD
+    ├── sources.rs     Source CRUD + autodiscover + geo
+    ├── parsers.rs     Parser listing
+    ├── news.rs        News fetch + enrichment
+    ├── reddit.rs      Reddit search
+    ├── research.rs    Academic paper search + details + download
+    ├── web.rs         Web search/scrape/crawl/map
+    ├── insights.rs    Cross-article entity analysis
+    └── intelligence.rs Pipeline: fetch→enrich→index
 ```
 
 ## Docker
 
 ```bash
-# Build with Docker
 docker build -t igs-rust-mcp .
-
-# Run
 docker run -v ~/.config/igs-mcp:/root/.config/igs-mcp igs-rust-mcp
 ```
 
-Multi-stage Dockerfile: `rust:1.85-slim-bookworm` builder → `debian:bookworm-slim` runtime. Binary stripped with LTO. Final image ~15–20 MB.
-
----
-
-## Engineering Highlights
-
-### PDF-to-Markdown Intelligence Pipeline
-Instead of raw text dumping, I implemented a structured pipeline that transforms fragmented PDF data into clean, LLM-optimized Markdown. This preserves the semantic hierarchy of the original document while stripping out layout noise, ensuring the agent receives a coherent narrative rather than a series of disconnected strings.
-
-### TOON: Token-Oriented Object Notation
-To solve the "JSON tax," I integrated **TOON**, a compact alternative to JSON specifically designed for AI consumption. By optimizing for common tokenization patterns, TOON reduces the token footprint of large datasets by 40–60%. This allows the MCP server to return significantly more source data per request without triggering context overflows.
-
-### Low-Footprint Rust Core
-Built using `rmcp` for type-safe tool definitions, the server is optimized for extreme efficiency. With a stripped release binary of ~7MB and an idle RSS of ~5MB, the system provides high-throughput intelligence gathering without competing for system resources on the host machine.
-
+Multi-stage: `rust:1.85-slim-bookworm` builder → `debian:bookworm-slim` runtime. Final image ~15–20 MB.
 
 ## Size & Performance
 
-| Metric            | Value                                    |
-| ----------------- | ---------------------------------------- |
-| Binary            | ~14 MB (debug), ~7 MB (release-stripped) |
-| RSS (idle)        | ~5 MB                                    |
-| Docker image      | ~15–20 MB                                |
-| Sources monitored | 223+ global RSS/HTTP sources             |
-| Startup           | < 100 ms                                 |
+| Metric | Value |
+|--------|-------|
+| Binary | ~14 MB (debug), ~7 MB (release-stripped) |
+| RSS (idle) | ~5 MB |
+| Docker image | ~15–20 MB |
+| Sources | 411 across 47 countries |
+| Pools | 18 |
+| Tools | 30 |
+| Startup | < 100 ms |
 
 ## License
 
@@ -146,4 +201,4 @@ MIT
 
 ---
 
-Developed by [Ishan Parihar](https://github.com/ishanparihar) — If you find this useful, [consider supporting](https://rzp.io/rzp/ishan-parihar)
+Developed by [Ishan Parihar](https://github.com/ishanparihar)

@@ -31,3 +31,6 @@ cache/
 .memsearch/
 .contexty/
 .sisyphus/
+config/insights.db
+config/cache/
+target/

@@ -1,0 +1,92 @@
+use crate::server::InsightStorage;
+use crate::tools::types::*;
+use crate::types::*;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+/// Find articles mentioning the same entity across different domains
+pub(crate) async fn insights_find_connections(
+    storage: &Arc<Mutex<InsightStorage>>,
+    input: InsightConnectionInput,
+) -> Result<InsightConnectionOutput, String> {
+    let storage = storage.lock().await;
+    let connections = storage.find_inter_domain_connections(
+        &input.entity,
+        input.min_domains.unwrap_or(2) as usize,
+    );
+    let count = connections.len();
+    Ok(InsightConnectionOutput { connections, count })
+}
+
+/// Discover all entities that appear across multiple domains
+pub(crate) async fn insights_find_all_connections(
+    storage: &Arc<Mutex<InsightStorage>>,
+    input: InsightAllConnectionsInput,
+) -> Result<InsightAllConnectionsOutput, String> {
+    let storage = storage.lock().await;
+    let all = storage.find_all_inter_domain_connections(input.min_domains.unwrap_or(2) as usize);
+    let total_found = all.len();
+    let limit = input.limit.unwrap_or(20) as usize;
+    let connections: Vec<EntityConnection> = all.into_iter().take(limit).collect();
+    let stats = storage.stats();
+    Ok(InsightAllConnectionsOutput { connections, total_found, stats })
+}
+
+/// Detect entities with increasing mention frequency
+pub(crate) async fn insights_trending(
+    storage: &Arc<Mutex<InsightStorage>>,
+    input: InsightTrendingInput,
+) -> Result<InsightTrendingOutput, String> {
+    let storage = storage.lock().await;
+    let window_ms = input.time_window_hours.unwrap_or(24) * 3_600_000;
+    let trending = storage.detect_trending(
+        window_ms,
+        input.min_growth.unwrap_or(2.0),
+        input.min_current_mentions.unwrap_or(3),
+    );
+    let count = trending.len();
+    let stats = storage.stats();
+    Ok(InsightTrendingOutput { trending, count, stats })
+}
+
+/// Add articles to the insight engine for cross-article analysis
+pub(crate) async fn insights_index(
+    storage: &Arc<Mutex<InsightStorage>>,
+    input: InsightIndexInput,
+) -> Result<InsightIndexOutput, String> {
+    let mut storage = storage.lock().await;
+    let mut indexed = 0usize;
+
+    for article in &input.articles {
+        storage.add_article(ArticleInsight {
+            id: article.id.clone(),
+            title: article.title.clone(),
+            pub_date: article.pub_date.clone(),
+            source_name: article.source_name.clone(),
+            domains: article.domains.clone().unwrap_or_default(),
+            entities: article.entities.clone().unwrap_or_default(),
+        });
+        indexed += 1;
+    }
+
+    let stats = storage.stats();
+    Ok(InsightIndexOutput { indexed, stats })
+}
+
+/// Get statistics about indexed articles
+pub(crate) async fn insights_stats(
+    storage: &Arc<Mutex<InsightStorage>>,
+) -> Result<InsightStatsOutput, String> {
+    let storage = storage.lock().await;
+    let stats = storage.stats();
+    Ok(InsightStatsOutput { stats })
+}
+
+/// Clear all indexed articles from the insight engine
+pub(crate) async fn insights_clear(
+    storage: &Arc<Mutex<InsightStorage>>,
+) -> Result<InsightClearOutput, String> {
+    let mut storage = storage.lock().await;
+    storage.clear();
+    Ok(InsightClearOutput { cleared: true })
+}

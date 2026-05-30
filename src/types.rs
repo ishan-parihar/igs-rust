@@ -86,6 +86,7 @@ pub struct SourcesFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct HttpSettings {
     #[serde(default = "default_user_agent")]
     pub user_agent: String,
@@ -126,6 +127,7 @@ fn default_per_host() -> u32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheSettings {
     #[serde(default = "default_cache_enabled")]
     pub enabled: bool,
@@ -179,6 +181,7 @@ pub struct ProviderSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct TavilySettings {
     #[serde(default)]
     pub enabled: bool,
@@ -200,6 +203,7 @@ fn default_tavily_topic() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct FirecrawlSettings {
     #[serde(default)]
     pub enabled: bool,
@@ -215,6 +219,150 @@ fn default_formats() -> Vec<String> {
     vec!["markdown".to_string()]
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_lp_timeout() -> u64 {
+    30000
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LightpandaSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
+    #[serde(default)]
+    pub prefer_nightly: bool,
+    #[serde(default = "default_true")]
+    pub obey_robots: bool,
+    #[serde(default = "default_lp_timeout")]
+    pub timeout_ms: u64,
+    /// HTTP proxy URL (e.g., "http://proxy:8080" or "http://user:pass@proxy:8080")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
+    /// Bearer token for proxy authentication
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_bearer_token: Option<String>,
+    /// Suffix appended to Lightpanda's User-Agent header
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent_suffix: Option<String>,
+    /// Max concurrent HTTP requests during page load
+    #[serde(default = "default_lp_max_concurrent")]
+    pub max_concurrent: u32,
+    /// Max response size in bytes (0 = no limit)
+    #[serde(default)]
+    pub max_response_size: u64,
+    /// Disable TLS host verification (for sites with bad certs)
+    #[serde(default)]
+    pub insecure_tls: bool,
+}
+
+fn default_lp_max_concurrent() -> u32 {
+    10
+}
+
+impl Default for LightpandaSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            auto_update: true,
+            prefer_nightly: false,
+            obey_robots: true,
+            timeout_ms: 30000,
+            proxy: None,
+            proxy_bearer_token: None,
+            user_agent_suffix: None,
+            max_concurrent: 10,
+            max_response_size: 0,
+            insecure_tls: false,
+        }
+    }
+}
+
+fn default_max_topics() -> usize { 8 }
+fn default_max_entities() -> usize { 20 }
+fn default_min_entity_length() -> usize { 2 }
+fn default_dedup_threshold() -> f64 { 0.3 }
+fn default_pipeline_pool() -> String { "GLOBAL_TECH_CYBER".to_string() }
+fn default_pipeline_limit() -> i32 { 50 }
+fn default_output_format() -> String { "toon".to_string() }
+fn default_toon_indent() -> usize { 2 }
+fn default_max_items_per_response() -> i32 { 500 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NlpSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_max_topics")]
+    pub max_topics: usize,
+    #[serde(default = "default_max_entities")]
+    pub max_entities: usize,
+    #[serde(default = "default_min_entity_length")]
+    pub min_entity_length: usize,
+    #[serde(default = "default_dedup_threshold")]
+    pub dedup_threshold: f64,
+}
+
+impl Default for NlpSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_topics: 8,
+            max_entities: 20,
+            min_entity_length: 2,
+            dedup_threshold: 0.3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineSettings {
+    #[serde(default = "default_pipeline_pool")]
+    pub default_pool: String,
+    #[serde(default = "default_pipeline_limit")]
+    pub default_limit: i32,
+    #[serde(default = "default_true")]
+    pub auto_index: bool,
+    #[serde(default = "default_true")]
+    pub persist_insights: bool,
+}
+
+impl Default for PipelineSettings {
+    fn default() -> Self {
+        Self {
+            default_pool: "GLOBAL_TECH_CYBER".to_string(),
+            default_limit: 50,
+            auto_index: true,
+            persist_insights: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputSettings {
+    #[serde(default = "default_output_format")]
+    pub default_format: String,
+    #[serde(default = "default_toon_indent")]
+    pub toon_indent: usize,
+    #[serde(default = "default_max_items_per_response")]
+    pub max_items_per_response: i32,
+}
+
+impl Default for OutputSettings {
+    fn default() -> Self {
+        Self {
+            default_format: "toon".to_string(),
+            toon_indent: 2,
+            max_items_per_response: 500,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Settings {
     pub http: HttpSettings,
@@ -224,6 +372,14 @@ pub struct Settings {
     pub tavily: Option<TavilySettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub firecrawl: Option<FirecrawlSettings>,
+    #[serde(default)]
+    pub lightpanda: LightpandaSettings,
+    #[serde(default)]
+    pub nlp: NlpSettings,
+    #[serde(default)]
+    pub pipeline: PipelineSettings,
+    #[serde(default)]
+    pub output: OutputSettings,
 }
 
 // ─── News Types ─────────────────────────────────────────────────
