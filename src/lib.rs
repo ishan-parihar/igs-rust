@@ -1,6 +1,10 @@
 pub mod cache;
 pub mod config;
 pub mod http;
+pub mod lightpanda;
+pub mod lightpanda_mcp;
 pub mod parsers;
+pub mod persistence;
+pub mod tools;
 pub mod types;
 pub mod server;

@@ -4,8 +4,9 @@ use anyhow::Result;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Semaphore;
+use tokio::sync::{Mutex, Semaphore};
 
 /// HTTP fetch result
 pub struct FetchResponse {
@@ -19,12 +20,38 @@ pub enum FetchOutcome {
     Response(FetchResponse, Option<String>, Option<String>), // response, etag, last-modified
 }
 
-/// HTTP client with caching, retries, and concurrency limits
+/// Per-host concurrency tracker
+struct HostSemaphoreMap {
+    default_per_host: u32,
+    map: Mutex<HashMap<String, Arc<Semaphore>>>,
+}
+
+impl HostSemaphoreMap {
+    fn new(default_per_host: u32) -> Self {
+        Self {
+            default_per_host,
+            map: Mutex::new(HashMap::new()),
+        }
+    }
+
+    async fn acquire(&self, host: &str) -> tokio::sync::OwnedSemaphorePermit {
+        let sem = {
+            let mut map = self.map.lock().await;
+            map.entry(host.to_string())
+                .or_insert_with(|| Arc::new(Semaphore::new(self.default_per_host as usize)))
+                .clone()
+        };
+        sem.acquire_owned().await.expect("semaphore closed")
+    }
+}
+
+/// HTTP client with caching, retries, per-host concurrency, and exponential backoff
 pub struct HttpClient {
     client: Client,
     cache: FeedCache,
     settings: HttpSettings,
-    semaphore: Semaphore,
+    global_semaphore: Semaphore,
+    host_semaphores: HostSemaphoreMap,
 }
 
 impl HttpClient {
@@ -40,8 +67,17 @@ impl HttpClient {
             cache: FeedCache::new(cache_dir),
             client,
             settings: settings.clone(),
-            semaphore: Semaphore::new(settings.concurrency as usize),
+            global_semaphore: Semaphore::new(settings.concurrency as usize),
+            host_semaphores: HostSemaphoreMap::new(settings.per_host),
         }
+    }
+
+    /// Extract host from URL for per-host concurrency
+    fn extract_host(url: &str) -> String {
+        url::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "unknown".to_string())
     }
 
     pub async fn fetch(
@@ -67,19 +103,69 @@ impl HttpClient {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_millis() as u64;
-                // Default 30 min TTL
                 if now - entry.fetched_at <= 1_800_000 {
                     return Ok(FetchOutcome::Cached(entry.clone()));
                 }
             }
         }
 
-        let _permit = self.semaphore.acquire().await.unwrap();
+        // Acquire both global and per-host semaphore
+        let _global_permit = self.global_semaphore.acquire().await
+            .map_err(|e| anyhow::anyhow!("Global semaphore closed: {}", e))?;
+        let host = Self::extract_host(url);
+        let _host_permit = self.host_semaphores.acquire(&host).await;
 
+        // Retry loop with exponential backoff
+        let mut last_err: Option<anyhow::Error> = None;
+        let max_retries = self.settings.retries as u32;
+
+        for attempt in 0..=max_retries {
+            if attempt > 0 {
+                let backoff_ms = self.settings.backoff_base_ms as f64
+                    * self.settings.backoff_factor.powi(attempt as i32 - 1);
+                tokio::time::sleep(Duration::from_millis(backoff_ms as u64)).await;
+            }
+
+            let result = self.execute_request(url, extra_headers, cached.as_ref()).await;
+
+            match result {
+                Ok(outcome) => {
+                    // Cache successful responses
+                    if let FetchOutcome::Response(ref resp, ref _etag, ref _lm) = outcome {
+                        if resp.status >= 200 && resp.status < 400 {
+                            // Don't cache here — let the caller decide what to cache
+                        }
+                    }
+                    return Ok(outcome);
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    // Don't retry on client errors (4xx) — only server errors and network failures
+                    if let Some(ref err) = last_err {
+                        let err_str = err.to_string().to_lowercase();
+                        // If it's a reqwest error that's not a server error, don't retry
+                        if err_str.contains("status") && err_str.contains("4") {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("Request failed after {} retries", max_retries)))
+    }
+
+    /// Execute a single HTTP request attempt
+    async fn execute_request(
+        &self,
+        url: &str,
+        extra_headers: Option<&HashMap<String, String>>,
+        cached: Option<&FeedCacheEntry>,
+    ) -> Result<FetchOutcome> {
         let mut req = self.client.get(url);
 
         // Conditional request headers
-        if let Some(ref entry) = cached {
+        if let Some(entry) = cached {
             if let Some(ref etag) = entry.etag {
                 req = req.header("if-none-match", etag);
             }
@@ -108,7 +194,7 @@ impl HttpClient {
 
         if status == 304 {
             if let Some(entry) = cached {
-                return Ok(FetchOutcome::Cached(entry));
+                return Ok(FetchOutcome::Cached(entry.clone()));
             }
             return Ok(FetchOutcome::Cached(FeedCacheEntry {
                 url: url.to_string(),
@@ -117,6 +203,11 @@ impl HttpClient {
                 fetched_at: 0,
                 items: vec![],
             }));
+        }
+
+        // Treat 5xx as errors for retry purposes
+        if status >= 500 {
+            return Err(anyhow::anyhow!("Server error HTTP {} for {}", status, url));
         }
 
         let body_text = res.text().await?;

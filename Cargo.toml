@@ -1,6 +1,6 @@
 [package]
 name = "igs-rust-mcp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Intelligence Gathering System - RSS/HTTP source monitoring MCP server with NLP enrichment"
 authors = ["Ishan Parihar"]
@@ -17,6 +17,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "igs-mcp"
 path = "src/main.rs"
+
+[[bin]]
+name = "igs"
+path = "src/cli.rs"
 
 [dependencies]
 rmcp = { version = "1.6", features = ["server", "macros", "transport-io"] }
@@ -41,3 +45,6 @@ hex = "0.4"
 rand = "0.8"
 scraper = "0.22"
 url = "2.5"
+html-to-markdown-rs = "3.5"
+clap = { version = "4", features = ["derive", "env"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
