@@ -67,12 +67,11 @@ The binary auto-downloads to `~/.config/igs-mcp/bin/` and checks for updates dai
 ### Build & Run
 
 ```bash
-# MCP server
+### MCP Server
 cargo build --release
-./target/release/igs-mcp
+./target/release/igs mcp
 
 # CLI
-cargo build --release --bin igs
 ./target/release/igs status
 ```
 
@@ -103,8 +102,9 @@ igs --format toon news fetch --pools GLOBAL_TECH_CYBER --limit 5  # TOON output 
 ```json
 {
   "mcpServers": {
-    "igs-mcp": {
-      "command": "/absolute/path/to/igs-rust-mcp/target/release/igs-mcp"
+    "igs": {
+      "command": "/absolute/path/to/igs-rust-mcp/target/release/igs",
+      "args": ["mcp"]
     }
   }
 }
