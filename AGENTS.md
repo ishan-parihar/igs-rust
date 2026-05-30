@@ -254,10 +254,15 @@ output:
 IGS also provides a CLI binary `igs` for direct command-line use:
 
 ```bash
+# MCP server (for Claude Desktop / AI agents)
+igs mcp
+
+# CLI commands
 igs status
 igs news fetch --pools GLOBAL_TECH_CYBER --limit 10
 igs web scrape --url https://example.com
 igs research search --query "AI safety"
+igs browser goto --url https://example.com
 ```
 
 See `igs --help` for full command list.
