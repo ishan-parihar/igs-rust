@@ -15,10 +15,6 @@ name = "igs_rust_mcp"
 path = "src/lib.rs"
 
 [[bin]]
-name = "igs-mcp"
-path = "src/main.rs"
-
-[[bin]]
 name = "igs"
 path = "src/cli.rs"
 
