@@ -4,11 +4,12 @@ use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use crate::types::*;
 use chrono::Datelike;
+use unpdf;
 
 /// Search academic papers across arXiv and Semantic Scholar
 pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearchOutput, String> {
     let sources = input.sources.unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
-    let limit = input.limit.unwrap_or(25).min(100).max(1);
+    let limit = input.limit.unwrap_or(25).clamp(1, 100);
     let query_enc = urlencoding(&input.query);
 
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
@@ -28,7 +29,7 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
         } else {
             format!("search_query=(all:{})+AND+({})&start=0&max_results={}", query_enc, cat_filter, limit)
         };
-        let arxiv_url = format!("http://export.arxiv.org/api/query?{}", arxiv_query);
+        let arxiv_url = format!("https://export.arxiv.org/api/query?{}", arxiv_query);
 
         match http.fetch(&arxiv_url, None, "bypass").await {
             Ok(outcome) => {
@@ -36,14 +37,14 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
                     let body = resp.body_text;
                     if let Ok(feed) = feed_rs::parser::parse(body.as_bytes()) {
                         for entry in &feed.entries {
-                            let arxiv_id = entry.id.trim_start_matches("http://arxiv.org/abs/").to_string();
+                            let arxiv_id = entry.id.trim_start_matches("https://arxiv.org/abs/").to_string();
                             let pdf_url = format!("https://arxiv.org/pdf/{}.pdf", arxiv_id);
                             let title = entry.title.as_ref().map(|t| t.content.clone()).unwrap_or_default();
                             let abstract_text = entry.summary.as_ref().map(|s| s.content.clone()).unwrap_or_default();
                             let authors: Vec<String> = entry.authors.iter()
                                 .map(|a| a.name.clone())
                                 .collect();
-                            let year = entry.published.map(|d| d.year() as i32);
+                            let year = entry.published.map(|d| d.year());
 
                             all_papers.push(ResearchPaper {
                                 id: format!("arxiv:{}", arxiv_id),
@@ -137,6 +138,88 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
     })
 }
 
+/// Fetch a paginated list of related papers (citations or references) from Semantic Scholar.
+async fn fetch_s2_related_papers(
+    paper_id: &str,
+    endpoint: &str,
+    nested_key: &str,
+    http: &HttpClient,
+) -> Vec<PaperCitationEntry> {
+    let mut all_entries = Vec::new();
+    let limit = 1000;
+    let max_offset = 10_000i32;
+    let mut offset = 0i32;
+
+    loop {
+        let url = format!(
+            "https://api.semanticscholar.org/graph/v1/paper/{paper_id}/{endpoint}?fields=title,authors,year&limit={limit}&offset={offset}",
+        );
+
+        match http.fetch(&url, None, "bypass").await {
+            Ok(outcome) => {
+                if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
+                    match serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                        Ok(json) => {
+                            if let Some(data) = json["data"].as_array() {
+                                for item in data {
+                                    if let Some(paper) = item[nested_key].as_object() {
+                                        let pid = paper.get("paperId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let title = paper.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let authors: Vec<String> = paper.get("authors")
+                                            .and_then(|a| a.as_array())
+                                            .map(|a| a.iter().filter_map(|author| author["name"].as_str().map(|n| n.to_string())).collect())
+                                            .unwrap_or_default();
+                                        let year = paper.get("year").and_then(|v| v.as_i64()).map(|y| y as i32);
+
+                                        all_entries.push(PaperCitationEntry {
+                                            paper_id: pid,
+                                            title,
+                                            authors,
+                                            year,
+                                        });
+                                    }
+                                }
+                            }
+
+                            match json.get("next").and_then(|n| n.as_i64()).map(|n| n as i32) {
+                                Some(next_offset) if next_offset > offset && next_offset < max_offset => {
+                                    offset = next_offset;
+                                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                    continue;
+                                }
+                                _ => break,
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[igs] Warning: failed to parse S2 {} response: {}", endpoint, e);
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+            Err(e) => {
+                eprintln!("[igs] Warning: failed to fetch S2 {}: {}", endpoint, e);
+                break;
+            }
+        }
+    }
+
+    all_entries
+}
+
+/// Convert PDF bytes to markdown text using unpdf
+fn pdf_to_markdown(bytes: &[u8]) -> Result<String, String> {
+    let doc = unpdf::parse_reader(bytes).map_err(|e| format!("Failed to parse PDF: {}", e))?;
+    let options = unpdf::render::RenderOptions::default();
+    let markdown = unpdf::render::to_markdown(&doc, &options)
+        .map_err(|e| format!("Failed to render PDF as markdown: {}", e))?;
+    Ok(markdown)
+}
+
+type PaperFetchResult = (String, Vec<String>, String, Option<i32>, Option<i32>, Option<i32>, Option<String>, Option<String>);
+
 /// Get detailed information about a specific paper by ID
 pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOutput, String> {
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
@@ -144,10 +227,10 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
     let http = HttpClient::new(&settings.http, &cache_dir);
 
     let paper_id = &input.paper_id;
-    let (title, authors, abstract_text, year, citations, references, pdf_url, _content): (String, Vec<String>, String, Option<i32>, Option<i32>, Option<i32>, Option<String>, Option<String>) =
+    let (title, authors, abstract_text, year, citations, references, pdf_url, _content): PaperFetchResult =
         if paper_id.starts_with("arxiv:") || !paper_id.contains(':') {
             let id = paper_id.trim_start_matches("arxiv:");
-            let url = format!("http://export.arxiv.org/api/query?id_list={}", id);
+            let url = format!("https://export.arxiv.org/api/query?id_list={}", id);
             match http.fetch(&url, None, "bypass").await {
                 Ok(outcome) => {
                     if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
@@ -156,7 +239,7 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
                                 let t = entry.title.as_ref().map(|t| t.content.clone()).unwrap_or_default();
                                 let abs = entry.summary.as_ref().map(|s| s.content.clone()).unwrap_or_default();
                                 let auths: Vec<String> = entry.authors.iter().map(|a| a.name.clone()).collect();
-                                let yr = entry.published.map(|d| d.year() as i32);
+                                let yr = entry.published.map(|d| d.year());
                                 (t, auths, abs, yr, None::<i32>, None::<i32>, Some(format!("https://arxiv.org/pdf/{}.pdf", id)), None::<String>)
                             } else {
                                 return Err("Paper not found".into());
@@ -204,19 +287,61 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
             return Err("Unknown paper ID format. Use arxiv:XXXX.XXXXX or semanticscholar:XXXX".into());
         };
 
-    // Optionally extract PDF content
+    // Optionally extract PDF content as markdown
     let content = if input.extract_pdf.unwrap_or(false) {
         if let Some(pdf_url_val) = &pdf_url {
-            match http.fetch(pdf_url_val, None, "bypass").await {
-                Ok(outcome) => {
-                    if let http_mod::FetchOutcome::Response(_resp, _, _) = outcome {
-                        Some(format!("PDF available at {}. Direct content extraction requires pdf-extractor crate.", pdf_url_val))
+            let client = reqwest::Client::builder()
+                .user_agent(&settings.http.user_agent)
+                .timeout(std::time::Duration::from_millis(settings.http.timeout_ms))
+                .build()
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+            match client.get(pdf_url_val).send().await {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        match resp.bytes().await {
+                            Ok(bytes) => {
+                                match pdf_to_markdown(&bytes) {
+                                    Ok(md) => Some(md),
+                                    Err(e) => {
+                                        tracing::warn!("PDF to markdown failed: {}", e);
+                                        None
+                                    }
+                                }
+                            }
+                            Err(_) => None,
+                        }
                     } else { None }
                 }
                 Err(_) => None,
             }
         } else { None }
     } else { None };
+
+    // Determine S2-compatible ID for citation/reference fetching
+    let s2_lookup_id = if paper_id.starts_with("arxiv:") {
+        format!("arXiv:{}", paper_id.trim_start_matches("arxiv:"))
+    } else if paper_id.starts_with("semanticscholar:") {
+        paper_id.trim_start_matches("semanticscholar:").to_string()
+    } else {
+        paper_id.clone()
+    };
+
+    // Fetch citations list if requested
+    let citations_list = if input.include_citations == Some(true) {
+        Some(fetch_s2_related_papers(&s2_lookup_id, "citations", "citingPaper", &http).await)
+    } else {
+        None
+    };
+
+    // Fetch references list if requested (add delay if both were requested to avoid rate limiting)
+    let references_list = if input.include_references == Some(true) {
+        if input.include_citations == Some(true) {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        Some(fetch_s2_related_papers(&s2_lookup_id, "references", "citedPaper", &http).await)
+    } else {
+        None
+    };
 
     Ok(ResearchPaperOutput {
         paper: PaperDetail {
@@ -227,6 +352,8 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
             year,
             citations,
             references,
+            citations_list,
+            references_list,
             pdf_url,
             content,
         },
@@ -271,11 +398,14 @@ pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchD
         return Err("Unknown paper ID format. Use arxiv:XXXX.XXXXX or semanticscholar:XXXX".into());
     };
 
-    // Download the PDF
-    let client = reqwest::Client::new();
+    // Download the PDF using settings-configured client
+    let client = reqwest::Client::builder()
+        .user_agent(&settings.http.user_agent)
+        .timeout(std::time::Duration::from_millis(settings.http.timeout_ms))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     let resp = client
         .get(&pdf_url)
-        .header("User-Agent", "igs-mcp/0.1")
         .send()
         .await
         .map_err(|e| format!("Failed to download PDF: {}", e))?;
@@ -292,9 +422,30 @@ pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchD
         format!("{}.pdf", input.paper_id.replace(":", "_"))
     });
 
-    // Write to file
+    // Write PDF to file
     std::fs::write(&output_path, &bytes)
         .map_err(|e| format!("Failed to write PDF file: {}", e))?;
+
+    // Optionally convert to markdown sidecar
+    let markdown_path = if input.convert_to_markdown.unwrap_or(false) {
+        let md_path = output_path.replace(".pdf", ".md");
+        match pdf_to_markdown(&bytes) {
+            Ok(md) => {
+                if let Err(e) = std::fs::write(&md_path, &md) {
+                    tracing::warn!("Failed to write markdown file {}: {}", md_path, e);
+                    None
+                } else {
+                    Some(md_path)
+                }
+            }
+            Err(e) => {
+                tracing::warn!("PDF to markdown conversion failed: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     // Create metadata
     let metadata = serde_json::json!({
@@ -306,7 +457,7 @@ pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchD
 
     Ok(ResearchDownloadOutput {
         pdf_path: Some(output_path),
-        markdown_path: None,
+        markdown_path,
         file_size: bytes.len() as u64,
         metadata,
     })

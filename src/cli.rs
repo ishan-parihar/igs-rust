@@ -183,6 +183,12 @@ enum ResearchAction {
     Paper {
         #[arg(long)]
         id: String,
+        /// Include list of citing papers
+        #[arg(long)]
+        include_citations: bool,
+        /// Include list of referenced papers
+        #[arg(long)]
+        include_references: bool,
     },
     /// Download a paper PDF
     Download {
@@ -190,6 +196,9 @@ enum ResearchAction {
         id: String,
         #[arg(long)]
         output: Option<String>,
+        /// Convert PDF to markdown sidecar file
+        #[arg(long)]
+        convert_to_markdown: bool,
     },
 }
 
@@ -466,15 +475,15 @@ async fn main() -> anyhow::Result<()> {
                 }).await)?;
                 output(fmt, &result);
             }
-            ResearchAction::Paper { id } => {
+            ResearchAction::Paper { id, include_citations, include_references } => {
                 let result = r(research::research_paper(ResearchPaperInput {
-                    paper_id: id, include_citations: None, include_references: None, extract_pdf: None,
+                    paper_id: id, include_citations: Some(include_citations), include_references: Some(include_references), extract_pdf: None,
                 }).await)?;
                 output(fmt, &result);
             }
-            ResearchAction::Download { id, output: out } => {
+            ResearchAction::Download { id, output: out, convert_to_markdown } => {
                 let result = r(research::research_download(ResearchDownloadInput {
-                    paper_id: id, output_path: out, format: None,
+                    paper_id: id, output_path: out, format: None, convert_to_markdown: Some(convert_to_markdown),
                 }).await)?;
                 output(fmt, &result);
             }
