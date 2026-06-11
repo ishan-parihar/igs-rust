@@ -105,7 +105,7 @@ pub struct HttpSettings {
 }
 
 fn default_user_agent() -> String {
-    "IGS-MCP-Rust/0.1".to_string()
+    "IGS/0.3.2 (+https://github.com/ishan-parihar/igs-rust-mcp)".to_string()
 }
 fn default_timeout() -> u64 {
     15000
@@ -191,7 +191,7 @@ pub struct TavilySettings {
     pub search_depth: String,
     #[serde(default = "default_tavily_topic")]
     pub default_topic: String,
-    #[serde(default = "default_timeout")]
+    #[serde(default = "default_tavily_timeout")]
     pub timeout_ms: u64,
 }
 
@@ -201,6 +201,9 @@ fn default_tavily_depth() -> String {
 fn default_tavily_topic() -> String {
     "general".to_string()
 }
+fn default_tavily_timeout() -> u64 {
+    30000
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -209,14 +212,17 @@ pub struct FirecrawlSettings {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
-    #[serde(default = "default_timeout")]
+    #[serde(default = "default_firecrawl_timeout")]
     pub timeout_ms: u64,
     #[serde(default = "default_formats")]
     pub default_formats: Vec<String>,
 }
 
+fn default_firecrawl_timeout() -> u64 {
+    60000
+}
 fn default_formats() -> Vec<String> {
-    vec!["markdown".to_string()]
+    vec!["markdown".to_string(), "html".to_string(), "screenshot".to_string(), "links".to_string()]
 }
 
 fn default_true() -> bool {
@@ -266,7 +272,7 @@ fn default_lp_max_concurrent() -> u32 {
 impl Default for LightpandaSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             auto_update: true,
             prefer_nightly: false,
             obey_robots: true,

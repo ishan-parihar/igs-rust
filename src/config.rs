@@ -49,11 +49,43 @@ async fn ensure_bootstrapped() -> Result<()> {
     Ok(())
 }
 
+/// Replace ${VAR_NAME} patterns with environment variable values.
+/// Leaves literal ${VAR} if env var is unset (graceful fallback).
+fn expand_env_vars(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            chars.next();
+            let mut var_name = String::new();
+            for c in chars.by_ref() {
+                if c == '}' {
+                    break;
+                }
+                var_name.push(c);
+            }
+            match std::env::var(&var_name) {
+                Ok(val) => result.push_str(&val),
+                Err(_) => {
+                    result.push('$');
+                    result.push('{');
+                    result.push_str(&var_name);
+                    result.push('}');
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 async fn read_yaml<T: serde::de::DeserializeOwned>(file: &Path) -> Result<T> {
     let raw = fs::read_to_string(file)
         .await
         .with_context(|| format!("Failed to read {}", file.display()))?;
-    let doc: T = serde_yaml::from_str(&raw)
+    let expanded = expand_env_vars(&raw);
+    let doc: T = serde_yaml::from_str(&expanded)
         .with_context(|| format!("Failed to parse {}", file.display()))?;
     Ok(doc)
 }
