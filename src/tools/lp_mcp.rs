@@ -6,13 +6,13 @@ use tokio::sync::Mutex;
 /// Execute a Lightpanda MCP tool call and return the text content.
 async fn call_lp_tool(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     tool_name: &str,
     arguments: serde_json::Value,
 ) -> Result<LpToolOutput, String> {
     let mut guard = client.lock().await;
     if guard.is_none() {
-        *guard = Some(LightpandaMcpClient::new(binary_path.clone()));
+        *guard = Some(LightpandaMcpClient::new(binary_path.to_path_buf()));
     }
     let lp = guard.as_ref().unwrap();
 
@@ -37,7 +37,7 @@ async fn call_lp_tool(
 
 pub async fn lp_goto(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpGotoInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({ "url": input.url });
@@ -49,7 +49,7 @@ pub async fn lp_goto(
 
 pub async fn lp_markdown(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpMarkdownInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});
@@ -61,7 +61,7 @@ pub async fn lp_markdown(
 
 pub async fn lp_links(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpLinksInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});
@@ -73,7 +73,7 @@ pub async fn lp_links(
 
 pub async fn lp_evaluate(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpEvaluateInput,
 ) -> Result<LpToolOutput, String> {
     call_lp_tool(client, binary_path, "evaluate", serde_json::json!({
@@ -83,7 +83,7 @@ pub async fn lp_evaluate(
 
 pub async fn lp_semantic_tree(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpSemanticTreeInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});
@@ -95,7 +95,7 @@ pub async fn lp_semantic_tree(
 
 pub async fn lp_structured_data(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpStructuredDataInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});
@@ -107,7 +107,7 @@ pub async fn lp_structured_data(
 
 pub async fn lp_detect_forms(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpDetectFormsInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});
@@ -119,7 +119,7 @@ pub async fn lp_detect_forms(
 
 pub async fn lp_click(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpClickInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({ "selector": input.selector });
@@ -131,7 +131,7 @@ pub async fn lp_click(
 
 pub async fn lp_fill(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpFillInput,
 ) -> Result<LpToolOutput, String> {
     call_lp_tool(client, binary_path, "fill", serde_json::json!({
@@ -142,7 +142,7 @@ pub async fn lp_fill(
 
 pub async fn lp_scroll(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpScrollInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});
@@ -153,7 +153,7 @@ pub async fn lp_scroll(
 
 pub async fn lp_wait_for_selector(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpWaitForSelectorInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({ "selector": input.selector });
@@ -163,7 +163,7 @@ pub async fn lp_wait_for_selector(
 
 pub async fn lp_interactive_elements(
     client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::PathBuf,
+    binary_path: &std::path::Path,
     input: LpInteractiveElementsInput,
 ) -> Result<LpToolOutput, String> {
     let mut args = serde_json::json!({});

@@ -14,7 +14,7 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
     let sf = config::load_sources().await.map_err(|e| format!("Sources: {}", e))?;
 
     let cache_mode = input.cache_mode.unwrap_or_else(|| "prefer".to_string());
-    let limit = input.limit.unwrap_or(100).min(500).max(1) as usize;
+    let limit = input.limit.unwrap_or(100).clamp(1, 500) as usize;
 
     let mut sources = sf.sources;
     sources.retain(|s| s.is_active.unwrap_or(true));
@@ -192,7 +192,7 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
 
         if want.contains("summary") {
             let summary = item.content_snippet.as_deref()
-                .and_then(|s| s.split(|c| c == '.' || c == '!' || c == '?')
+                .and_then(|s| s.split(['.', '!', '?'])
                     .find(|s| !s.trim().is_empty())
                     .map(|s| s.trim().to_string()))
                 .unwrap_or_else(|| item.title.clone());

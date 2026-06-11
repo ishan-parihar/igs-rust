@@ -9,7 +9,7 @@ use crate::types::*;
 pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutput, String> {
     let sort = input.sort.as_deref().unwrap_or("relevance");
     let time = input.time.as_deref().unwrap_or("all");
-    let limit = input.limit.unwrap_or(25).min(100).max(1);
+    let limit = input.limit.unwrap_or(25).clamp(1, 100);
 
     let query_enc = urlencoding(&input.query);
     let subreddit_filter = input.subreddits.as_ref()
@@ -53,7 +53,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
             let posts: Vec<NewsItem> = json["data"]["children"]
                 .as_array()
                 .map(|children| {
-                    children.iter().filter_map(|child| {
+                    children.iter().map(|child| {
                         let data = &child["data"];
                         let title = data["title"].as_str().unwrap_or("Untitled");
                         let permalink = data["permalink"].as_str().unwrap_or("");
@@ -75,7 +75,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                             &format!("reddit_{}", subreddit),
                         );
 
-                        Some(NewsItem {
+                        NewsItem {
                             id: item_id,
                             title: title.to_string(),
                             link: url,
@@ -86,7 +86,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                                 selftext.chars().take(300).collect::<String>()),
                             author: author.map(|a| a.to_string()),
                             media_url: None,
-                        })
+                        }
                     }).collect()
                 })
                 .unwrap_or_default();
