@@ -1,5 +1,3 @@
-use crate::tools::types::*;
-use crate::types::*;
 use std::collections::HashMap;
 
 /// URL-encode a string
@@ -47,13 +45,13 @@ pub fn extract_basic_entities(text: &str) -> Vec<serde_json::Value> {
     let mut i = 0;
     while i < words.len() {
         let w = words[i].trim_matches(|c: char| !c.is_alphanumeric());
-        if w.len() >= 2 && w.chars().next().map_or(false, |c| c.is_uppercase())
+        if w.len() >= 2 && w.chars().next().is_some_and(|c| c.is_uppercase())
             && !w.chars().all(|c| c.is_uppercase())
         {
             let mut name = w.to_string();
             while i + 1 < words.len() {
                 let next = words[i + 1].trim_matches(|c: char| !c.is_alphanumeric());
-                if next.len() >= 2 && next.chars().next().map_or(false, |c| c.is_uppercase()) {
+                if next.len() >= 2 && next.chars().next().is_some_and(|c| c.is_uppercase()) {
                     name.push(' ');
                     name.push_str(next);
                     i += 1;

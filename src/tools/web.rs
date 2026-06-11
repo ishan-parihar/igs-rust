@@ -434,8 +434,7 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
 
     let mut links: Vec<WebMapLink> = Vec::new();
     // Try sitemap.xml
-    if let Ok(outcome) = http.fetch(&sitemap_url, None, "bypass").await {
-        if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&sitemap_url, None, "bypass").await {
             let doc = scraper::Html::parse_document(&resp.body_text);
             // Try to extract <loc> elements from sitemap XML
             for line in resp.body_text.lines() {
@@ -466,7 +465,6 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
                         }
                     }
                 }
-            }
         }
     }
 
@@ -475,7 +473,7 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
         let search_lower = search.to_lowercase();
         links.retain(|link| {
             link.url.to_lowercase().contains(&search_lower)
-                || link.title.as_ref().map_or(false, |t| t.to_lowercase().contains(&search_lower))
+                || link.title.as_ref().is_some_and(|t| t.to_lowercase().contains(&search_lower))
         });
     }
 
