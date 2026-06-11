@@ -22,6 +22,12 @@ pub struct InsightStorage {
     db: Option<rusqlite::Connection>,
 }
 
+impl Default for InsightStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InsightStorage {
     pub fn new() -> Self {
         // Try to open SQLite database for persistence
@@ -102,7 +108,7 @@ impl InsightStorage {
         for article in &self.articles {
             let matches_entity = article.entities.iter().any(|e| {
                 e.name.to_lowercase() == entity.to_lowercase()
-                    || e.normalized_id.as_ref().map_or(false, |id| id.to_lowercase() == entity.to_lowercase())
+                    || e.normalized_id.as_ref().is_some_and(|id| id.to_lowercase() == entity.to_lowercase())
             });
             if !matches_entity { continue; }
 
@@ -353,7 +359,19 @@ impl IgsMcpServer {
     #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use pools.list to see available pools. Returns NewsItem[] with title, link, pub_date, source_name, content_snippet. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
         let output = news::news_fetch(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "news.fetch",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -365,7 +383,19 @@ impl IgsMcpServer {
     #[tool(name = "news.testSource", description = "Test a single source and return up to 10 items. Input: source ID (from sources.list). Useful for debugging source configuration, parser issues, or verifying a new source works. Returns NewsItem[].")]
     async fn news_test_source(&self, params: Parameters<NewsTestInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.id.clone();
         let output = news::news_test_source(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "news.testSource",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -377,7 +407,19 @@ impl IgsMcpServer {
     #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch output (map id, title, link, pub_date, source_name, pool_id, content_snippet). Output: items with topics (word frequency), entities (capitalized word sequences), sentiment (keyword-based), summary (first sentence). No external API calls. Use with insights.indexArticles to enable cross-article analysis.")]
     async fn news_enrich(&self, params: Parameters<NewsEnrichInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = format!("enrich-{}", params.0.items.len());
         let output = news::news_enrich(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "news.enrich",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -391,7 +433,19 @@ impl IgsMcpServer {
     #[tool(name = "reddit.search", description = "Search Reddit posts via reddit.com JSON API. Supports subreddits filter (e.g. [\"worldnews\",\"technology\"]), sort (relevance/hot/top/new), time (hour/day/week/month/year/all). Returns NewsItem[] compatible with news.enrich and insights.indexArticles for cross-platform analysis.")]
     async fn reddit_search(&self, params: Parameters<RedditSearchInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.subreddits.as_ref().and_then(|s| s.first()).cloned().unwrap_or_else(|| params.0.query.clone());
         let output = reddit::reddit_search(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "reddit.search",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -405,7 +459,19 @@ impl IgsMcpServer {
     #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Supports categories (e.g. cs.AI, cs.CL), year_from, year_to filtering. Returns ResearchPaper[] with id (format: arxiv:XXXX or semanticscholar:XXXX), title, authors, abstract, year, citation_count, pdf_url. Use research.paper for details or research.download for PDF.")]
     async fn research_search(&self, params: Parameters<ResearchSearchInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.query.clone();
         let output = research::research_search(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "research.search",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -416,7 +482,20 @@ impl IgsMcpServer {
 
     #[tool(name = "research.paper", description = "Get detailed paper information by ID. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. Returns PaperDetail with title, authors, abstract, year, citations, references, pdf_url. Optionally include_citations, include_references, extract_pdf.")]
     async fn research_paper(&self, params: Parameters<ResearchPaperInput>) -> Result<Json<ResearchPaperOutput>, String> {
-        research::research_paper(params.0).await.map(Json)
+        let _subject = params.0.paper_id.clone();
+        let output = research::research_paper(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "research.paper",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
+        Ok(Json(output))
     }
 
     #[tool(name = "research.download", description = "Download a research paper PDF to disk. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. For Semantic Scholar, fetches PDF URL from API first. Optional output_path (default: {paper_id}.pdf) and format. Returns file path and size.")]
@@ -429,7 +508,19 @@ impl IgsMcpServer {
     #[tool(name = "web.search", description = "Realtime web search via Tavily (default) or Firecrawl API. Requires tavily.enabled=true or firecrawl.enabled=true in settings.yml with API key. Supports include_domains, exclude_domains, days, include_answer. Returns results array with title, url, content, score. Default output: TOON. Use format='json' for structured JSON.")]
     async fn web_search(&self, params: Parameters<WebSearchInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.query.clone();
         let output = web::web_search(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "web.search",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -441,7 +532,19 @@ impl IgsMcpServer {
     #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata (title, headings, og:description, link count). Provider 'default' uses HTTP+html-to-markdown. Provider 'lightpanda' renders JavaScript — set lightpanda.enabled=true in settings.yml first. Lightpanda supports wait_selector, strip_mode, wait_until, include_frames for JS-heavy sites. Default output: TOON.")]
     async fn web_scrape(&self, params: Parameters<WebScrapeInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_scrape(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "web.scrape",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -453,7 +556,19 @@ impl IgsMcpServer {
     #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Renders JavaScript. Requires lightpanda.enabled=true in settings.yml (binary auto-downloads). Supports max_depth (default 2), max_pages (default 20), obey_robots, dump_format (markdown/html/semantic_tree), wait_until, wait_selector, strip_mode, include_frames. Returns pages with depth and status. Default output: TOON.")]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_crawl(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "web.crawl",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
@@ -465,7 +580,19 @@ impl IgsMcpServer {
     #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Fetches /sitemap.xml, extracts <loc> URLs. Supports limit (default 100) and search filter. Returns WebMapOutput with links array containing url and optional title. Default output: TOON.")]
     async fn web_map(&self, params: Parameters<WebMapInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_map(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "web.map",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
