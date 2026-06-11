@@ -290,6 +290,8 @@ fn default_pipeline_limit() -> i32 { 50 }
 fn default_output_format() -> String { "toon".to_string() }
 fn default_toon_indent() -> usize { 2 }
 fn default_max_items_per_response() -> i32 { 500 }
+fn default_dump_enabled() -> bool { false }
+fn default_dump_dir() -> String { "~/Documents/IGS".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -351,6 +353,10 @@ pub struct OutputSettings {
     pub toon_indent: usize,
     #[serde(default = "default_max_items_per_response")]
     pub max_items_per_response: i32,
+    #[serde(default = "default_dump_enabled")]
+    pub dump_enabled: bool,
+    #[serde(default = "default_dump_dir")]
+    pub dump_dir: String,
 }
 
 impl Default for OutputSettings {
@@ -359,6 +365,8 @@ impl Default for OutputSettings {
             default_format: "toon".to_string(),
             toon_indent: 2,
             max_items_per_response: 500,
+            dump_enabled: false,
+            dump_dir: "~/Documents/IGS".to_string(),
         }
     }
 }
