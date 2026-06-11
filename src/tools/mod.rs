@@ -10,3 +10,5 @@ pub mod research;
 pub mod sources;
 pub mod types;
 pub mod web;
+
+pub mod dump;
