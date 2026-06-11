@@ -312,6 +312,14 @@ pub struct ResearchPaperInput {
     pub extract_pdf: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PaperCitationEntry {
+    pub paper_id: String,
+    pub title: String,
+    pub authors: Vec<String>,
+    pub year: Option<i32>,
+}
+
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PaperDetail {
     pub id: String,
@@ -321,6 +329,10 @@ pub struct PaperDetail {
     pub year: Option<i32>,
     pub citations: Option<i32>,
     pub references: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub citations_list: Option<Vec<PaperCitationEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub references_list: Option<Vec<PaperCitationEntry>>,
     pub pdf_url: Option<String>,
     pub content: Option<String>,
 }
@@ -335,6 +347,7 @@ pub struct ResearchDownloadInput {
     pub paper_id: String,
     pub output_path: Option<String>,
     pub format: Option<String>,
+    pub convert_to_markdown: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
