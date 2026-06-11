@@ -117,7 +117,7 @@ impl HttpClient {
 
         // Retry loop with exponential backoff
         let mut last_err: Option<anyhow::Error> = None;
-        let max_retries = self.settings.retries as u32;
+        let max_retries = self.settings.retries;
 
         for attempt in 0..=max_retries {
             if attempt > 0 {

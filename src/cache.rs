@@ -126,7 +126,7 @@ impl QueryCache {
                 at: now,
                 deps,
             },
-            data: data,
+            data,
         };
         let raw = serde_json::to_string(&entry)?;
         fs::write(&file, raw.as_bytes()).await?;

@@ -215,6 +215,7 @@ impl LightpandaManager {
     }
 
     /// Fetch with all available options including wait_selector, strip_mode, and structured_data.
+    #[allow(clippy::too_many_arguments)]
     pub async fn fetch_with_all_options(
         &self,
         url: &str,

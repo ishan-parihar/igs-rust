@@ -193,7 +193,7 @@ async fn parse_generic_html(source: &Source, html: &str) -> Vec<NewsItem> {
     // Build selector list: from parser_config first, then fallback generics
     let mut selectors: Vec<String> = Vec::new();
     if let Some(ref cfg) = source.parser_config {
-        if !cfg.selectors.as_ref().map_or(true, |s| s.item.is_empty()) {
+        if !cfg.selectors.as_ref().is_none_or(|s| s.item.is_empty()) {
             if let Some(ref sel) = cfg.selectors {
                 selectors.push(sel.item.clone());
             }
@@ -340,7 +340,7 @@ async fn parse_json_feed(source: &Source, body: &str) -> Vec<NewsItem> {
             if let Some(arr) = items.as_array() {
                 return arr
                     .iter()
-                    .filter_map(|item| {
+                    .map(|item| {
                         let title = item
                             .get("title")
                             .and_then(|t| t.as_str())
@@ -364,7 +364,7 @@ async fn parse_json_feed(source: &Source, body: &str) -> Vec<NewsItem> {
 
                         let item_id = make_item_id(title, link, pub_date, &source.id);
 
-                        Some(NewsItem {
+                        NewsItem {
                             id: item_id,
                             title: title.to_string(),
                             link: link.to_string(),
@@ -386,7 +386,7 @@ async fn parse_json_feed(source: &Source, body: &str) -> Vec<NewsItem> {
                                 .get("image")
                                 .and_then(|i| i.as_str())
                                 .map(|s| s.to_string()),
-                        })
+                        }
                     })
                     .collect();
             }
@@ -409,7 +409,7 @@ async fn parse_who_dons(source: &Source, body: &str) -> Vec<NewsItem> {
         } else if let Some(arr) = val.as_array() {
             arr.clone()
         } else { vec![] };
-        return items.into_iter().filter_map(|item| {
+        return items.into_iter().map(|item| {
             let title = item.get("UseOverrideTitle").and_then(|u| u.as_bool()).unwrap_or(false)
                 .then(|| item.get("OverrideTitle").and_then(|t| t.as_str()).unwrap_or(""))
                 .or_else(|| item.get("Title").and_then(|t| t.as_str()))
@@ -431,12 +431,12 @@ async fn parse_who_dons(source: &Source, body: &str) -> Vec<NewsItem> {
                 item.get("Assessment").and_then(|v| v.as_str()),
             ].iter().filter_map(|&s| s).collect::<Vec<_>>().join(" ");
             let item_id = make_item_id(&title, &link, &pub_date, &source.id);
-            Some(NewsItem {
+            NewsItem {
                 id: item_id, title, link, pub_date,
                 source_name: source_name.clone(), pool_id: pool_id.clone(),
                 content_snippet: strip_html_tags(&content).chars().take(600).collect(),
                 author: None, media_url: None,
-            })
+            }
         }).collect();
     }
     vec![]
@@ -636,7 +636,7 @@ pub fn filter_by_keywords(
     // Normalize keywords into clusters
     let clusters: Vec<Vec<String>> = match keywords {
         Some(kw) if kw.is_array() => {
-            if kw.as_array().map_or(false, |arr| arr.first().map_or(false, |v| v.is_array())) {
+            if kw.as_array().is_some_and(|arr| arr.first().is_some_and(|v| v.is_array())) {
                 // Already clustered: [[...], [...]]
                 kw.as_array()
                     .unwrap()
@@ -758,12 +758,12 @@ pub fn batch_similar(items: Vec<NewsItem>, threshold: f64) -> Vec<NewsItem> {
             .map(|w| w.to_string())
             .collect();
 
-        for j in (i + 1)..items.len() {
+        for (j, item_j) in items.iter().enumerate().skip(i + 1) {
             if used.contains(&j) {
                 continue;
             }
 
-            let words_j: std::collections::HashSet<String> = items[j]
+            let words_j: std::collections::HashSet<String> = item_j
                 .title
                 .to_lowercase()
                 .split_whitespace()

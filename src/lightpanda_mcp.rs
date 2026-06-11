@@ -27,6 +27,7 @@ struct JsonRpcResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct JsonRpcError {
     code: i64,
     message: String,
@@ -86,11 +87,10 @@ impl LightpandaMcpClient {
 
         // Check if already running
         if let Some(ref mut child) = inner.child {
-            if child.try_wait()?.is_none() {
-                if inner.initialized {
+            if child.try_wait()?.is_none()
+                && inner.initialized {
                     return Ok(());
                 }
-            }
             // Process exited — clean up
             inner.child = None;
             inner.stdin_tx = None;
