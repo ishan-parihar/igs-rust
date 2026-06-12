@@ -160,6 +160,13 @@ enum RedditAction {
         #[arg(long, default_value = "25")]
         limit: i32,
     },
+    /// Fetch latest posts via RSS feeds (reliable, no API key needed)
+    Feed {
+        #[arg(long, value_delimiter = ',')]
+        subreddits: Vec<String>,
+        #[arg(long, default_value = "25")]
+        limit: i32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -463,6 +470,12 @@ async fn main() -> anyhow::Result<()> {
             RedditAction::Search { query, subreddits, sort, time, limit } => {
                 let result = r(reddit::reddit_search(RedditSearchInput {
                     query, subreddits, sort: Some(sort), time: Some(time), limit: Some(limit), format: None,
+                }).await)?;
+                output(fmt, &result);
+            }
+            RedditAction::Feed { subreddits, limit } => {
+                let result = r(reddit::reddit_feed(RedditFeedInput {
+                    subreddits, limit: Some(limit), format: None,
                 }).await)?;
                 output(fmt, &result);
             }

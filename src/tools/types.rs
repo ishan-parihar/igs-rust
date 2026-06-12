@@ -276,6 +276,25 @@ pub struct RedditSearchOutput {
     pub meta: RedditSearchMeta,
 }
 
+// ─── Reddit Feed Types ──────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct RedditFeedInput {
+    /// Subreddit name(s) without r/ prefix (e.g. ["worldnews", "technology"])
+    pub subreddits: Vec<String>,
+    /// Limit per subreddit (default: 25, max: 100)
+    pub limit: Option<i32>,
+    /// Output format: "toon" (default, token-efficient) or "json"
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct RedditFeedOutput {
+    pub posts: Vec<NewsItem>,
+    pub count: usize,
+    pub subreddits: Vec<String>,
+}
+
 // ─── Research Types ───────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
