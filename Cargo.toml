@@ -27,7 +27,7 @@ serde_json = "1"
 serde_yaml = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
   "json",
-  "native-tls",
+  "rustls-tls",
   "gzip",
   "brotli",
   "deflate",
