@@ -454,6 +454,30 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
+    #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds (old.reddit.com/r/{sub}/.rss). Reliable cross-platform access that works without API keys or residential IPs. Pass subreddit names without r/ prefix. Returns NewsItem[] compatible with news.enrich and insights.indexArticles.")]
+    async fn reddit_feed(&self, params: Parameters<RedditFeedInput>) -> Result<CallToolResult, String> {
+        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.subreddits.first().cloned().unwrap_or_default();
+        let output = reddit::reddit_feed(params.0).await?;
+        #[cfg(not(test))]
+        {
+            if let Ok(settings) = crate::config::load_settings().await {
+                crate::tools::dump::maybe_dump(
+                    &settings,
+                    "reddit.feed",
+                    &_subject,
+                    &toon_encode(&output),
+                );
+            }
+        }
+        let text = if format == "json" {
+            serde_json::to_string_pretty(&output).unwrap_or_default()
+        } else {
+            toon_encode(&output)
+        };
+        Ok(CallToolResult::success(vec![Content::text(text)]))
+    }
+
     // ── Research Tools ──────────────────────────────────────────
 
     #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Supports categories (e.g. cs.AI, cs.CL), year_from, year_to filtering. Returns ResearchPaper[] with id (format: arxiv:XXXX or semanticscholar:XXXX), title, authors, abstract, year, citation_count, pdf_url. Use research.paper for details or research.download for PDF.")]

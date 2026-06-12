@@ -251,7 +251,10 @@ pub struct LightpandaSettings {
     /// Bearer token for proxy authentication
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy_bearer_token: Option<String>,
-    /// Suffix appended to Lightpanda's User-Agent header
+    /// Full custom User-Agent string (overrides default)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
+    /// Suffix appended to Lightpanda's User-Agent header (used if user_agent not set)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_agent_suffix: Option<String>,
     /// Max concurrent HTTP requests during page load
@@ -263,6 +266,12 @@ pub struct LightpandaSettings {
     /// Disable TLS host verification (for sites with bad certs)
     #[serde(default)]
     pub insecure_tls: bool,
+    /// Enable stealth mode via injected anti-fingerprinting JavaScript
+    #[serde(default)]
+    pub stealth: bool,
+    /// Optional path to a custom JS file to inject (--inject-script-file)
+    #[serde(default)]
+    pub stealth_script_path: Option<String>,
 }
 
 fn default_lp_max_concurrent() -> u32 {
@@ -279,14 +288,16 @@ impl Default for LightpandaSettings {
             timeout_ms: 30000,
             proxy: None,
             proxy_bearer_token: None,
+            user_agent: None,
             user_agent_suffix: None,
             max_concurrent: 10,
             max_response_size: 0,
             insecure_tls: false,
+            stealth: false,
+            stealth_script_path: None,
         }
     }
 }
-
 fn default_max_topics() -> usize { 8 }
 fn default_max_entities() -> usize { 20 }
 fn default_min_entity_length() -> usize { 2 }

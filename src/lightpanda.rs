@@ -20,7 +20,23 @@ pub struct LightpandaManager {
 
 const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/lightpanda-io/browser/releases";
 const GITHUB_DOWNLOAD_BASE: &str = "https://github.com/lightpanda-io/browser/releases/download";
-const CHECK_INTERVAL_SECS: u64 = 86400; // 24 hours
+const CHECK_INTERVAL_SECS: u64 = 86400;
+
+const ANTI_FINGERPRINT_JS: &str = r#"
+Object.defineProperty(navigator, 'webdriver', { get: () => false });
+Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+const _origGetParam = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(p) {
+  if (p === 37445) return 'Intel Inc.';
+  if (p === 37446) return 'Intel Iris OpenGL Engine';
+  return _origGetParam.call(this, p);
+};
+window.navigator.permissions.query = (p) =>
+  p.name === 'notifications'
+    ? Promise.resolve({ state: Notification.permission })
+    : window.navigator.permissions.query(p);
+"#;
 
 impl LightpandaManager {
     /// Create a new manager using the user config directory
@@ -262,9 +278,18 @@ impl LightpandaManager {
             cmd.arg("--proxy-bearer-token").arg(token);
         }
 
-        // User agent suffix
-        if let Some(ref suffix) = self.settings.user_agent_suffix {
+        if let Some(ref ua) = self.settings.user_agent {
+            cmd.arg("--user-agent").arg(ua);
+        } else if let Some(ref suffix) = self.settings.user_agent_suffix {
             cmd.arg("--user-agent-suffix").arg(suffix);
+        }
+
+        if self.settings.stealth {
+            if let Some(ref path) = self.settings.stealth_script_path {
+                cmd.arg("--inject-script-file").arg(path);
+            } else {
+                cmd.arg("--inject-script").arg(ANTI_FINGERPRINT_JS);
+            }
         }
 
         // Concurrency

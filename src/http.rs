@@ -223,6 +223,51 @@ impl HttpClient {
         ))
     }
 
+    /// POST JSON body to a URL. No caching — used for API calls (Tavily, Firecrawl, etc.)
+    pub async fn post_json(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+        extra_headers: Option<&HashMap<String, String>>,
+    ) -> Result<FetchOutcome> {
+        let _global_permit = self.global_semaphore.acquire().await
+            .map_err(|e| anyhow::anyhow!("Global semaphore closed: {}", e))?;
+        let host = Self::extract_host(url);
+        let _host_permit = self.host_semaphores.acquire(&host).await;
+
+        let mut req = self.client.post(url)
+            .header("Content-Type", "application/json")
+            .json(body);
+
+        if let Some(h) = extra_headers {
+            for (k, v) in h {
+                req = req.header(k.as_str(), v.as_str());
+            }
+        }
+
+        let res = req.send().await?;
+        let status = res.status().as_u16();
+        let headers = res.headers().clone();
+        let etag = headers.get("etag")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let last_modified = headers.get("last-modified")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        if status >= 500 {
+            return Err(anyhow::anyhow!("Server error HTTP {} for {}", status, url));
+        }
+
+        let body_text = res.text().await?;
+
+        Ok(FetchOutcome::Response(
+            FetchResponse { status, headers, body_text },
+            etag,
+            last_modified,
+        ))
+    }
+
     pub fn cache(&self) -> &FeedCache {
         &self.cache
     }

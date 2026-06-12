@@ -153,13 +153,14 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
     Err("No web search provider available. Configure Tavily or Firecrawl in settings.yml.".into())
 }
 
-/// Scrape content from a URL with structured markdown output
 pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String> {
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
     let provider = input.provider.as_deref().unwrap_or("default");
 
     match provider {
         "lightpanda" => web_scrape_lightpanda(&input, &settings).await,
+        "tavily" => web_scrape_tavily(&input, &settings).await,
+        "firecrawl" => web_scrape_firecrawl(&input, &settings).await,
         _ => web_scrape_default(&input, &settings).await,
     }
 }
@@ -213,7 +214,122 @@ async fn web_scrape_lightpanda(input: &WebScrapeInput, settings: &crate::types::
     extract_scrape_output(&input.url, &body, "lightpanda", input.formats.as_deref())
 }
 
-/// Extract structured output from HTML body (shared between providers)
+async fn web_scrape_tavily(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
+    let tavily = settings.tavily.as_ref().ok_or("Tavily not configured")?;
+    if !tavily.enabled {
+        return Err("Tavily is not enabled. Set tavily.enabled=true in settings.yml".into());
+    }
+    let api_key = tavily.api_key.as_ref().ok_or("Tavily API key not configured")?;
+
+    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+
+    let body = serde_json::json!({
+        "api_key": api_key,
+        "urls": [input.url],
+        "include_images": false,
+    });
+
+    let headers = HashMap::from([("Content-Type".into(), "application/json".into())]);
+
+    match http.post_json("https://api.tavily.com/extract", &body, Some(&headers)).await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if resp.status >= 400 {
+                return Err(format!("Tavily extract failed (HTTP {}): {}", resp.status, resp.body_text));
+            }
+            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("Tavily parse error: {}", e))?;
+
+            let results = json["results"].as_array().cloned().unwrap_or_default();
+            if let Some(first) = results.first() {
+                let raw_content = first["raw_content"].as_str().unwrap_or("");
+                let markdown = if raw_content.is_empty() {
+                    first["content"].as_str().unwrap_or("").to_string()
+                } else {
+                    raw_content.to_string()
+                };
+
+                return Ok(WebScrapeOutput {
+                    success: true,
+                    url: input.url.clone(),
+                    title: first["title"].as_str().map(|s| s.to_string()),
+                    markdown: Some(markdown),
+                    metadata: None,
+                    meta: serde_json::json!({
+                        "provider": "tavily",
+                        "formats": input.formats.as_deref().unwrap_or(&["markdown".to_string()]),
+                    }),
+                });
+            }
+
+            Err("Tavily extract returned no results".into())
+        }
+        Ok(http_mod::FetchOutcome::Cached(_)) => Err("Unexpected cache hit for Tavily extract".into()),
+        Err(e) => Err(format!("Tavily extract failed: {}", e)),
+    }
+}
+
+async fn web_scrape_firecrawl(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
+    let firecrawl = settings.firecrawl.as_ref().ok_or("Firecrawl not configured")?;
+    if !firecrawl.enabled {
+        return Err("Firecrawl is not enabled. Set firecrawl.enabled=true in settings.yml".into());
+    }
+    let api_key = firecrawl.api_key.as_ref().ok_or("Firecrawl API key not configured")?;
+
+    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+
+    let default_formats = vec!["markdown".to_string()];
+    let formats = input.formats.as_ref().unwrap_or(&default_formats);
+    let body = serde_json::json!({
+        "url": input.url,
+        "formats": formats,
+        "onlyMainContent": true,
+    });
+
+    let headers = HashMap::from([
+        ("Authorization".into(), format!("Bearer {}", api_key)),
+        ("Content-Type".into(), "application/json".into()),
+    ]);
+
+    match http.post_json("https://api.firecrawl.dev/v1/scrape", &body, Some(&headers)).await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if resp.status >= 400 {
+                return Err(format!("Firecrawl scrape failed (HTTP {}): {}", resp.status, resp.body_text));
+            }
+            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("Firecrawl parse error: {}", e))?;
+
+            let data = &json["data"];
+            let markdown = data["markdown"].as_str().map(|s| s.to_string());
+            let title = data["metadata"]["title"].as_str().map(|s| s.to_string());
+            let description = data["metadata"]["description"].as_str().map(|s| s.to_string());
+            let og_title = data["metadata"]["ogTitle"].as_str().map(|s| s.to_string());
+            let og_description = data["metadata"]["ogDescription"].as_str().map(|s| s.to_string());
+
+            Ok(WebScrapeOutput {
+                success: true,
+                url: input.url.clone(),
+                title,
+                markdown,
+                metadata: Some(ScrapeMeta {
+                    description,
+                    og_title,
+                    og_description,
+                    links_count: 0,
+                    headings: Vec::new(),
+                }),
+                meta: serde_json::json!({
+                    "provider": "firecrawl",
+                    "formats": formats,
+                }),
+            })
+        }
+        Ok(http_mod::FetchOutcome::Cached(_)) => Err("Unexpected cache hit for Firecrawl scrape".into()),
+        Err(e) => Err(format!("Firecrawl scrape failed: {}", e)),
+    }
+}
+
 fn extract_scrape_output(url: &str, body: &str, provider: &str, formats: Option<&[String]>) -> Result<WebScrapeOutput, String> {
     let doc = scraper::Html::parse_document(body);
 
@@ -285,11 +401,17 @@ fn extract_scrape_output(url: &str, body: &str, provider: &str, formats: Option<
     })
 }
 
-/// Crawl a website systematically using Lightpanda browser
 pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let provider = input.provider.as_deref().unwrap_or("lightpanda");
 
-    // Check if Lightpanda is enabled
+    match provider {
+        "firecrawl" => web_crawl_firecrawl(&input, &settings).await,
+        _ => web_crawl_lightpanda(&input, &settings).await,
+    }
+}
+
+async fn web_crawl_lightpanda(input: &WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
     let lp_settings = settings.lightpanda.clone();
     if !lp_settings.enabled {
         return Err("Lightpanda is not enabled. Set lightpanda.enabled=true in settings.yml to use web.crawl".into());
@@ -306,11 +428,9 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
     let wait_selector = input.wait_selector.as_deref();
     let strip_mode = input.strip_mode.as_deref();
 
-    // Ensure binary is ready
     let _binary = lp.ensure_ready().await
         .map_err(|e| format!("Lightpanda not ready: {}", e))?;
 
-    // Fetch the initial page with all options
     let content = lp.fetch_with_all_options(
         &input.url, dump_format, obey_robots, wait_until, include_frames,
         wait_selector, strip_mode, false,
@@ -333,18 +453,15 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
         status: "ok".to_string(),
     }];
 
-    // BFS crawl: extract links from each page and follow internal ones up to max_depth
     if max_depth > 0 {
         let base_url = url::Url::parse(&input.url)
             .map_err(|e| format!("Invalid URL '{}': {}", input.url, e))?;
         let base_host = base_url.host_str().unwrap_or("").to_string();
 
-        // BFS queue: (url, depth)
         let mut queue: std::collections::VecDeque<(String, i32)> = std::collections::VecDeque::new();
         let mut visited = std::collections::HashSet::new();
         visited.insert(input.url.clone());
 
-        // Extract links from the initial page and enqueue them
         {
             let doc = scraper::Html::parse_document(&pages[0].content);
             let sel = scraper::Selector::parse("a[href]").expect("valid selector");
@@ -356,7 +473,6 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
             }
         }
 
-        // Process BFS queue
         while let Some((url_str, depth)) = queue.pop_front() {
             if pages.len() >= max_pages as usize {
                 break;
@@ -372,7 +488,6 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
                             .map(|el| el.text().collect::<String>().trim().to_string())
                     };
 
-                    // If we haven't reached max_depth, extract links from this page
                     if depth < max_depth {
                         let doc = scraper::Html::parse_document(&content);
                         let sel = scraper::Selector::parse("a[href]").expect("valid selector");
@@ -408,7 +523,7 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
     let count = pages.len();
     Ok(WebCrawlOutput {
         success: true,
-        start_url: input.url,
+        start_url: input.url.clone(),
         pages,
         count,
         meta: WebCrawlMeta {
@@ -421,6 +536,115 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
             include_frames,
         },
     })
+}
+
+async fn web_crawl_firecrawl(input: &WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
+    let firecrawl = settings.firecrawl.as_ref().ok_or("Firecrawl not configured")?;
+    if !firecrawl.enabled {
+        return Err("Firecrawl is not enabled. Set firecrawl.enabled=true in settings.yml".into());
+    }
+    let api_key = firecrawl.api_key.as_ref().ok_or("Firecrawl API key not configured")?;
+
+    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+
+    let max_depth = input.max_depth.unwrap_or(2);
+    let max_pages = input.max_pages.unwrap_or(20);
+
+    let body = serde_json::json!({
+        "url": input.url,
+        "limit": max_pages,
+        "maxDepth": max_depth,
+        "scrapeOptions": {
+            "formats": ["markdown"],
+            "onlyMainContent": true,
+        },
+    });
+
+    let headers = HashMap::from([
+        ("Authorization".into(), format!("Bearer {}", api_key)),
+        ("Content-Type".into(), "application/json".into()),
+    ]);
+
+    let job_id = match http.post_json("https://api.firecrawl.dev/v1/crawl", &body, Some(&headers)).await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if resp.status >= 400 {
+                return Err(format!("Firecrawl crawl start failed (HTTP {}): {}", resp.status, resp.body_text));
+            }
+            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("Firecrawl parse error: {}", e))?;
+            json["id"].as_str()
+                .ok_or_else(|| format!("Firecrawl crawl returned no job ID: {}", resp.body_text))?
+                .to_string()
+        }
+        Ok(http_mod::FetchOutcome::Cached(_)) => return Err("Unexpected cache hit for Firecrawl crawl".into()),
+        Err(e) => return Err(format!("Firecrawl crawl start failed: {}", e)),
+    };
+
+    let poll_url = format!("https://api.firecrawl.dev/v1/crawl/{}", job_id);
+    let mut attempts = 0u32;
+    let max_attempts = 120;
+
+    loop {
+        if attempts >= max_attempts {
+            return Err(format!("Firecrawl crawl timed out after {} polls", max_attempts));
+        }
+        attempts += 1;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        match http.fetch(&poll_url, Some(&headers), "bypass").await {
+            Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+                if resp.status >= 400 {
+                    return Err(format!("Firecrawl poll failed (HTTP {}): {}", resp.status, resp.body_text));
+                }
+                let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                    .map_err(|e| format!("Firecrawl poll parse error: {}", e))?;
+
+                let status = json["status"].as_str().unwrap_or("");
+                match status {
+                    "completed" => {
+                        let data = json["data"].as_array().cloned().unwrap_or_default();
+                        let pages: Vec<CrawledPage> = data.iter().enumerate().map(|(i, item)| {
+                            CrawledPage {
+                                url: item["metadata"]["sourceURL"].as_str()
+                                    .or(item["url"].as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                title: item["metadata"]["title"].as_str().map(|s| s.to_string()),
+                                content: item["markdown"].as_str().unwrap_or("").to_string(),
+                                depth: i as i32,
+                                status: "ok".to_string(),
+                            }
+                        }).collect();
+
+                        let count = pages.len();
+                        return Ok(WebCrawlOutput {
+                            success: true,
+                            start_url: input.url.clone(),
+                            pages,
+                            count,
+                            meta: WebCrawlMeta {
+                                provider: "firecrawl".to_string(),
+                                max_depth,
+                                max_pages,
+                                obey_robots: true,
+                                dump_format: "markdown".to_string(),
+                                wait_until: "networkidle".to_string(),
+                                include_frames: false,
+                            },
+                        });
+                    }
+                    "failed" => {
+                        let error = json["error"].as_str().unwrap_or("unknown error");
+                        return Err(format!("Firecrawl crawl failed: {}", error));
+                    }
+                    _ => continue,
+                }
+            }
+            Ok(http_mod::FetchOutcome::Cached(_)) => return Err("Unexpected cache hit for Firecrawl poll".into()),
+            Err(e) => return Err(format!("Firecrawl poll failed: {}", e)),
+        }
+    }
 }
 
 /// Discover URLs on a website by analyzing sitemap and links.
