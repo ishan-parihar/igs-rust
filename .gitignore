@@ -33,6 +33,9 @@ cache/
 .sisyphus/
 config/insights.db
 config/cache/
+
+# User-specific settings (may contain API keys)
+config/settings.yml
 target/
 
 # Cloned reference repos (not part of IGS)

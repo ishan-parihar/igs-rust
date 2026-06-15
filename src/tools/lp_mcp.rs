@@ -14,7 +14,7 @@ async fn call_lp_tool(
     if guard.is_none() {
         *guard = Some(LightpandaMcpClient::new(binary_path.to_path_buf()));
     }
-    let lp = guard.as_ref().unwrap();
+    let lp = guard.as_ref().expect("lightpanda client initialized above");
 
     match lp.call_tool(tool_name, arguments).await {
         Ok(result) => {

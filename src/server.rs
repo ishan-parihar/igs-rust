@@ -290,19 +290,11 @@ impl HasFormat for WebMapInput {
     fn format(&self) -> &Option<String> { &self.output.format }
 }
 
-impl HasFormat for InsightAllConnectionsInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
 impl HasFormat for InsightFindConnectionsInput {
     fn format(&self) -> &Option<String> { &self.output.format }
 }
 
 impl HasFormat for InsightTrendingInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for IntelligenceCollectInput {
     fn format(&self) -> &Option<String> { &self.output.format }
 }
 
@@ -313,6 +305,8 @@ pub struct IgsMcpServer {
     tool_router: ToolRouter<IgsMcpServer>,
     insights: Arc<Mutex<InsightStorage>>,
     lightpanda_mcp: Arc<Mutex<Option<LightpandaMcpClient>>>,
+    /// Tool groups for progressive discovery. Empty = all groups available.
+    tool_groups: Vec<String>,
 }
 
 // ─── Tool Router ────────────────────────────────────────────────
@@ -328,6 +322,25 @@ impl IgsMcpServer {
     pub fn resolve_format(params: &impl HasFormat) -> String {
         params.format().as_deref().unwrap_or("toon").to_string()
     }
+
+    /// Get filtered tool list based on configured groups.
+    /// If tool_groups is empty, returns all tool names.
+    pub fn filtered_tool_names(&self, all_tools: Vec<String>) -> Vec<String> {
+        if self.tool_groups.is_empty() {
+            return all_tools;
+        }
+        let mut result = Vec::new();
+        for group_name in &self.tool_groups {
+            if let Some(group_tools) = crate::tools::registry::get_group_tools(group_name) {
+                for tool in &all_tools {
+                    if group_tools.contains(&tool.as_str()) && !result.contains(tool) {
+                        result.push(tool.clone());
+                    }
+                }
+            }
+        }
+        result
+    }
 }
 
 #[tool_router(router = tool_router)]
@@ -337,6 +350,16 @@ impl IgsMcpServer {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
             lightpanda_mcp: Arc::new(Mutex::new(None)),
+            tool_groups: Vec::new(),
+        }
+    }
+
+    pub fn new_with_groups(tool_groups: Vec<String>) -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+            insights: Arc::new(Mutex::new(InsightStorage::new())),
+            lightpanda_mcp: Arc::new(Mutex::new(None)),
+            tool_groups,
         }
     }
 
@@ -432,14 +455,14 @@ impl IgsMcpServer {
 
     // ── Parser Tools ────────────────────────────────────────────
 
-    #[tool(name = "parsers.list", description = "List available source parser keys. Use these keys in sources.upsert parser field. Available: rss (RSS/Atom feeds), ofac (US Treasury OFAC), who_dons (WHO Disease Outbreak News), newslaundry (Newslaundry JSON-in-script), generic_html (CSS selector-based HTML scraping), ussf_cfc (US Space Force), hackernews (HN Algolia JSON), youtube (YouTube Atom RSS), github (GitHub releases/search), bluesky (Bluesky AT Protocol), semantic_scholar (Semantic Scholar API). Auto-detects if parser not specified.")]
+    #[tool(name = "parsers.list", description = "List available source parser keys (rss, ofac, who_dons, newslaundry, generic_html, ussf_cfc, hackernews, youtube, github, bluesky, semantic_scholar). Auto-detects if parser not specified in sources.upsert.")]
     async fn parsers_list(&self) -> Result<Json<ParserListOutput>, String> {
         parsers_tools::parsers_list().await.map(Json)
     }
 
     // ── News Tools ──────────────────────────────────────────────
 
-    #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use depth='deep' for full intelligence pipeline (fetch -> enrich -> index in insight engine). Use skip_enrich/skip_index to skip pipeline steps. Returns NewsItem[] with date_confidence, freshness_score. At depth='deep' with >=5 items, returns ClusterInfo with entity clusters. Weighted RRF fusion auto-deduplicates across sources. Per-author dedup caps items per author. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
+    #[tool(name = "news.fetch", description = "Fetch news from 410+ sources across 47 countries. Filter by pools, countries, cities, domains, time range, and keywords. Keyword clusters: OR within, AND across. depth='deep' runs full pipeline (fetch→enrich→index). skip_enrich/skip_index to skip steps. Default output: TOON. Use format='json' for JSON.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let depth = params.0.depth_opts.depth.clone().unwrap_or_else(|| "default".to_string());
@@ -500,7 +523,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch output (map id, title, link, pub_date, source_name, pool_id, content_snippet). Output: items with topics (word frequency), entities (capitalized word sequences), sentiment (keyword-based), summary (first sentence). Pass extract=['topics','entities','sentiment','summary'] to select what to extract, or omit for all. Add 'diversity' to extract for source diversity metrics. No external API calls. Use with insights.indexArticles to enable cross-article analysis.")]
+    #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch. Output: items with topics, entities, sentiment, summary. Pass extract=['topics','entities','sentiment','summary'] to select. No external API calls. Use with insights.indexArticles for cross-article analysis.")]
     async fn news_enrich(&self, params: Parameters<NewsEnrichInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = format!("enrich-{}", params.0.items.len());
@@ -723,24 +746,12 @@ impl IgsMcpServer {
 
     // ── Insight Tools ───────────────────────────────────────────
 
-    #[tool(name = "insights.findConnections", description = "Find cross-domain entity connections in indexed articles. Pass entity to look up specific entity, or omit entity to discover all cross-domain entities. Requires articles indexed via insights.indexArticles or intelligence.collect. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2), limit for max results in discovery mode (default 20).")]
+    #[tool(name = "insights.findConnections", description = "Find cross-domain entity connections in indexed articles. Pass entity to look up specific entity, or omit to discover all cross-domain entities. Requires articles indexed via insights.indexArticles or news.fetch with depth='deep'. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2), limit for max results (default 20).")]
     async fn insight_find_connections(&self, params: Parameters<InsightFindConnectionsInput>) -> Result<Json<InsightFindConnectionsOutput>, String> {
         insights::insights_find_connections(&self.insights, params.0).await.map(Json)
     }
 
-    #[tool(name = "insights.findAllConnections", description = "[DEPRECATED] Use insight_find_connections instead. This tool will be removed in v2.")]
-    async fn insights_find_all_connections(&self, params: Parameters<InsightAllConnectionsInput>) -> Result<CallToolResult, String> {
-        let unified = InsightFindConnectionsInput {
-            entity: None,
-            min_domains: params.0.min_domains,
-            limit: params.0.limit,
-            output: params.0.output,
-        };
-        let result = insights::insights_find_connections(&self.insights, unified).await?;
-        Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&result).unwrap())]))
-    }
-
-    #[tool(name = "insights.trendingEntities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.indexArticles or intelligence.collect. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3).")]
+    #[tool(name = "insights.trendingEntities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.indexArticles. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3).")]
     async fn insights_trending(&self, params: Parameters<InsightTrendingInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = insights::insights_trending(&self.insights, params.0).await?;
@@ -752,7 +763,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "insights.indexArticles", description = "Index articles in the in-memory insight engine for cross-article entity analysis. Input: articles with id, title, pub_date, source_name, and optionally domains (Vec<DomainInfo>) and entities (Vec<EntityInfo>). Use intelligence.collect to automate fetch→enrich→index pipeline. After indexing, use insights.findConnections or insights.trendingEntities.")]
+    #[tool(name = "insights.indexArticles", description = "Index articles in the in-memory insight engine for cross-article entity analysis. Input: articles with id, title, pub_date, source_name, and optionally domains (Vec<DomainInfo>) and entities (Vec<EntityInfo>). Use news.fetch with depth='deep' to automate fetch→enrich→index pipeline. After indexing, use insights.findConnections or insights.trendingEntities.")]
     async fn insights_index(&self, params: Parameters<InsightIndexInput>) -> Result<Json<InsightIndexOutput>, String> {
         insights::insights_index(&self.insights, params.0).await.map(Json)
     }
@@ -767,32 +778,6 @@ impl IgsMcpServer {
         insights::insights_clear(&self.insights).await.map(Json)
     }
 
-    // ── Intelligence Pipeline Tools ─────────────────────────────
-
-    #[tool(name = "intelligence.collect", description = "DEPRECATED: Use news.fetch with depth='deep' instead. Full intelligence pipeline in one call: fetch news → enrich with NLP → index in insight engine. Pass skip_enrich=true or skip_index=true to skip steps.")]
-    async fn intelligence_collect(&self, params: Parameters<IntelligenceCollectInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
-
-        // Convert IntelligenceCollectInput to NewsFetchInput
-        let news_input = NewsFetchInput {
-            filters: params.0.filters,
-            discovery_mode: None,
-            urgency: None,
-            skip_enrich: params.0.skip_enrich,
-            skip_index: params.0.skip_index,
-            depth_opts: params.0.depth_opts,
-            output: params.0.output,
-        };
-
-        let output = news::fetch_news_intelligent(news_input, &self.insights).await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
-    }
-
     // ── Lightpanda MCP Browser Automation Tools ──────────────────
 
     #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript. Spawns persistent browser session on first call. Use wait_until to control when page is considered loaded.")]
@@ -802,77 +787,77 @@ impl IgsMcpServer {
         lp_mcp::lp_goto(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown. Use after lightpanda.goto to extract content. Supports strip_mode to remove js/css/ui elements.")]
+    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown. Supports strip_mode to remove js/css/ui elements.")]
     async fn lp_markdown(&self, params: Parameters<LpMarkdownInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_markdown(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text.")]
     async fn lp_links(&self, params: Parameters<LpLinksInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_links(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result of the expression. Use after lightpanda.goto. Example: expressions like document.title, document.querySelectorAll('h1').length")]
+    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result. Example: document.title, document.querySelectorAll('h1').length")]
     async fn lp_evaluate(&self, params: Parameters<LpEvaluateInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_evaluate(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation of page structure. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation of page structure.")]
     async fn lp_semantic_tree(&self, params: Parameters<LpSemanticTreeInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_semantic_tree(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.structuredData", description = "Extract structured data from the current page: JSON-LD, OpenGraph metadata, microdata. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.structuredData", description = "Extract structured data from the current page: JSON-LD, OpenGraph metadata, microdata.")]
     async fn lp_structured_data(&self, params: Parameters<LpStructuredDataInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_structured_data(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.detectForms", description = "Detect forms on the current page. Returns form fields, actions, and methods. Use after lightpanda.goto to find forms for filling.")]
+    #[tool(name = "lightpanda.detectForms", description = "Detect forms on the current page. Returns form fields, actions, and methods.")]
     async fn lp_detect_forms(&self, params: Parameters<LpDetectFormsInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_detect_forms(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector. Optionally wait for navigation. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector. Optionally wait for navigation.")]
     async fn lp_click(&self, params: Parameters<LpClickInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_click(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field. Use after lightpanda.goto and optionally lightpanda.detectForms.")]
+    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field.")]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_fill(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right. Pixels: amount to scroll. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right. Pixels: amount to scroll.")]
     async fn lp_scroll(&self, params: Parameters<LpScrollInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_scroll(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.waitForSelector", description = "Wait for a CSS selector to appear on the page. Useful for SPAs that load content dynamically. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.waitForSelector", description = "Wait for a CSS selector to appear on the page. Useful for SPAs that load content dynamically.")]
     async fn lp_wait_for_selector(&self, params: Parameters<LpWaitForSelectorInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_wait_for_selector(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.interactiveElements", description = "Find interactive elements on the current page (buttons, links, inputs). Returns clickable/fillable elements. Use after lightpanda.goto.")]
+    #[tool(name = "lightpanda.interactiveElements", description = "Find interactive elements on the current page (buttons, links, inputs). Returns clickable/fillable elements.")]
     async fn lp_interactive_elements(&self, params: Parameters<LpInteractiveElementsInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;

@@ -39,8 +39,9 @@ pub fn parse_date_with_confidence(raw: &str) -> (String, String) {
         return (dt.and_utc().to_rfc3339(), "medium".to_string());
     }
     if let Ok(dt) = NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
-        let rfc = dt.and_hms_opt(0, 0, 0).unwrap().and_utc().to_rfc3339();
-        return (rfc, "medium".to_string());
+        if let Some(ndt) = dt.and_hms_opt(0, 0, 0) {
+            return (ndt.and_utc().to_rfc3339(), "medium".to_string());
+        }
     }
     for fmt in &[
         "%B %d, %Y",
@@ -613,10 +614,10 @@ fn find_date_prefix(text: &str) -> Option<String> {
             if let Some(end) = chunk.find(" - ") {
                 let date_str = chunk[..end].trim();
                 if let Ok(d) = chrono::NaiveDate::parse_from_str(date_str, "%B %d, %Y") {
-                    return Some(d.and_hms_opt(0,0,0).unwrap().and_utc().to_rfc3339());
+                    return d.and_hms_opt(0, 0, 0).map(|ndt| ndt.and_utc().to_rfc3339());
                 }
                 if let Ok(d) = chrono::NaiveDate::parse_from_str(date_str, "%b %d, %Y") {
-                    return Some(d.and_hms_opt(0,0,0).unwrap().and_utc().to_rfc3339());
+                    return d.and_hms_opt(0, 0, 0).map(|ndt| ndt.and_utc().to_rfc3339());
                 }
             }
         }
@@ -1026,28 +1027,28 @@ pub fn filter_by_keywords(
     // Normalize keywords into clusters
     let clusters: Vec<Vec<String>> = match keywords {
         Some(kw) if kw.is_array() => {
-            if kw.as_array().is_some_and(|arr| arr.first().is_some_and(|v| v.is_array())) {
-                // Already clustered: [[...], [...]]
-                kw.as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|cluster| {
-                        cluster
-                            .as_array()
-                            .unwrap_or(&vec![])
-                            .iter()
-                            .map(|v| v.as_str().unwrap_or("").to_lowercase())
-                            .collect()
-                    })
-                    .collect()
+            if let Some(arr) = kw.as_array() {
+                if arr.first().is_some_and(|v| v.is_array()) {
+                    // Already clustered: [[...], [...]]
+                    arr.iter()
+                        .map(|cluster| {
+                            cluster
+                                .as_array()
+                                .unwrap_or(&vec![])
+                                .iter()
+                                .map(|v| v.as_str().unwrap_or("").to_lowercase())
+                                .collect()
+                        })
+                        .collect()
+                } else {
+                    // Flat array: ["a", "b"]
+                    vec![arr
+                        .iter()
+                        .map(|v| v.as_str().unwrap_or("").to_lowercase())
+                        .collect()]
+                }
             } else {
-                // Flat array: ["a", "b"]
-                vec![kw
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| v.as_str().unwrap_or("").to_lowercase())
-                    .collect()]
+                vec![]
             }
         }
         _ => vec![],
@@ -1093,9 +1094,10 @@ pub fn filter_by_time(items: Vec<NewsItem>, start: Option<&str>, end: Option<&st
         .and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok().map(|dt| dt.timestamp_millis()))
         .or_else(|| {
             start.and_then(|d| {
-                chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%dT%H:%M:%S%.fZ")
-                    .or_else(|_| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map(|nd| nd.and_hms_opt(0, 0, 0).unwrap()))
+                chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
                     .ok()
+                    .and_then(|nd| nd.and_hms_opt(0, 0, 0))
+                    .or_else(|| chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%dT%H:%M:%S%.fZ").ok())
                     .map(|ndt| ndt.and_utc().timestamp_millis())
             })
         })
@@ -1105,9 +1107,10 @@ pub fn filter_by_time(items: Vec<NewsItem>, start: Option<&str>, end: Option<&st
         .and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok().map(|dt| dt.timestamp_millis()))
         .or_else(|| {
             end.and_then(|d| {
-                chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%dT%H:%M:%S%.fZ")
-                    .or_else(|_| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map(|nd| nd.and_hms_opt(23, 59, 59).unwrap()))
+                chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
                     .ok()
+                    .and_then(|nd| nd.and_hms_opt(23, 59, 59))
+                    .or_else(|| chrono::NaiveDateTime::parse_from_str(d, "%Y-%m-%dT%H:%M:%S%.fZ").ok())
                     .map(|ndt| ndt.and_utc().timestamp_millis())
             })
         })

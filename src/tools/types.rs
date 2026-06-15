@@ -552,33 +552,6 @@ pub struct WebMapOutput {
 // ─── Insight Types ────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct InsightConnectionInput {
-    pub entity: String,
-    pub min_domains: Option<i32>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct InsightConnectionOutput {
-    pub connections: Vec<EntityConnection>,
-    pub count: usize,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct InsightAllConnectionsInput {
-    pub min_domains: Option<i32>,
-    pub limit: Option<i32>,
-    #[serde(flatten)]
-    pub output: OutputOptions,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct InsightAllConnectionsOutput {
-    pub connections: Vec<EntityConnection>,
-    pub total_found: usize,
-    pub stats: InsightStats,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightFindConnectionsInput {
     /// Entity to find connections for (omit to discover all cross-domain entities)
     pub entity: Option<String>,
@@ -645,38 +618,6 @@ pub struct InsightStatsOutput {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightClearOutput {
     pub cleared: bool,
-}
-
-// ─── Intelligence Pipeline Types ────────────────────────────────
-
-/// Input for intelligence.collect — runs fetch→enrich→index pipeline
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct IntelligenceCollectInput {
-    #[serde(flatten)]
-    pub filters: DiscoveryFilters,
-    /// Skip NLP enrichment step
-    pub skip_enrich: Option<bool>,
-    /// Skip insight indexing step
-    pub skip_index: Option<bool>,
-    #[serde(flatten)]
-    pub depth_opts: DepthOptions,
-    #[serde(flatten)]
-    pub output: OutputOptions,
-}
-
-/// Output from intelligence.collect pipeline
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct IntelligenceCollectOutput {
-    /// Number of news items fetched
-    pub fetched: usize,
-    /// Number of items enriched
-    pub enriched: usize,
-    /// Number of items indexed in insight engine
-    pub indexed: usize,
-    /// Insight engine stats after indexing
-    pub stats: InsightStats,
-    /// Fetch metadata
-    pub fetch_meta: NewsFetchMeta,
 }
 
 // ─── Lightpanda MCP Browser Automation Types ───────────────────

@@ -186,7 +186,7 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
 pub async fn fetch_news_intelligent(
     input: NewsFetchInput,
     insights: &Arc<Mutex<InsightStorage>>,
-) -> Result<IntelligenceCollectOutput, String> {
+) -> Result<serde_json::Value, String> {
     // Use json format for internal pipeline steps
     let mut fetch_input = input.clone();
     fetch_input.output.format = Some("json".to_string());
@@ -198,13 +198,13 @@ pub async fn fetch_news_intelligent(
 
     if fetched == 0 {
         let stats = insights.lock().await.stats();
-        return Ok(IntelligenceCollectOutput {
-            fetched: 0,
-            enriched: 0,
-            indexed: 0,
-            stats,
-            fetch_meta,
-        });
+        return Ok(serde_json::json!({
+            "fetched": 0,
+            "enriched": 0,
+            "indexed": 0,
+            "stats": stats,
+            "fetch_meta": fetch_meta,
+        }));
     }
 
     // Step 2: Enrich with NLP (unless skipped)
@@ -295,13 +295,13 @@ pub async fn fetch_news_intelligent(
 
     let stats = insights.lock().await.stats();
 
-    Ok(IntelligenceCollectOutput {
-        fetched,
-        enriched: enriched_count,
-        indexed: indexed_count,
-        stats,
-        fetch_meta,
-    })
+    Ok(serde_json::json!({
+        "fetched": fetched,
+        "enriched": enriched_count,
+        "indexed": indexed_count,
+        "stats": stats,
+        "fetch_meta": fetch_meta,
+    }))
 }
 
 /// Debug helper. Test a single source and return up to 10 items.

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use igs_rust_mcp::server::IgsMcpServer;
-use igs_rust_mcp::tools::{news, pools, sources, reddit, research, web, helpers::toon_encode, parsers as parsers_tools};
+use igs_rust_mcp::tools::{news, pools, sources, reddit, research, web, helpers::toon_encode, parsers as parsers_tools, registry};
 use igs_rust_mcp::tools::types::*;
 use igs_rust_mcp::tools::types_base::{DiscoveryFilters, DepthOptions, OutputOptions};
 use rmcp::ServiceExt;
@@ -58,15 +58,16 @@ enum Commands {
         #[command(subcommand)]
         action: BrowserAction,
     },
-    /// Intelligence pipeline: fetch → enrich → index
-    Intelligence {
-        #[command(subcommand)]
-        action: IntelligenceAction,
-    },
     /// List available parsers
     Parsers,
     /// Show IGS settings and status
     Status,
+    /// List tool groups for progressive discovery
+    ToolGroups {
+        /// Filter to show tools in a specific group
+        #[arg(long)]
+        group: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -278,38 +279,6 @@ enum WebAction {
 }
 
 #[derive(Subcommand)]
-enum IntelligenceAction {
-    /// Run full pipeline: fetch → enrich → index
-    Collect {
-        #[arg(long, value_delimiter = ',')]
-        pools: Option<Vec<String>>,
-        #[arg(long, value_delimiter = ',')]
-        sources: Option<Vec<String>>,
-        #[arg(long, value_delimiter = ',')]
-        countries: Option<Vec<String>>,
-        #[arg(long)]
-        start: Option<String>,
-        #[arg(long)]
-        end: Option<String>,
-        #[arg(long, value_delimiter = ',')]
-        keywords: Option<Vec<String>>,
-        #[arg(long, default_value = "50")]
-        limit: i32,
-        #[arg(long, default_value = "prefer")]
-        cache_mode: String,
-        /// Fetch depth: "quick", "deep", "full"
-        #[arg(long)]
-        depth: Option<String>,
-        /// Skip NLP enrichment step
-        #[arg(long)]
-        skip_enrich: bool,
-        /// Skip insight indexing step
-        #[arg(long)]
-        skip_index: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum BrowserAction {
     /// Navigate to a URL
     Goto {
@@ -408,7 +377,9 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Mcp => {
             // MCP server mode — takes over stdin/stdout, no CLI output
-            let server = IgsMcpServer::new();
+            let settings = igs_rust_mcp::config::load_settings().await?;
+            let tool_groups = settings.tool_groups.unwrap_or_default();
+            let server = IgsMcpServer::new_with_groups(tool_groups);
             let service = server.serve(rmcp::transport::stdio()).await.inspect_err(|e| {
                 tracing::error!("MCP server error: {:?}", e);
             })?;
@@ -438,32 +409,39 @@ async fn main() -> anyhow::Result<()> {
             output(fmt, &result);
         }
 
-        Commands::Intelligence { action } => match action {
-            IntelligenceAction::Collect { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode, depth, skip_enrich, skip_index } => {
-                let kw = keywords.map(|k| serde_json::json!(k));
-                let result = r(igs_rust_mcp::tools::intelligence::intelligence_collect(
-                    &Arc::new(Mutex::new(igs_rust_mcp::server::InsightStorage::new())),
-                    IntelligenceCollectInput {
-                        filters: DiscoveryFilters {
-                            pools,
-                            sources: srcs,
-                            countries,
-                            cities: None,
-                            domains: None,
-                            start,
-                            end,
-                            keywords: kw,
-                            exclude_keywords: None,
-                            match_all: None,
-                            limit: Some(limit),
-                            cache_mode: Some(cache_mode),
-                        },
-                        skip_enrich: Some(skip_enrich),
-                        skip_index: Some(skip_index),
-                        depth_opts: DepthOptions { depth },
-                        output: OutputOptions { format: Some(fmt.clone()) },
-                    },
-                ).await)?;
+        Commands::ToolGroups { group } => {
+            if let Some(group_name) = group {
+                match registry::get_group_tools(&group_name) {
+                    Some(tools) => {
+                        let result = serde_json::json!({
+                            "group": group_name,
+                            "tool_count": tools.len(),
+                            "tools": tools,
+                        });
+                        output(fmt, &result);
+                    }
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "Unknown group '{}'. Available groups: {}",
+                            group_name,
+                            registry::list_groups().iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ")
+                        ));
+                    }
+                }
+            } else {
+                let groups: Vec<_> = registry::TOOL_GROUPS.iter().map(|g| {
+                    serde_json::json!({
+                        "name": g.name,
+                        "description": g.description,
+                        "tool_count": g.tools.len(),
+                        "tools": g.tools,
+                    })
+                }).collect();
+                let result = serde_json::json!({
+                    "total_groups": groups.len(),
+                    "total_tools": registry::total_tool_count(),
+                    "groups": groups,
+                });
                 output(fmt, &result);
             }
         }

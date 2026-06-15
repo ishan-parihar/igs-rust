@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-BIN = str(Path(__file__).resolve().parent.parent / "target" / "release" / "igs-mcp")
+BIN = str(Path(__file__).resolve().parent.parent / "target" / "release" / "igs")
 CFG = str(Path(__file__).resolve().parent.parent / "config")
 
 PASS = 0

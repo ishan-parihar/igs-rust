@@ -1,6 +1,5 @@
 use crate::server::InsightStorage;
 use crate::tools::types::*;
-use crate::tools::types_base::OutputOptions;
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -28,36 +27,6 @@ pub(crate) async fn insights_find_connections(
         let stats = storage.stats();
         Ok(InsightFindConnectionsOutput { connections, count, total_found: Some(total_found), stats: Some(stats) })
     }
-}
-
-/// [DEPRECATED] Use insights_find_connections with entity=Some(...)
-pub(crate) async fn insights_find_connections_entity(
-    storage: &Arc<Mutex<InsightStorage>>,
-    entity: String,
-    min_domains: Option<i32>,
-) -> Result<InsightConnectionOutput, String> {
-    let input = InsightFindConnectionsInput { entity: Some(entity), min_domains, limit: None, output: OutputOptions { format: None } };
-    let result = insights_find_connections(storage, input).await?;
-    Ok(InsightConnectionOutput { connections: result.connections, count: result.count })
-}
-
-/// [DEPRECATED] Use insights_find_connections with entity=None
-pub(crate) async fn insights_find_all_connections_legacy(
-    storage: &Arc<Mutex<InsightStorage>>,
-    input: InsightAllConnectionsInput,
-) -> Result<InsightAllConnectionsOutput, String> {
-    let unified_input = InsightFindConnectionsInput {
-        entity: None,
-        min_domains: input.min_domains,
-        limit: input.limit,
-        output: input.output,
-    };
-    let result = insights_find_connections(storage, unified_input).await?;
-    Ok(InsightAllConnectionsOutput {
-        connections: result.connections,
-        total_found: result.total_found.unwrap_or(0),
-        stats: result.stats.unwrap_or(InsightStats { total_articles: 0, total_entities: 0, total_domains: 0, avg_entities_per_article: 0.0, avg_domains_per_article: 0.0 }),
-    })
 }
 
 /// Detect entities with increasing mention frequency

@@ -177,14 +177,6 @@ fn default_timezone() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ProviderSettings {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_key: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TavilySettings {
     #[serde(default)]
@@ -409,6 +401,8 @@ pub struct Settings {
     pub pipeline: PipelineSettings,
     #[serde(default)]
     pub output: OutputSettings,
+    #[serde(default)]
+    pub tool_groups: Option<Vec<String>>,
 }
 
 // ─── News Types ─────────────────────────────────────────────────
@@ -463,11 +457,6 @@ pub struct QueryCacheMeta {
 // ─── Research Types ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct PaperAuthor {
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchPaper {
     pub id: String,
     pub title: String,
@@ -501,29 +490,6 @@ pub struct DomainInfo {
     pub domain: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct EnrichedArticle {
-    pub id: String,
-    pub title: String,
-    pub link: String,
-    pub pub_date: String,
-    pub source_name: String,
-    pub pool_id: String,
-    pub content_snippet: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub author: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub topics: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub entities: Option<Vec<EntityInfo>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sentiment: Option<SentimentResult>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub domains: Option<Vec<DomainInfo>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

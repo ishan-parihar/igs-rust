@@ -18,7 +18,7 @@ Guide for AI agents using IGS as an intelligence gathering tool.
 
 ### Tool Discovery (Progressive Loading)
 
-Tools are organized into 8 domain groups. Load only the groups you need to conserve context.
+Tools are organized into 7 domain groups. Load only the groups you need to conserve context.
 
 | Group | Tools | Context Est. | When to Load |
 |-------|-------|-------------|--------------|
@@ -26,10 +26,9 @@ Tools are organized into 8 domain groups. Load only the groups you need to conse
 | **News** | `news.fetch`, `news.testSource`, `news.enrich` | ~3% | Fetching and enriching news articles |
 | **Research** | `research.search`, `research.paper`, `research.download` | ~3% | Academic paper search and retrieval |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | ~4% | Web search, scraping, crawling |
-| **Insights** | `insight_find_connections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
+| **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
 | **Social** | `reddit.search` | ~1% | Searching Reddit posts |
 | **Browser** | `lightpanda.*` (12 tools) | ~8% | JS-rendered browsing, form interaction |
-| **Pipeline** | `news.fetch` (with `depth: "deep"`) | ~1% | Full fetch→enrich→index pipeline |
 
 **Recommended loading patterns:**
 
@@ -46,10 +45,9 @@ Tools are organized into 8 domain groups. Load only the groups you need to conse
 | **News** | `news.fetch`, `news.testSource`, `news.enrich` |
 | **Research** | `research.search`, `research.paper`, `research.download` |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` |
-| **Insights** | `insight_find_connections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` |
+| **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` |
 | **Social** | `reddit.search` |
 | **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` |
-| **Pipeline** | `news.fetch` (with `depth: "deep"`) |
 
 ## Recommended Workflows
 
@@ -62,7 +60,7 @@ news.fetch(pools=["GLOBAL_TECH_CYBER"], limit=50, depth="deep")
 insights.trendingEntities(time_window_hours=24)
 → Returns entities with increasing mention frequency
 
-insight_find_connections(min_domains=2)
+insights.findConnections(min_domains=2)
 → Returns cross-domain connections. Entity is optional — omit for all connections.
 ```
 
@@ -229,7 +227,7 @@ After indexing articles via `insights.indexArticles` or `news.fetch` with `depth
 
 | Tool | Purpose |
 |------|---------|
-| `insight_find_connections(entity?, min_domains?, limit?)` | Find cross-domain connections. Entity optional — omit for all connections. |
+| `insights.findConnections(entity?, min_domains?, limit?)` | Find cross-domain connections. Entity optional — omit for all connections. |
 | `insights.trendingEntities(time_window_hours, min_growth, min_current_mentions)` | Detect entity mention trends |
 | `insights.getStats` | Engine statistics (total_articles, total_entities, total_domains) |
 | `insights.clearIndex` | Clear all indexed articles |

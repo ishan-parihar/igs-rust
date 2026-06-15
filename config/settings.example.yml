@@ -1,0 +1,87 @@
+# IGS MCP Server — Settings Configuration (Example)
+# Copy this file to ~/.config/igs-mcp/settings.yml and customize.
+# Environment variable substitution: ${VAR_NAME} is replaced at runtime.
+
+# ─── HTTP Client ──────────────────────────────────────────────
+http:
+  userAgent: IGS/0.3.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
+  timeoutMs: 15000
+  retries: 2
+  backoffBaseMs: 500
+  backoffFactor: 2.0
+  concurrency: 6
+  perHost: 2
+
+# ─── Caching ──────────────────────────────────────────────────
+cache:
+  enabled: true
+  dir: cache
+  honorEtags: true
+  ttlMs: 1800000
+  queryTtlMs: 600000
+  maxItemsPerSource: 300
+
+# ─── Time ─────────────────────────────────────────────────────
+time:
+  timezone: local
+
+# ─── Web Search Providers ─────────────────────────────────────
+
+# Tavily — AI-powered web search
+# Get API key: https://tavily.com
+tavily:
+  enabled: true
+  apiKey: ${TAVILY_API_KEY}
+  searchDepth: basic
+  defaultTopic: general
+  timeoutMs: 30000
+
+# Firecrawl — Web scraping and crawling API
+# Get API key: https://firecrawl.dev
+firecrawl:
+  enabled: true
+  apiKey: ${FIRECRAWL_API_KEY}
+  timeoutMs: 60000
+  defaultFormats:
+    - markdown
+    - html
+    - screenshot
+    - links
+
+# ─── Lightpanda Headless Browser ──────────────────────────────
+lightpanda:
+  enabled: true
+  auto_update: true
+  prefer_nightly: false
+  obey_robots: true
+  timeout_ms: 30000
+  max_concurrent: 10
+  max_response_size: 0
+  insecure_tls: false
+  stealth: true
+
+# ─── NLP Enrichment ──────────────────────────────────────────
+nlp:
+  enabled: true
+  max_topics: 8
+  max_entities: 20
+  min_entity_length: 2
+  dedup_threshold: 0.3
+
+# ─── Intelligence Pipeline ───────────────────────────────────
+pipeline:
+  default_pool: GLOBAL_TECH_CYBER
+  default_limit: 50
+  auto_index: true
+  persist_insights: true
+
+# ─── Output Format ────────────────────────────────────────────
+output:
+  default_format: toon
+  toon_indent: 2
+  max_items_per_response: 500
+  dump_enabled: false
+  dump_dir: "~/Documents/IGS"
+
+# ─── Tool Groups ───────────────────────────────────────────────
+# tool_groups: ["discovery", "news", "web"]

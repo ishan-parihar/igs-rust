@@ -113,10 +113,12 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
         };
 
         let document = scraper::Html::parse_document(&body);
-        let selector = scraper::Selector::parse("div.search-result.search-result-link").unwrap();
+        let selector = scraper::Selector::parse("div.search-result.search-result-link")
+            .expect("valid CSS selector");
 
         for result in document.select(&selector).take(limit as usize) {
-            let (title, link) = if let Some(a) = result.select(&scraper::Selector::parse("a.search-title").unwrap()).next() {
+            let (title, link) = if let Some(a) = result.select(&scraper::Selector::parse("a.search-title")
+                .expect("valid CSS selector")).next() {
                 let title = parsers::strip_html_tags(&a.text().collect::<String>());
                 let href = a.value().attr("href").unwrap_or("");
                 let link = if href.starts_with("http") {
@@ -129,11 +131,13 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                 continue;
             };
 
-            let author = result.select(&scraper::Selector::parse("a.author").unwrap())
+            let author = result.select(&scraper::Selector::parse("a.author")
+                .expect("valid CSS selector"))
                 .next()
                 .map(|a| format!("u/{}", a.text().collect::<String>()));
 
-            let score_text = result.select(&scraper::Selector::parse("span.search-score").unwrap())
+            let score_text = result.select(&scraper::Selector::parse("span.search-score")
+                .expect("valid CSS selector"))
                 .next()
                 .map(|s| s.text().collect::<String>())
                 .unwrap_or_default();
@@ -143,7 +147,8 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                 .parse()
                 .unwrap_or(0);
 
-            let comments_text = result.select(&scraper::Selector::parse("a.search-comments").unwrap())
+            let comments_text = result.select(&scraper::Selector::parse("a.search-comments")
+                .expect("valid CSS selector"))
                 .next()
                 .map(|a| a.text().collect::<String>())
                 .unwrap_or_default();
@@ -153,13 +158,15 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                 .parse()
                 .unwrap_or(0);
 
-            let pub_date = result.select(&scraper::Selector::parse("time").unwrap())
+            let pub_date = result.select(&scraper::Selector::parse("time")
+                .expect("valid CSS selector"))
                 .next()
                 .and_then(|t| t.value().attr("datetime"))
                 .map(|d| d.to_string())
                 .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
-            let subreddit = result.select(&scraper::Selector::parse("a.search-subreddit-link").unwrap())
+            let subreddit = result.select(&scraper::Selector::parse("a.search-subreddit-link")
+                .expect("valid CSS selector"))
                 .next()
                 .map(|a| a.text().collect::<String>())
                 .map(|s| s.trim_start_matches("r/").to_string())
