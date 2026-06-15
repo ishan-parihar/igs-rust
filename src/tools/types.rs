@@ -579,6 +579,28 @@ pub struct InsightAllConnectionsOutput {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct InsightFindConnectionsInput {
+    /// Entity to find connections for (omit to discover all cross-domain entities)
+    pub entity: Option<String>,
+    /// Minimum number of domains for a connection to be included (default: 2)
+    pub min_domains: Option<i32>,
+    /// Maximum number of results to return (default: 20, only used when entity is omitted)
+    pub limit: Option<i32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct InsightFindConnectionsOutput {
+    pub connections: Vec<EntityConnection>,
+    pub count: usize,
+    /// Only present when entity is omitted (all connections mode)
+    pub total_found: Option<usize>,
+    /// Only present when entity is omitted (all connections mode)
+    pub stats: Option<InsightStats>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightTrendingInput {
     pub time_window_hours: Option<i64>,
     pub min_growth: Option<f64>,

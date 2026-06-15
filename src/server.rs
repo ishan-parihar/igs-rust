@@ -294,6 +294,10 @@ impl HasFormat for InsightAllConnectionsInput {
     fn format(&self) -> &Option<String> { &self.output.format }
 }
 
+impl HasFormat for InsightFindConnectionsInput {
+    fn format(&self) -> &Option<String> { &self.output.format }
+}
+
 impl HasFormat for InsightTrendingInput {
     fn format(&self) -> &Option<String> { &self.output.format }
 }
@@ -719,21 +723,21 @@ impl IgsMcpServer {
 
     // ── Insight Tools ───────────────────────────────────────────
 
-    #[tool(name = "insights.findConnections", description = "Find cross-domain entity connections in indexed articles. Requires articles indexed via insights.indexArticles or intelligence.collect. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2).")]
-    async fn insights_find_connections(&self, params: Parameters<InsightConnectionInput>) -> Result<Json<InsightConnectionOutput>, String> {
+    #[tool(name = "insights.findConnections", description = "Find cross-domain entity connections in indexed articles. Pass entity to look up specific entity, or omit entity to discover all cross-domain entities. Requires articles indexed via insights.indexArticles or intelligence.collect. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2), limit for max results in discovery mode (default 20).")]
+    async fn insight_find_connections(&self, params: Parameters<InsightFindConnectionsInput>) -> Result<Json<InsightFindConnectionsOutput>, String> {
         insights::insights_find_connections(&self.insights, params.0).await.map(Json)
     }
 
-    #[tool(name = "insights.findAllConnections", description = "Discover all entities appearing across multiple domains in indexed articles. Returns EntityConnection[] sorted by connection_strength. Requires articles indexed via insights.indexArticles or intelligence.collect. Use min_domains (default 2) and limit to control output size.")]
+    #[tool(name = "insights.findAllConnections", description = "[DEPRECATED] Use insight_find_connections instead. This tool will be removed in v2.")]
     async fn insights_find_all_connections(&self, params: Parameters<InsightAllConnectionsInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
-        let output = insights::insights_find_all_connections(&self.insights, params.0).await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
+        let unified = InsightFindConnectionsInput {
+            entity: None,
+            min_domains: params.0.min_domains,
+            limit: params.0.limit,
+            output: params.0.output,
         };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        let result = insights::insights_find_connections(&self.insights, unified).await?;
+        Ok(CallToolResult::success(vec![Content::text(serde_json::to_string_pretty(&result).unwrap())]))
     }
 
     #[tool(name = "insights.trendingEntities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.indexArticles or intelligence.collect. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3).")]

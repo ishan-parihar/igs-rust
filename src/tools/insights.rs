@@ -1,35 +1,63 @@
 use crate::server::InsightStorage;
 use crate::tools::types::*;
+use crate::tools::types_base::OutputOptions;
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Find articles mentioning the same entity across different domains
+/// Unified connection finder: specific entity OR all cross-domain entities
 pub(crate) async fn insights_find_connections(
     storage: &Arc<Mutex<InsightStorage>>,
-    input: InsightConnectionInput,
-) -> Result<InsightConnectionOutput, String> {
+    input: InsightFindConnectionsInput,
+) -> Result<InsightFindConnectionsOutput, String> {
     let storage = storage.lock().await;
-    let connections = storage.find_inter_domain_connections(
-        &input.entity,
-        input.min_domains.unwrap_or(2) as usize,
-    );
-    let count = connections.len();
-    Ok(InsightConnectionOutput { connections, count })
+    let min_domains = input.min_domains.unwrap_or(2) as usize;
+
+    if let Some(ref entity) = input.entity {
+        // Specific entity lookup
+        let connections = storage.find_inter_domain_connections(entity, min_domains);
+        let count = connections.len();
+        Ok(InsightFindConnectionsOutput { connections, count, total_found: None, stats: None })
+    } else {
+        // All cross-domain entities
+        let all = storage.find_all_inter_domain_connections(min_domains);
+        let total_found = all.len();
+        let limit = input.limit.unwrap_or(20) as usize;
+        let connections: Vec<EntityConnection> = all.into_iter().take(limit).collect();
+        let count = connections.len();
+        let stats = storage.stats();
+        Ok(InsightFindConnectionsOutput { connections, count, total_found: Some(total_found), stats: Some(stats) })
+    }
 }
 
-/// Discover all entities that appear across multiple domains
-pub(crate) async fn insights_find_all_connections(
+/// [DEPRECATED] Use insights_find_connections with entity=Some(...)
+pub(crate) async fn insights_find_connections_entity(
+    storage: &Arc<Mutex<InsightStorage>>,
+    entity: String,
+    min_domains: Option<i32>,
+) -> Result<InsightConnectionOutput, String> {
+    let input = InsightFindConnectionsInput { entity: Some(entity), min_domains, limit: None, output: OutputOptions { format: None } };
+    let result = insights_find_connections(storage, input).await?;
+    Ok(InsightConnectionOutput { connections: result.connections, count: result.count })
+}
+
+/// [DEPRECATED] Use insights_find_connections with entity=None
+pub(crate) async fn insights_find_all_connections_legacy(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightAllConnectionsInput,
 ) -> Result<InsightAllConnectionsOutput, String> {
-    let storage = storage.lock().await;
-    let all = storage.find_all_inter_domain_connections(input.min_domains.unwrap_or(2) as usize);
-    let total_found = all.len();
-    let limit = input.limit.unwrap_or(20) as usize;
-    let connections: Vec<EntityConnection> = all.into_iter().take(limit).collect();
-    let stats = storage.stats();
-    Ok(InsightAllConnectionsOutput { connections, total_found, stats })
+    let unified_input = InsightFindConnectionsInput {
+        entity: None,
+        min_domains: input.min_domains,
+        limit: input.limit,
+        output: input.output,
+    };
+    let result = insights_find_connections(storage, unified_input).await?;
+    Ok(InsightAllConnectionsOutput {
+        connections: result.connections,
+        total_found: result.total_found.unwrap_or(0),
+        stats: result.stats.unwrap_or(InsightStats { total_articles: 0, total_entities: 0, total_domains: 0, avg_entities_per_article: 0.0, avg_domains_per_article: 0.0 }),
+    })
 }
 
 /// Detect entities with increasing mention frequency
