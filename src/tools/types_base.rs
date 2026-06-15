@@ -1,11 +1,12 @@
 //! Base input types for shared fields across IGS tool categories.
 //! Eliminates ~300 tokens of duplicated `format: Option<String>` across 15 structs.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Base fields shared by all tools that produce output.
 /// Each tool embeds this as a single field instead of repeating these params.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct OutputOptions {
     /// Output format: "toon" (default, token-efficient) or "json" (standard)
     #[serde(default)]
@@ -14,7 +15,7 @@ pub struct OutputOptions {
 
 /// Base fields shared by all news/source discovery tools.
 /// Covers filtering, date ranges, geographic scoping, and content matching.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DiscoveryFilters {
     /// Pool IDs to search (e.g. ["GLOBAL_TECH_CYBER"]). If empty, searches all pools.
     #[serde(default)]
@@ -56,7 +57,7 @@ pub struct DiscoveryFilters {
 }
 
 /// Base fields shared by crawl/depth-aware tools.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DepthOptions {
     /// Crawl depth for web crawling: "shallow" (default, 1 level), "medium" (2 levels),
     /// "deep" (3 levels, full BFS). Used by news.fetch and web.crawl.
@@ -66,10 +67,10 @@ pub struct DepthOptions {
 
 /// Format helper: extract format from OutputOptions or return default "toon".
 pub fn resolve_format(opts: &OutputOptions) -> String {
-    opts.format.clone().unwrap_or_else(|| "toon".to_string())
+    opts.format.as_deref().unwrap_or("toon").to_string()
 }
 
 /// Format helper: resolve format from an Option<String> directly.
 pub fn resolve_format_opt(format: &Option<String>) -> String {
-    format.clone().unwrap_or_else(|| "toon".to_string())
+    format.as_deref().unwrap_or("toon").to_string()
 }
