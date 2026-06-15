@@ -10,38 +10,60 @@ Guide for AI agents using IGS as an intelligence gathering tool.
 2. `sources.list` — see available sources
 3. `parsers.list` — see available parser types
 4. `news.fetch` — fetch news from sources
-5. `intelligence.collect` — run full pipeline in one call
+5. `news.fetch` with `depth: "deep"` — full fetch→enrich→index pipeline (replaces deprecated `intelligence.collect`)
 
 ### Default Output Format
 
 **All bulk data tools return TOON by default** (token-efficient). Pass `format: "json"` for standard JSON.
 
-### Tool Categories
+### Tool Discovery (Progressive Loading)
 
-| Category | Tools | When to Use |
-|----------|-------|-------------|
-| **Pool/Source Management** | `pools.*`, `sources.*`, `parsers.list` | Configure and explore sources |
-| **News Gathering** | `news.fetch`, `news.testSource`, `news.enrich` | Fetch and enrich news |
-| **Social Media** | `reddit.search` | Search Reddit posts |
-| **Academic Research** | `research.search`, `research.paper`, `research.download` | Search arXiv + Semantic Scholar |
-| **Web Intelligence** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | Web search, scraping, crawling |
-| **Cross-Article Analysis** | `insights.*` | Entity connections, trending |
-| **Pipeline** | `intelligence.collect` | Fetch→enrich→index in one call |
-| **Browser Automation** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` | Persistent browser session, JS execution, form interaction |
+Tools are organized into 8 domain groups. Load only the groups you need to conserve context.
+
+| Group | Tools | Context Est. | When to Load |
+|-------|-------|-------------|--------------|
+| **Discovery** | `pools.*`, `sources.*`, `parsers.list` | ~5% | Initial setup, exploring available sources |
+| **News** | `news.fetch`, `news.testSource`, `news.enrich` | ~3% | Fetching and enriching news articles |
+| **Research** | `research.search`, `research.paper`, `research.download` | ~3% | Academic paper search and retrieval |
+| **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | ~4% | Web search, scraping, crawling |
+| **Insights** | `insight_find_connections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
+| **Social** | `reddit.search` | ~1% | Searching Reddit posts |
+| **Browser** | `lightpanda.*` (12 tools) | ~8% | JS-rendered browsing, form interaction |
+| **Pipeline** | `news.fetch` (with `depth: "deep"`) | ~1% | Full fetch→enrich→index pipeline |
+
+**Recommended loading patterns:**
+
+- **Quick scan**: Load Discovery + News (~8% context)
+- **Full research**: Load Discovery + News + Research + Web + Insights (~19% context)
+- **Social monitoring**: Load Discovery + News + Social (~9% context)
+- **Browser automation**: Load Browser only (~8% context) after navigating
+
+**Quick reference:**
+
+| Group | Tools |
+|-------|-------|
+| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list` |
+| **News** | `news.fetch`, `news.testSource`, `news.enrich` |
+| **Research** | `research.search`, `research.paper`, `research.download` |
+| **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` |
+| **Insights** | `insight_find_connections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` |
+| **Social** | `reddit.search` |
+| **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` |
+| **Pipeline** | `news.fetch` (with `depth: "deep"`) |
 
 ## Recommended Workflows
 
 ### 1. Quick Intelligence Collection
 
 ```
-intelligence.collect(pools=["GLOBAL_TECH_CYBER"], limit=50)
+news.fetch(pools=["GLOBAL_TECH_CYBER"], limit=50, depth="deep")
 → Returns fetched count, enriched count, indexed count, stats
 
 insights.trendingEntities(time_window_hours=24)
 → Returns entities with increasing mention frequency
 
-insights.findConnections(entity="OpenAI", min_domains=2)
-→ Returns cross-domain connections for specific entity
+insight_find_connections(min_domains=2)
+→ Returns cross-domain connections. Entity is optional — omit for all connections.
 ```
 
 ### 2. Targeted News Monitoring
@@ -203,12 +225,11 @@ These tools use a persistent browser session via `lightpanda mcp`. The page stay
 
 ### Insight Engine
 
-After indexing articles via `insights.indexArticles` or `intelligence.collect`:
+After indexing articles via `insights.indexArticles` or `news.fetch` with `depth: "deep"`:
 
 | Tool | Purpose |
 |------|---------|
-| `insights.findConnections(entity, min_domains)` | Find cross-domain connections for specific entity |
-| `insights.findAllConnections(min_domains, limit)` | Discover all cross-domain entities |
+| `insight_find_connections(entity?, min_domains?, limit?)` | Find cross-domain connections. Entity optional — omit for all connections. |
 | `insights.trendingEntities(time_window_hours, min_growth, min_current_mentions)` | Detect entity mention trends |
 | `insights.getStats` | Engine statistics (total_articles, total_entities, total_domains) |
 | `insights.clearIndex` | Clear all indexed articles |
@@ -243,6 +264,12 @@ lightpanda:
 tavily:
   enabled: true
   apiKey: "tvly-YOUR_KEY"
+
+# Restrict loaded tool groups (default: all)
+tool_groups:
+  - discovery
+  - news
+  - insights
 
 # Change default output format
 output:

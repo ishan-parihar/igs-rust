@@ -1,0 +1,100 @@
+# IGS MCP Server — Settings Configuration
+# All values shown are defaults unless noted otherwise.
+# Environment variable substitution: ${VAR_NAME} is replaced at runtime.
+
+# ─── HTTP Client ──────────────────────────────────────────────
+http:
+  userAgent: IGS/0.3.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
+  timeoutMs: 15000           # Per-request timeout in ms
+  retries: 2                 # Number of retries on failure
+  backoffBaseMs: 500         # Base delay for exponential backoff
+  backoffFactor: 2.0         # Multiplier for backoff (500, 1000, 2000, ...)
+  concurrency: 6             # Max concurrent HTTP requests globally
+  perHost: 2                 # Max concurrent requests per host
+
+# ─── Caching ──────────────────────────────────────────────────
+cache:
+  enabled: true
+  dir: cache                 # Relative to config dir, or absolute path
+  honorEtags: true           # Use ETag/Last-Modified conditional requests
+  ttlMs: 1800000             # Feed cache TTL: 30 minutes
+  queryTtlMs: 600000         # Query cache TTL: 10 minutes
+  maxItemsPerSource: 300     # Max items stored per source
+
+# ─── Time ─────────────────────────────────────────────────────
+time:
+  timezone: local            # "local" or IANA tz like "America/New_York"
+
+# ─── Web Search Providers ─────────────────────────────────────
+
+# Tavily — AI-powered web search
+# Get API key: https://tavily.com
+tavily:
+  enabled: true
+  apiKey: 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
+  searchDepth: basic         # basic, advanced, fast, ultra-fast
+  defaultTopic: general      # general, news, finance
+  timeoutMs: 30000
+
+# Firecrawl — Web scraping and crawling API
+# Get API key: https://firecrawl.dev
+firecrawl:
+  enabled: true
+  apiKey: 9662d8628c914153a5ecb5ccaf72b3cd.LCvakqV1sNtoHz1n
+  timeoutMs: 60000
+  defaultFormats:
+    - markdown
+    - html
+    - screenshot
+    - links
+
+# ─── Lightpanda Headless Browser ──────────────────────────────
+# Binary auto-downloads to ~/.config/igs-mcp/bin/lightpanda
+# Updated once per day when auto_update is true
+lightpanda:
+  enabled: true              # Enable Lightpanda for web.crawl and web.scrape(provider=lightpanda)
+  auto_update: true          # Check for updates once per day
+  prefer_nightly: false      # Use nightly builds instead of stable releases
+  obey_robots: true          # Respect robots.txt when crawling
+  timeout_ms: 30000          # --wait-ms: how long to wait for page to settle
+  # proxy: "http://proxy:8080"           # HTTP proxy URL
+  # proxy_bearer_token: "token"          # Bearer token for proxy auth
+  # user_agent_suffix: "IGS-crawler"     # Suffix appended to Lightpanda's User-Agent
+  # user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36..."  # Full custom UA (overrides suffix)
+  max_concurrent: 10         # --http-max-concurrent: max parallel HTTP requests during page load
+  max_response_size: 0       # --http-max-response-size: 0 = no limit
+  insecure_tls: false        # --insecure-disable-tls-host-verification
+  stealth: true              # Inject anti-fingerprinting JS (patches navigator, WebGL, canvas, audio, WebRTC)
+  # stealth_script_path: /path/to/custom.js  # Optional: custom JS file instead of built-in stealth script
+
+# ─── NLP Enrichment ──────────────────────────────────────────
+# All NLP is offline (no external API calls)
+nlp:
+  enabled: true
+  max_topics: 8              # Max topics to extract per article
+  max_entities: 20           # Max entities to extract per article
+  min_entity_length: 2       # Min character length for entity detection
+  dedup_threshold: 0.3       # Jaccard similarity threshold for deduplication
+  # stop_words_language: en  # Future: multi-language support
+
+# ─── Intelligence Pipeline ───────────────────────────────────
+pipeline:
+  default_pool: GLOBAL_TECH_CYBER  # Default pool for intelligence.collect
+  default_limit: 50                # Default max items to fetch
+  auto_index: true                 # Automatically index articles after enrich
+  persist_insights: true           # Persist insight engine to disk (SQLite)
+
+# ─── Monitoring (Future) ─────────────────────────────────────
+# Scheduled polling and alerts — not yet implemented
+# monitoring:
+#   enabled: false
+#   poll_interval_ms: 300000   # 5 minutes
+#   alert_threshold: 5         # Min entity mentions to trigger alert
+
+# ─── Output Format ────────────────────────────────────────────
+output:
+  default_format: toon       # "toon" (token-efficient) or "json"
+  toon_indent: 2             # TOON indentation spaces
+  max_items_per_response: 500  # Truncate results beyond this
+  dump_enabled: false        # Enable markdown dump of tool outputs to disk
+  dump_dir: "~/Documents/IGS"  # Root directory for dump files
