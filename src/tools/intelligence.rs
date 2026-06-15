@@ -16,6 +16,8 @@ pub async fn intelligence_collect(
         filters: input.filters.clone(),
         discovery_mode: None,
         urgency: None,
+        skip_enrich: input.skip_enrich,
+        skip_index: input.skip_index,
         depth_opts: input.depth_opts.clone(),
         output: OutputOptions { format: Some("json".to_string()) },
     };

@@ -169,12 +169,16 @@ pub struct DomainsOutput {
 
 // ─── News Fetch Types ─────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct NewsFetchInput {
     #[serde(flatten)]
     pub filters: DiscoveryFilters,
     pub discovery_mode: Option<bool>,
     pub urgency: Option<String>,
+    /// Skip NLP enrichment step (only used with depth=deep)
+    pub skip_enrich: Option<bool>,
+    /// Skip insight indexing step (only used with depth=deep)
+    pub skip_index: Option<bool>,
     #[serde(flatten)]
     pub depth_opts: DepthOptions,
     #[serde(flatten)]

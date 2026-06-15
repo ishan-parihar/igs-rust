@@ -2,7 +2,7 @@ use crate::config;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, insights, intelligence, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, sources, types::*, web};
+use crate::tools::{helpers::toon_encode, insights, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, sources, types::*, web};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -435,26 +435,39 @@ impl IgsMcpServer {
 
     // ── News Tools ──────────────────────────────────────────────
 
-    #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use depth='deep' for source site crawl with date_confidence scoring; depth='full' for multi-source enrichment. Returns NewsItem[] with date_confidence, freshness_score. At depth='deep' with >=5 items, returns ClusterInfo with entity clusters. Weighted RRF fusion auto-deduplicates across sources. Per-author dedup caps items per author. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
+    #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use depth='deep' for full intelligence pipeline (fetch -> enrich -> index in insight engine). Use skip_enrich/skip_index to skip pipeline steps. Returns NewsItem[] with date_confidence, freshness_score. At depth='deep' with >=5 items, returns ClusterInfo with entity clusters. Weighted RRF fusion auto-deduplicates across sources. Per-author dedup caps items per author. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let _subject = params.0.filters.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
-        let output = news::news_fetch(params.0).await?;
-        #[cfg(not(test))]
-        {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "news.fetch",
-                    &_subject,
-                    &toon_encode(&output),
-                );
+        let depth = params.0.depth_opts.depth.clone().unwrap_or_else(|| "default".to_string());
+
+        let text = if depth == "deep" {
+            // Deep mode: full intelligence pipeline
+            let output = news::fetch_news_intelligent(params.0, &self.insights).await?;
+            if format == "json" {
+                serde_json::to_string_pretty(&output).unwrap_or_default()
+            } else {
+                toon_encode(&output)
             }
-        }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {
-            toon_encode(&output)
+            // Normal mode: just fetch
+            let _subject = params.0.filters.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
+            let output = news::news_fetch(params.0).await?;
+            #[cfg(not(test))]
+            {
+                if let Ok(settings) = crate::config::load_settings().await {
+                    crate::tools::dump::maybe_dump(
+                        &settings,
+                        "news.fetch",
+                        &_subject,
+                        &toon_encode(&output),
+                    );
+                }
+            }
+            if format == "json" {
+                serde_json::to_string_pretty(&output).unwrap_or_default()
+            } else {
+                toon_encode(&output)
+            }
         };
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
@@ -752,10 +765,22 @@ impl IgsMcpServer {
 
     // ── Intelligence Pipeline Tools ─────────────────────────────
 
-    #[tool(name = "intelligence.collect", description = "Full intelligence pipeline in one call: fetch news → enrich with NLP → index in insight engine. Combines news.fetch, news.enrich, and insights.indexArticles. Use skip_enrich=true or skip_index=true to skip steps. Pass depth='deep' to enable source site crawl with date_confidence scoring and entity clustering. After indexing, use insights.findConnections or insights.trendingEntities for cross-article analysis.")]
+    #[tool(name = "intelligence.collect", description = "DEPRECATED: Use news.fetch with depth='deep' instead. Full intelligence pipeline in one call: fetch news → enrich with NLP → index in insight engine. Pass skip_enrich=true or skip_index=true to skip steps.")]
     async fn intelligence_collect(&self, params: Parameters<IntelligenceCollectInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let output = intelligence::intelligence_collect(&self.insights, params.0).await?;
+
+        // Convert IntelligenceCollectInput to NewsFetchInput
+        let news_input = NewsFetchInput {
+            filters: params.0.filters,
+            discovery_mode: None,
+            urgency: None,
+            skip_enrich: params.0.skip_enrich,
+            skip_index: params.0.skip_index,
+            depth_opts: params.0.depth_opts,
+            output: params.0.output,
+        };
+
+        let output = news::fetch_news_intelligent(news_input, &self.insights).await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
         } else {

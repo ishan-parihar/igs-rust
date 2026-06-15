@@ -518,6 +518,7 @@ async fn main() -> anyhow::Result<()> {
                         limit: Some(limit), cache_mode: Some(cache_mode),
                     },
                     discovery_mode: None, urgency: None,
+                    skip_enrich: None, skip_index: None,
                     depth_opts: DepthOptions { depth },
                     output: OutputOptions { format: None },
                 }).await)?;
