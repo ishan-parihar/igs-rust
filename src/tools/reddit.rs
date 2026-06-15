@@ -176,12 +176,14 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                 id: item_id,
                 title,
                 link,
-                pub_date,
+                pub_date: pub_date.clone(),
                 source_name: format!("Reddit r/{}", subreddit),
                 pool_id: "REDDIT".to_string(),
                 content_snippet: format!("Score: {} | Comments: {}", score_num, comments_num),
                 author,
                 media_url: None,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(crate::parsers::calculate_freshness(&pub_date)),
             });
         }
     }
@@ -277,6 +279,8 @@ pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, Str
                 content_snippet,
                 author,
                 media_url: None,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(parsers::calculate_freshness(&pub_date)),
             });
         }
     }

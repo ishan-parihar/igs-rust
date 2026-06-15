@@ -9,6 +9,7 @@ pub mod reddit;
 pub mod research;
 pub mod sources;
 pub mod types;
+pub mod types_base;
 pub mod web;
 
 pub mod dump;

@@ -57,6 +57,11 @@ enum Commands {
         #[command(subcommand)]
         action: BrowserAction,
     },
+    /// Intelligence pipeline: fetch → enrich → index
+    Intelligence {
+        #[command(subcommand)]
+        action: IntelligenceAction,
+    },
     /// List available parsers
     Parsers,
     /// Show IGS settings and status
@@ -129,6 +134,9 @@ enum NewsAction {
         limit: i32,
         #[arg(long, default_value = "prefer")]
         cache_mode: String,
+        /// Fetch depth: "quick" (direct RSS), "deep" (source site crawl), "full" (multi-source enrichment)
+        #[arg(long)]
+        depth: Option<String>,
     },
     /// Test a single source
     Test {
@@ -142,6 +150,9 @@ enum NewsAction {
         /// JSON file with items, or - for stdin
         #[arg(long)]
         input: Option<String>,
+        /// What to extract: topics, entities, sentiment, summary, diversity (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        extract: Option<Vec<String>>,
     },
 }
 
@@ -262,6 +273,38 @@ enum WebAction {
         limit: i32,
         #[arg(long)]
         search: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum IntelligenceAction {
+    /// Run full pipeline: fetch → enrich → index
+    Collect {
+        #[arg(long, value_delimiter = ',')]
+        pools: Option<Vec<String>>,
+        #[arg(long, value_delimiter = ',')]
+        sources: Option<Vec<String>>,
+        #[arg(long, value_delimiter = ',')]
+        countries: Option<Vec<String>>,
+        #[arg(long)]
+        start: Option<String>,
+        #[arg(long)]
+        end: Option<String>,
+        #[arg(long, value_delimiter = ',')]
+        keywords: Option<Vec<String>>,
+        #[arg(long, default_value = "50")]
+        limit: i32,
+        #[arg(long, default_value = "prefer")]
+        cache_mode: String,
+        /// Fetch depth: "quick", "deep", "full"
+        #[arg(long)]
+        depth: Option<String>,
+        /// Skip NLP enrichment step
+        #[arg(long)]
+        skip_enrich: bool,
+        /// Skip insight indexing step
+        #[arg(long)]
+        skip_index: bool,
     },
 }
 
@@ -394,6 +437,23 @@ async fn main() -> anyhow::Result<()> {
             output(fmt, &result);
         }
 
+        Commands::Intelligence { action } => match action {
+            IntelligenceAction::Collect { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode, depth, skip_enrich, skip_index } => {
+                let kw = keywords.map(|k| serde_json::json!(k));
+                let result = r(igs_rust_mcp::tools::intelligence::intelligence_collect(
+                    &Arc::new(Mutex::new(igs_rust_mcp::server::InsightStorage::new())),
+                    IntelligenceCollectInput {
+                        pools, sources: srcs, countries, cities: None, domains: None,
+                        start, end, keywords: kw, exclude_keywords: None, match_all: None,
+                        limit: Some(limit), cache_mode: Some(cache_mode),
+                        skip_enrich: Some(skip_enrich), skip_index: Some(skip_index),
+                        depth, format: Some(fmt.clone()),
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+        }
+
         Commands::Pools { action } => match action {
             PoolAction::List => {
                 let result = r(pools::pools_list().await)?;
@@ -435,12 +495,12 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::News { action } => match action {
-            NewsAction::Fetch { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode } => {
+            NewsAction::Fetch { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode, depth } => {
                 let kw = keywords.map(|k| serde_json::json!(k));
                 let result = r(news::news_fetch(NewsFetchInput {
                     pools, sources: srcs, countries, cities: None, domains: None,
                     start, end, keywords: kw, exclude_keywords: None, match_all: None,
-                    discovery_mode: None, limit: Some(limit), cache_mode: Some(cache_mode), urgency: None, format: None,
+                    discovery_mode: None, limit: Some(limit), cache_mode: Some(cache_mode), urgency: None, format: None, depth,
                 }).await)?;
                 output(fmt, &result);
             }
@@ -448,7 +508,7 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(news::news_test_source(NewsTestInput { id, cache_mode: Some(cache_mode), format: None }).await)?;
                 output(fmt, &result);
             }
-            NewsAction::Enrich { input } => {
+            NewsAction::Enrich { input, extract } => {
                 let items_json = if let Some(path) = input {
                     if path == "-" {
                         let mut buf = String::new();
@@ -461,7 +521,7 @@ async fn main() -> anyhow::Result<()> {
                     return Err(anyhow::anyhow!("Provide --input <file> or --input - for stdin"));
                 };
                 let items: Vec<EnrichItemInput> = serde_json::from_str(&items_json)?;
-                let result = r(news::news_enrich(NewsEnrichInput { items, extract: None, format: None }).await)?;
+                let result = r(news::news_enrich(NewsEnrichInput { items, extract, format: None }).await)?;
                 output(fmt, &result);
             }
         },

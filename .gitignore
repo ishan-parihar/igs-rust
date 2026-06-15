@@ -34,3 +34,6 @@ cache/
 config/insights.db
 config/cache/
 target/
+
+# Cloned reference repos (not part of IGS)
+last30days-skill/

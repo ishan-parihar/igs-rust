@@ -1,6 +1,6 @@
 [package]
 name = "igs-rust-mcp"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 description = "Intelligence Gathering System - RSS/HTTP source monitoring MCP server with NLP enrichment"
 authors = ["Ishan Parihar"]

@@ -46,6 +46,8 @@ pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutp
                 tier: None,
                 rate_limit: None,
                 source_category: None,
+                weight: None,
+                trust_score: None,
             };
             if let Some(idx) = sf.sources.iter().position(|s| s.id == id) {
                 sf.sources[idx] = src;

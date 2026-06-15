@@ -183,6 +183,8 @@ pub struct NewsFetchInput {
     pub limit: Option<i32>,
     pub cache_mode: Option<String>,
     pub urgency: Option<String>,
+    /// Depth: "quick" (2 pools, 5/pool), "default" (5 pools, 20/pool), "deep" (20 pools, 50/pool)
+    pub depth: Option<String>,
     /// Output format: "toon" (default, token-efficient) or "json"
     pub format: Option<String>,
 }
@@ -199,10 +201,19 @@ pub struct NewsFetchMeta {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ClusterInfo {
+    pub representative: NewsItem,
+    pub member_count: usize,
+    pub entities: Vec<String>,
+    pub source_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsFetchOutput {
     pub items: Vec<NewsItem>,
     pub count: usize,
     pub meta: NewsFetchMeta,
+    pub clusters: Option<Vec<ClusterInfo>>,
 }
 
 // ─── News Test Source Types ───────────────────────────────────
@@ -232,6 +243,8 @@ pub struct EnrichItemInput {
     pub source_name: String,
     pub pool_id: String,
     pub content_snippet: Option<String>,
+    pub date_confidence: Option<String>,
+    pub freshness_score: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -648,6 +661,8 @@ pub struct IntelligenceCollectInput {
     pub skip_enrich: Option<bool>,
     /// Skip insight indexing step
     pub skip_index: Option<bool>,
+    /// Fetch depth: "quick" (direct RSS), "deep" (source site crawl), "full" (multi-source enrichment)
+    pub depth: Option<String>,
     /// Output format: "toon" (default) or "json"
     pub format: Option<String>,
 }

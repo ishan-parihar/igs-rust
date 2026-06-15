@@ -1,9 +1,60 @@
 use crate::http::{FetchOutcome, HttpClient};
 use crate::types::{NewsItem, Source};
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use feed_rs::parser;
 use sha2::{Digest, Sha256};
+
+pub fn calculate_freshness(pub_date: &str) -> f64 {
+    let now = Utc::now();
+    let parsed = DateTime::parse_from_rfc3339(pub_date)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+        .or_else(|| {
+            NaiveDateTime::parse_from_str(pub_date, "%Y-%m-%dT%H:%M:%S%.fZ")
+                .ok()
+                .map(|ndt| ndt.and_utc())
+        })
+        .or_else(|| {
+            NaiveDate::parse_from_str(pub_date, "%Y-%m-%d")
+                .ok()
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+                .map(|ndt| ndt.and_utc())
+        });
+
+    match parsed {
+        Some(dt) => {
+            let hours = (now - dt).num_hours().max(0) as f64;
+            100.0 * (-hours / 168.0).exp()
+        }
+        None => 0.0,
+    }
+}
+
+pub fn parse_date_with_confidence(raw: &str) -> (String, String) {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(raw) {
+        return (dt.with_timezone(&Utc).to_rfc3339(), "high".to_string());
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        return (dt.and_utc().to_rfc3339(), "medium".to_string());
+    }
+    if let Ok(dt) = NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+        let rfc = dt.and_hms_opt(0, 0, 0).unwrap().and_utc().to_rfc3339();
+        return (rfc, "medium".to_string());
+    }
+    for fmt in &[
+        "%B %d, %Y",
+        "%b %d, %Y",
+        "%d %B %Y",
+        "%d %b %Y",
+        "%Y-%m-%d",
+    ] {
+        if let Ok(dt) = NaiveDateTime::parse_from_str(raw, fmt) {
+            return (dt.and_utc().to_rfc3339(), "medium".to_string());
+        }
+    }
+    (raw.to_string(), "low".to_string())
+}
 
 /// Generate a stable ID for a news item
 pub fn make_item_id(title: &str, link: &str, pub_date: &str, source_id: &str) -> String {
@@ -88,6 +139,7 @@ pub async fn parse_rss(source: &Source, xml_body: &str) -> Vec<NewsItem> {
                 &source.id,
             );
 
+            let freshness = calculate_freshness(&pub_date);
             NewsItem {
                 id: item_id,
                 title,
@@ -98,6 +150,8 @@ pub async fn parse_rss(source: &Source, xml_body: &str) -> Vec<NewsItem> {
                 content_snippet,
                 author,
                 media_url,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(freshness),
             }
         })
         .collect()
@@ -155,6 +209,18 @@ pub async fn parse_by_source(
                 }
                 Some("generic_html") => {
                     parse_generic_html(source, body).await
+                }
+                Some("hackernews") => {
+                    parse_hackernews(source, body).await
+                }
+                Some("youtube") => {
+                    parse_youtube_channel(source, body).await
+                }
+                Some("github") => {
+                    parse_github(source, body).await
+                }
+                Some("bluesky") => {
+                    parse_bluesky(source, body).await
                 }
                 _ => {
                     // Auto-detect
@@ -268,19 +334,45 @@ async fn parse_generic_html(source: &Source, html: &str) -> Vec<NewsItem> {
                     .collect::<Vec<_>>()
                     .join(" ");
 
-                let now = Utc::now().to_rfc3339();
-                let item_id = make_item_id(&title, &link, &now, &source.id);
+                let date_sel = source.parser_config.as_ref()
+                    .and_then(|c| c.selectors.as_ref())
+                    .and_then(|s| s.date.as_deref());
+
+                let (pub_date, date_confidence) = if let Some(sel_str) = date_sel {
+                    if let Ok(_sel) = scraper::Selector::parse(sel_str) {
+                        extract_first_text(&element, sel_str)
+                            .map(|raw| {
+                                let (parsed, conf) = parse_date_with_confidence(&raw);
+                                (parsed, Some(conf))
+                            })
+                            .unwrap_or_else(|| {
+                                let now = Utc::now().to_rfc3339();
+                                (now, Some("low".to_string()))
+                            })
+                    } else {
+                        let now = Utc::now().to_rfc3339();
+                        (now, Some("low".to_string()))
+                    }
+                } else {
+                    let now = Utc::now().to_rfc3339();
+                    (now, Some("low".to_string()))
+                };
+
+                let freshness_score = Some(calculate_freshness(&pub_date));
+                let item_id = make_item_id(&title, &link, &pub_date, &source.id);
 
                 items.push(NewsItem {
                     id: item_id,
                     title,
                     link,
-                    pub_date: now,
+                    pub_date,
                     source_name: source_name.clone(),
                     pool_id: pool_id.clone(),
                     content_snippet,
                     author: None,
                     media_url: extract_attr(&element, "img", "src"),
+                    date_confidence,
+                    freshness_score,
                 });
 
                 // Limit per source
@@ -386,6 +478,8 @@ async fn parse_json_feed(source: &Source, body: &str) -> Vec<NewsItem> {
                                 .get("image")
                                 .and_then(|i| i.as_str())
                                 .map(|s| s.to_string()),
+                            date_confidence: Some("high".to_string()),
+                            freshness_score: Some(calculate_freshness(pub_date)),
                         }
                     })
                     .collect();
@@ -431,11 +525,14 @@ async fn parse_who_dons(source: &Source, body: &str) -> Vec<NewsItem> {
                 item.get("Assessment").and_then(|v| v.as_str()),
             ].iter().filter_map(|&s| s).collect::<Vec<_>>().join(" ");
             let item_id = make_item_id(&title, &link, &pub_date, &source.id);
+            let freshness = calculate_freshness(&pub_date);
             NewsItem {
                 id: item_id, title, link, pub_date,
                 source_name: source_name.clone(), pool_id: pool_id.clone(),
                 content_snippet: strip_html_tags(&content).chars().take(600).collect(),
                 author: None, media_url: None,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(freshness),
             }
         }).collect();
     }
@@ -494,11 +591,14 @@ async fn parse_ofac(source: &Source, body: &str) -> Vec<NewsItem> {
         let pub_date = find_date_prefix(block).unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
         let desc = strip_html_tags(block).chars().take(600).collect::<String>();
         let display_title = format!("{} — {}", raw_title, category);
+        let freshness = calculate_freshness(&pub_date);
         items.push(NewsItem {
             id: make_item_id(&display_title, &link, &pub_date, &source.id),
             title: display_title, link, pub_date,
             source_name: source_name.clone(), pool_id: pool_id.clone(),
             content_snippet: desc, author: None, media_url: None,
+            date_confidence: Some("medium".to_string()),
+            freshness_score: Some(freshness),
         });
     }
     items
@@ -605,6 +705,8 @@ fn extract_items_from_json(val: &serde_json::Value) -> Vec<NewsItem> {
                         source_name: String::new(), pool_id: String::new(),
                         content_snippet: content.chars().take(600).collect(),
                         author: None, media_url: None,
+                        date_confidence: Some("medium".to_string()),
+                        freshness_score: Some(calculate_freshness(pub_date)),
                     });
                 }
             }
@@ -612,6 +714,294 @@ fn extract_items_from_json(val: &serde_json::Value) -> Vec<NewsItem> {
         }
     }
     items
+}
+
+async fn parse_hackernews(source: &Source, body: &str) -> Vec<NewsItem> {
+    let source_name = source.name.clone();
+    let pool_id = source.pools.first().cloned().unwrap_or_else(|| "UNKNOWN".to_string());
+
+    #[derive(serde::Deserialize)]
+    struct HnHit {
+        title: Option<String>,
+        url: Option<String>,
+        created_at: Option<String>,
+        author: Option<String>,
+        points: Option<i64>,
+        num_comments: Option<i64>,
+        object_id: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct HnResponse {
+        hits: Vec<HnHit>,
+    }
+
+    let resp: HnResponse = match serde_json::from_str(body) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("HN parse failed for {}: {}", source.id, e);
+            return vec![];
+        }
+    };
+
+    resp.hits
+        .into_iter()
+        .filter_map(|hit| {
+            let title = hit.title?;
+            let item_url = hit.url.unwrap_or_else(|| {
+                format!("https://news.ycombinator.com/item?id={}", hit.object_id.as_deref().unwrap_or(""))
+            });
+            let pub_date = hit.created_at
+                .map(|d| parse_date_with_confidence(&d).0)
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            let snippet = format!(
+                "Points: {} | Comments: {}",
+                hit.points.unwrap_or(0),
+                hit.num_comments.unwrap_or(0)
+            );
+            let item_id = make_item_id(&title, &item_url, &pub_date, &source.id);
+            let freshness = calculate_freshness(&pub_date);
+
+            Some(NewsItem {
+                id: item_id,
+                title,
+                link: item_url,
+                pub_date,
+                source_name: source_name.clone(),
+                pool_id: pool_id.clone(),
+                content_snippet: snippet,
+                author: hit.author,
+                media_url: None,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(freshness),
+            })
+        })
+        .collect()
+}
+
+async fn parse_youtube_channel(source: &Source, xml_body: &str) -> Vec<NewsItem> {
+    let feed = match feed_rs::parser::parse(xml_body.as_bytes()) {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!("YouTube RSS parse failed for {}: {}", source.id, e);
+            return vec![];
+        }
+    };
+
+    let source_name = source.name.clone();
+    let pool_id = source.pools.first().cloned().unwrap_or_else(|| "UNKNOWN".to_string());
+
+    feed.entries
+        .iter()
+        .map(|entry| {
+            let title = entry.title.as_ref().map(|t| t.content.clone()).unwrap_or_else(|| "Untitled".to_string());
+            let link = entry.links.first().map(|l| l.href.clone()).unwrap_or_default();
+            let pub_date = entry.published
+                .or(entry.updated)
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            let content_snippet = entry.summary.as_ref().map(|s| s.content.clone()).unwrap_or_default();
+            let content_snippet = strip_html_tags(&content_snippet).chars().take(600).collect::<String>();
+            let author = entry.authors.first().map(|a| a.name.clone()).filter(|n| !n.is_empty());
+
+            let media_url = entry.media.iter()
+                .flat_map(|m| m.thumbnails.iter())
+                .next()
+                .map(|t| t.image.uri.clone())
+                .or_else(|| entry.media.iter()
+                    .flat_map(|m| m.content.iter())
+                    .next()
+                    .and_then(|c| c.url.as_ref().map(|u| u.to_string())));
+
+            let item_id = make_item_id(&title, &link, &pub_date, &source.id);
+            let freshness = calculate_freshness(&pub_date);
+
+            NewsItem {
+                id: item_id,
+                title,
+                link,
+                pub_date,
+                source_name: source_name.clone(),
+                pool_id: pool_id.clone(),
+                content_snippet,
+                author,
+                media_url,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(freshness),
+            }
+        })
+        .collect()
+}
+
+async fn parse_github(source: &Source, body: &str) -> Vec<NewsItem> {
+    let source_name = source.name.clone();
+    let pool_id = source.pools.first().cloned().unwrap_or_else(|| "UNKNOWN".to_string());
+
+    #[derive(serde::Deserialize)]
+    struct GhAuthor {
+        login: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct GhRelease {
+        name: Option<String>,
+        tag_name: Option<String>,
+        html_url: Option<String>,
+        published_at: Option<String>,
+        body: Option<String>,
+        author: Option<GhAuthor>,
+    }
+    #[derive(serde::Deserialize)]
+    struct GhRepo {
+        full_name: Option<String>,
+        html_url: Option<String>,
+        description: Option<String>,
+        updated_at: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct GhSearchResult {
+        items: Vec<GhRepo>,
+    }
+
+    if let Ok(releases) = serde_json::from_str::<Vec<GhRelease>>(body) {
+        return releases.into_iter().filter_map(|rel| {
+            let title = rel.name.or(rel.tag_name)?;
+            let link = rel.html_url.unwrap_or_default();
+            let pub_date = rel.published_at
+                .map(|d| parse_date_with_confidence(&d).0)
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            let content = rel.body.unwrap_or_default();
+            let item_id = make_item_id(&title, &link, &pub_date, &source.id);
+            let freshness = calculate_freshness(&pub_date);
+
+            Some(NewsItem {
+                id: item_id,
+                title,
+                link,
+                pub_date,
+                source_name: source_name.clone(),
+                pool_id: pool_id.clone(),
+                content_snippet: strip_html_tags(&content).chars().take(600).collect(),
+                author: rel.author.and_then(|a| a.login),
+                media_url: None,
+                date_confidence: Some("high".to_string()),
+                freshness_score: Some(freshness),
+            })
+        }).collect();
+    }
+
+    if let Ok(search) = serde_json::from_str::<GhSearchResult>(body) {
+        return search.items.into_iter().filter_map(|repo| {
+            let name = repo.full_name?;
+            let link = repo.html_url.unwrap_or_default();
+            let pub_date = repo.updated_at
+                .map(|d| parse_date_with_confidence(&d).0)
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            let content = repo.description.unwrap_or_default();
+            let item_id = make_item_id(&name, &link, &pub_date, &source.id);
+            let freshness = calculate_freshness(&pub_date);
+
+            Some(NewsItem {
+                id: item_id,
+                title: name,
+                link,
+                pub_date,
+                source_name: source_name.clone(),
+                pool_id: pool_id.clone(),
+                content_snippet: content,
+                author: None,
+                media_url: None,
+                date_confidence: Some("medium".to_string()),
+                freshness_score: Some(freshness),
+            })
+        }).collect();
+    }
+
+    vec![]
+}
+
+async fn parse_bluesky(source: &Source, body: &str) -> Vec<NewsItem> {
+    let source_name = source.name.clone();
+    let pool_id = source.pools.first().cloned().unwrap_or_else(|| "UNKNOWN".to_string());
+
+    #[derive(serde::Deserialize)]
+    struct BskyAuthor {
+        handle: Option<String>,
+        display_name: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct BskyRecord {
+        text: Option<String>,
+        created_at: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct BskyPost {
+        uri: Option<String>,
+        _cid: Option<String>,
+        record: Option<BskyRecord>,
+        author: Option<BskyAuthor>,
+        like_count: Option<i64>,
+        reply_count: Option<i64>,
+        _repost_count: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct BskyResponse {
+        posts: Vec<BskyPost>,
+    }
+
+    let resp: BskyResponse = match serde_json::from_str(body) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("Bluesky parse failed for {}: {}", source.id, e);
+            return vec![];
+        }
+    };
+
+    resp.posts
+        .into_iter()
+        .filter_map(|post| {
+            let record = post.record?;
+            let text = record.text?;
+            let created_at = record.created_at.unwrap_or_default();
+            let pub_date = parse_date_with_confidence(&created_at).0;
+
+            let link = post.uri.as_deref()
+                .map(|uri| {
+                    let rkey = uri.rsplit('/').next().unwrap_or("");
+                    let handle = post.author.as_ref()
+                        .and_then(|a| a.handle.as_deref())
+                        .unwrap_or("unknown");
+                    format!("https://bsky.app/profile/{}/post/{}", handle, rkey)
+                })
+                .unwrap_or_default();
+
+            let author_name = post.author.as_ref()
+                .and_then(|a| a.display_name.as_deref().or(a.handle.as_deref()))
+                .map(|s| s.to_string());
+
+            let item_id = make_item_id(&text, &link, &pub_date, &source.id);
+            let freshness = calculate_freshness(&pub_date);
+
+            let snippet = format!(
+                "{}{}{}",
+                text.chars().take(500).collect::<String>(),
+                post.like_count.map(|l| format!(" | Likes: {}", l)).unwrap_or_default(),
+                post.reply_count.map(|r| format!(" | Replies: {}", r)).unwrap_or_default(),
+            );
+
+            Some(NewsItem {
+                id: item_id,
+                title: text.chars().take(120).collect(),
+                link,
+                pub_date,
+                source_name: source_name.clone(),
+                pool_id: pool_id.clone(),
+                content_snippet: snippet,
+                author: author_name,
+                media_url: None,
+                date_confidence: Some("medium".to_string()),
+                freshness_score: Some(freshness),
+            })
+        })
+        .collect()
 }
 
 /// Strip HTML tags from a string
@@ -792,4 +1182,621 @@ pub fn batch_similar(items: Vec<NewsItem>, threshold: f64) -> Vec<NewsItem> {
     }
 
     results
+}
+
+pub fn cap_per_author(items: Vec<NewsItem>, max_per_author: usize) -> Vec<NewsItem> {
+    let mut author_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    items.into_iter().filter(|item| {
+        let author = item.author.as_deref().unwrap_or("unknown");
+        let count = author_counts.entry(author.to_string()).or_insert(0);
+        if *count < max_per_author {
+            *count += 1;
+            true
+        } else {
+            false
+        }
+    }).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_source() -> Source {
+        Source {
+            id: "test_source".to_string(),
+            name: "Test Source".to_string(),
+            source_type: "rss".to_string(),
+            url: "https://example.com".to_string(),
+            headers: None,
+            parser: None,
+            parser_config: None,
+            pools: vec!["TEST_POOL".to_string()],
+            countries: vec![],
+            cities: vec![],
+            domains: vec![],
+            is_active: Some(true),
+            platform: None,
+            tier: None,
+            rate_limit: None,
+            source_category: None,
+            weight: None,
+            trust_score: None,
+        }
+    }
+
+    fn make_test_item(title: &str, author: Option<&str>, pub_date: &str) -> NewsItem {
+        NewsItem {
+            id: String::new(),
+            title: title.to_string(),
+            link: "https://example.com/article".to_string(),
+            pub_date: pub_date.to_string(),
+            source_name: "Test".to_string(),
+            pool_id: "TEST".to_string(),
+            content_snippet: String::new(),
+            author: author.map(|s| s.to_string()),
+            media_url: None,
+            date_confidence: None,
+            freshness_score: None,
+        }
+    }
+
+    // ── calculate_freshness ──────────────────────────────────────
+
+    #[test]
+    fn freshness_now_returns_near_100() {
+        let now = Utc::now().to_rfc3339();
+        let score = calculate_freshness(&now);
+        assert!((score - 100.0).abs() < 0.01, "Expected ~100, got {}", score);
+    }
+
+    #[test]
+    fn freshness_one_day_ago_decays_as_expected() {
+        let day_ago = (Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+        let score = calculate_freshness(&day_ago);
+        let expected = 100.0 * (-24.0_f64 / 168.0).exp();
+        assert!((score - expected).abs() < 0.5, "Expected ~{:.2}, got {}", expected, score);
+    }
+
+    #[test]
+    fn freshness_one_week_ago_returns_about_36_8() {
+        let week_ago = (Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+        let score = calculate_freshness(&week_ago);
+        let expected = 100.0 * (-1.0_f64).exp();
+        assert!((score - expected).abs() < 0.5, "Expected ~{:.2}, got {}", expected, score);
+    }
+
+    #[test]
+    fn freshness_one_month_ago_decays_near_zero() {
+        let month_ago = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+        let score = calculate_freshness(&month_ago);
+        assert!(score < 5.0, "Expected near 0, got {}", score);
+    }
+
+    #[test]
+    fn freshness_invalid_date_returns_zero() {
+        assert_eq!(calculate_freshness("not-a-date"), 0.0);
+    }
+
+    #[test]
+    fn freshness_empty_string_returns_zero() {
+        assert_eq!(calculate_freshness(""), 0.0);
+    }
+
+    // ── parse_date_with_confidence ──────────────────────────────
+
+    #[test]
+    fn parse_rfc3339_datetime_returns_high_confidence() {
+        let (parsed, confidence) = parse_date_with_confidence("2024-01-15T10:30:00+00:00");
+        assert!(parsed.contains("2024-01-15T10:30:00"), "parsed={}", parsed);
+        assert_eq!(confidence, "high");
+    }
+
+    #[test]
+    fn parse_rfc3339_with_offset_converts_to_utc() {
+        let (parsed, confidence) = parse_date_with_confidence("2024-06-01T12:00:00+05:30");
+        // +05:30 offset means 06:30 UTC
+        assert!(parsed.contains("T06:30:00"), "parsed={}", parsed);
+        assert_eq!(confidence, "high");
+    }
+
+    #[test]
+    fn parse_datetime_with_z_is_valid_rfc3339_high() {
+        // "2024-01-15T10:30:00.000Z" is valid RFC3339 (Z suffix counts as timezone),
+        // so it returns "high" from the RFC3339 branch, not the naive datetime path.
+        let (parsed, confidence) = parse_date_with_confidence("2024-01-15T10:30:00.000Z");
+        assert!(parsed.contains("2024-01-15T10:30:00"), "parsed={}", parsed);
+        assert_eq!(confidence, "high");
+    }
+
+    #[test]
+    fn parse_date_only_returns_medium_confidence() {
+        let (parsed, confidence) = parse_date_with_confidence("2024-01-15");
+        assert!(parsed.starts_with("2024-01-15"), "parsed={}", parsed);
+        assert_eq!(confidence, "medium");
+    }
+
+    #[test]
+    fn parse_named_date_without_time_falls_to_low() {
+        // NaiveDateTime::parse_from_str requires time components, so "January 15, 2024"
+        // falls through to "low" despite being a valid date string.
+        let input = "January 15, 2024";
+        let (parsed, confidence) = parse_date_with_confidence(input);
+        assert_eq!(parsed, input);
+        assert_eq!(confidence, "low");
+    }
+
+    #[test]
+    fn parse_garbage_returns_low_confidence() {
+        let input = "this is not a date at all";
+        let (parsed, confidence) = parse_date_with_confidence(input);
+        assert_eq!(parsed, input);
+        assert_eq!(confidence, "low");
+    }
+
+    #[test]
+    fn parse_empty_string_returns_low() {
+        let (_parsed, confidence) = parse_date_with_confidence("");
+        assert_eq!(confidence, "low");
+    }
+
+    // ── cap_per_author ──────────────────────────────────────────
+
+    #[test]
+    fn cap_limits_items_per_author() {
+        let items = vec![
+            make_test_item("A1", Some("alice"), "2024-01-01"),
+            make_test_item("A2", Some("alice"), "2024-01-02"),
+            make_test_item("A3", Some("alice"), "2024-01-03"),
+            make_test_item("A4", Some("alice"), "2024-01-04"),
+            make_test_item("A5", Some("alice"), "2024-01-05"),
+            make_test_item("B1", Some("bob"), "2024-01-01"),
+            make_test_item("B2", Some("bob"), "2024-01-02"),
+        ];
+        let result = cap_per_author(items, 2);
+        assert_eq!(result.len(), 4);
+        assert_eq!(
+            result.iter().filter(|i| i.author.as_deref() == Some("alice")).count(),
+            2
+        );
+        assert_eq!(
+            result.iter().filter(|i| i.author.as_deref() == Some("bob")).count(),
+            2
+        );
+    }
+
+    #[test]
+    fn cap_all_from_one_author_respects_limit() {
+        let items = vec![
+            make_test_item("A1", Some("alice"), "2024-01-01"),
+            make_test_item("A2", Some("alice"), "2024-01-02"),
+            make_test_item("A3", Some("alice"), "2024-01-03"),
+        ];
+        let result = cap_per_author(items, 1);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn cap_empty_input_returns_empty() {
+        let result = cap_per_author(vec![], 5);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn cap_zero_max_returns_empty() {
+        let items = vec![make_test_item("A1", Some("alice"), "2024-01-01")];
+        let result = cap_per_author(items, 0);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn cap_no_author_falls_back_to_unknown() {
+        let items = vec![
+            make_test_item("A1", None, "2024-01-01"),
+            make_test_item("A2", None, "2024-01-02"),
+            make_test_item("A3", None, "2024-01-03"),
+        ];
+        let result = cap_per_author(items, 2);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn cap_under_limit_keeps_all_items() {
+        let items = vec![
+            make_test_item("A1", Some("alice"), "2024-01-01"),
+            make_test_item("B1", Some("bob"), "2024-01-01"),
+        ];
+        let result = cap_per_author(items, 5);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn cap_preserves_order() {
+        let items = vec![
+            make_test_item("First", Some("alice"), "2024-01-01"),
+            make_test_item("Second", Some("alice"), "2024-01-02"),
+            make_test_item("Third", Some("alice"), "2024-01-03"),
+        ];
+        let result = cap_per_author(items, 2);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].title, "First");
+        assert_eq!(result[1].title, "Second");
+    }
+
+    // ── parse_hackernews ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn hn_parses_valid_response() {
+        let src = make_test_source();
+        let body = r#"{
+            "hits": [
+                {
+                    "title": "Rust 1.78 Released",
+                    "url": "https://example.com/rust-1.78",
+                    "created_at": "2024-05-01T12:00:00Z",
+                    "author": "johndoe",
+                    "points": 150,
+                    "num_comments": 45,
+                    "object_id": "12345"
+                }
+            ]
+        }"#;
+        let items = parse_hackernews(&src, body).await;
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Rust 1.78 Released");
+        assert!(items[0].link.contains("example.com/rust-1.78"));
+        assert!(items[0].content_snippet.contains("Points: 150"));
+        assert!(items[0].content_snippet.contains("Comments: 45"));
+        assert_eq!(items[0].author.as_deref(), Some("johndoe"));
+    }
+
+    #[tokio::test]
+    async fn hn_empty_hits_returns_empty() {
+        let src = make_test_source();
+        let body = r#"{"hits": []}"#;
+        let items = parse_hackernews(&src, body).await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hn_missing_title_filtered_out() {
+        let src = make_test_source();
+        let body = r#"{
+            "hits": [
+                {
+                    "url": "https://example.com/no-title",
+                    "created_at": "2024-05-01T12:00:00Z",
+                    "object_id": "67890"
+                }
+            ]
+        }"#;
+        let items = parse_hackernews(&src, body).await;
+        assert!(items.is_empty(), "items without title should be filtered out");
+    }
+
+    #[tokio::test]
+    async fn hn_missing_url_uses_hackernews_fallback() {
+        let src = make_test_source();
+        let body = r#"{
+            "hits": [
+                {
+                    "title": "Discussion Thread",
+                    "created_at": "2024-05-01T12:00:00Z",
+                    "author": "asker",
+                    "object_id": "99999"
+                }
+            ]
+        }"#;
+        let items = parse_hackernews(&src, body).await;
+        assert_eq!(items.len(), 1);
+        assert!(items[0].link.contains("news.ycombinator.com/item?id=99999"));
+    }
+
+    #[tokio::test]
+    async fn hn_invalid_json_returns_empty() {
+        let src = make_test_source();
+        let items = parse_hackernews(&src, "not json at all").await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hn_missing_created_at_uses_current_time() {
+        let src = make_test_source();
+        let body = r#"{
+            "hits": [
+                {
+                    "title": "Timeless Post",
+                    "url": "https://example.com/timeless",
+                    "object_id": "11111"
+                }
+            ]
+        }"#;
+        let items = parse_hackernews(&src, body).await;
+        assert_eq!(items.len(), 1);
+        let parsed = DateTime::parse_from_rfc3339(&items[0].pub_date);
+        assert!(parsed.is_ok(), "pub_date should be a valid RFC3339: {}", items[0].pub_date);
+    }
+
+    // ── parse_youtube_channel ───────────────────────────────────
+
+    #[tokio::test]
+    async fn yt_parses_valid_atom_feed() {
+        let src = make_test_source();
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+                <title>Hello Rust World</title>
+                <link href="https://youtube.com/watch?v=abc123" rel="alternate"/>
+                <published>2024-06-01T10:00:00+00:00</published>
+                <summary>A great Rust video about systems programming</summary>
+                <author>
+                    <name>RustChannel</name>
+                </author>
+            </entry>
+            <entry>
+                <title>Async Rust Deep Dive</title>
+                <link href="https://youtube.com/watch?v=def456" rel="alternate"/>
+                <published>2024-06-05T14:30:00+00:00</published>
+                <summary>Understanding async/await in Rust</summary>
+                <author>
+                    <name>RustChannel</name>
+                </author>
+            </entry>
+        </feed>"#;
+        let items = parse_youtube_channel(&src, xml).await;
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].title, "Hello Rust World");
+        assert_eq!(items[1].title, "Async Rust Deep Dive");
+        assert_eq!(items[0].author.as_deref(), Some("RustChannel"));
+        assert_eq!(items[1].author.as_deref(), Some("RustChannel"));
+        assert!(items[0].link.contains("youtube.com/watch?v=abc123"));
+    }
+
+    #[tokio::test]
+    async fn yt_invalid_xml_returns_empty() {
+        let src = make_test_source();
+        let items = parse_youtube_channel(&src, "not xml at all").await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn yt_empty_feed_returns_empty() {
+        let src = make_test_source();
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+        </feed>"#;
+        let items = parse_youtube_channel(&src, xml).await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn yt_missing_title_uses_fallback() {
+        let src = make_test_source();
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+            <entry>
+                <link href="https://youtube.com/watch?v=no-title" rel="alternate"/>
+                <published>2024-06-01T10:00:00+00:00</published>
+            </entry>
+        </feed>"#;
+        let items = parse_youtube_channel(&src, xml).await;
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Untitled");
+    }
+
+    // ── parse_github ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn gh_parses_releases_array() {
+        let src = make_test_source();
+        let body = r#"[
+            {
+                "name": "v1.0.0",
+                "tag_name": "v1.0.0",
+                "html_url": "https://github.com/owner/repo/releases/tag/v1.0.0",
+                "published_at": "2024-06-15T00:00:00Z",
+                "body": "Initial release with cool features",
+                "author": {"login": "releaser"}
+            },
+            {
+                "name": "v1.1.0",
+                "tag_name": "v1.1.0",
+                "html_url": "https://github.com/owner/repo/releases/tag/v1.1.0",
+                "published_at": "2024-07-01T12:00:00Z",
+                "body": "Bug fixes and improvements",
+                "author": {"login": "releaser"}
+            }
+        ]"#;
+        let items = parse_github(&src, body).await;
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].title, "v1.0.0");
+        assert_eq!(items[1].title, "v1.1.0");
+        assert_eq!(items[0].author.as_deref(), Some("releaser"));
+    }
+
+    #[tokio::test]
+    async fn gh_parses_search_result() {
+        let src = make_test_source();
+        let body = r#"{
+            "items": [
+                {
+                    "full_name": "owner/awesome-repo",
+                    "html_url": "https://github.com/owner/awesome-repo",
+                    "description": "An awesome Rust project",
+                    "updated_at": "2024-06-20T12:00:00Z"
+                },
+                {
+                    "full_name": "owner/another-repo",
+                    "html_url": "https://github.com/owner/another-repo",
+                    "description": "Another cool project",
+                    "updated_at": "2024-06-25T08:00:00Z"
+                }
+            ]
+        }"#;
+        let items = parse_github(&src, body).await;
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].title, "owner/awesome-repo");
+        assert_eq!(items[1].title, "owner/another-repo");
+    }
+
+    #[tokio::test]
+    async fn gh_release_without_name_and_tag_skipped() {
+        let src = make_test_source();
+        let body = r#"[
+            {
+                "html_url": "https://github.com/owner/repo/releases/tag/v1.0.0",
+                "published_at": "2024-06-15T00:00:00Z"
+            }
+        ]"#;
+        let items = parse_github(&src, body).await;
+        assert!(items.is_empty(), "release without name or tag_name should be filtered out");
+    }
+
+    #[tokio::test]
+    async fn gh_invalid_json_returns_empty() {
+        let src = make_test_source();
+        let items = parse_github(&src, "not json at all").await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn gh_empty_array_returns_empty() {
+        let src = make_test_source();
+        let items = parse_github(&src, "[]").await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn gh_empty_search_items_returns_empty() {
+        let src = make_test_source();
+        let body = r#"{"items": []}"#;
+        let items = parse_github(&src, body).await;
+        assert!(items.is_empty());
+    }
+
+    // ── parse_bluesky ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn bsky_parses_valid_response() {
+        let src = make_test_source();
+        let body = r#"{
+            "posts": [
+                {
+                    "uri": "at://did:plc:abc/app.bsky.feed.post/123xyz",
+                    "record": {
+                        "text": "Hello Bluesky! This is a test post about decentralized social media.",
+                        "created_at": "2024-07-01T08:00:00.000Z"
+                    },
+                    "author": {
+                        "handle": "testuser.bsky.social",
+                        "display_name": "Test User"
+                    },
+                    "like_count": 42,
+                    "reply_count": 5
+                }
+            ]
+        }"#;
+        let items = parse_bluesky(&src, body).await;
+        assert_eq!(items.len(), 1);
+        assert!(items[0].title.contains("Hello Bluesky"));
+        assert_eq!(items[0].author.as_deref(), Some("Test User"));
+        assert!(
+            items[0].link.contains("bsky.app/profile/testuser.bsky.social/post/123xyz"),
+            "link={}",
+            items[0].link
+        );
+        assert!(items[0].content_snippet.contains("Likes: 42"));
+        assert!(items[0].content_snippet.contains("Replies: 5"));
+    }
+
+    #[tokio::test]
+    async fn bsky_empty_posts_returns_empty() {
+        let src = make_test_source();
+        let body = r#"{"posts": []}"#;
+        let items = parse_bluesky(&src, body).await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn bsky_missing_record_filtered_out() {
+        let src = make_test_source();
+        let body = r#"{
+            "posts": [
+                {
+                    "uri": "at://did:plc:abc/app.bsky.feed.post/456xyz",
+                    "author": {"handle": "nopost.bsky.social"}
+                }
+            ]
+        }"#;
+        let items = parse_bluesky(&src, body).await;
+        assert!(items.is_empty(), "posts without record should be filtered out");
+    }
+
+    #[tokio::test]
+    async fn bsky_invalid_json_returns_empty() {
+        let src = make_test_source();
+        let items = parse_bluesky(&src, "not json at all").await;
+        assert!(items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn bsky_missing_author_uses_none() {
+        let src = make_test_source();
+        let body = r#"{
+            "posts": [
+                {
+                    "uri": "at://did:plc:def/app.bsky.feed.post/789abc",
+                    "record": {
+                        "text": "Anonymous post without author info",
+                        "created_at": "2024-07-02T12:00:00.000Z"
+                    }
+                }
+            ]
+        }"#;
+        let items = parse_bluesky(&src, body).await;
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].author, None);
+    }
+
+    #[tokio::test]
+    async fn bsky_missing_text_filtered_out() {
+        let src = make_test_source();
+        let body = r#"{
+            "posts": [
+                {
+                    "uri": "at://did:plc:abc/app.bsky.feed.post/nope",
+                    "record": {
+                        "created_at": "2024-07-02T12:00:00.000Z"
+                    },
+                    "author": {"handle": "empty.bsky.social"}
+                }
+            ]
+        }"#;
+        let items = parse_bluesky(&src, body).await;
+        assert!(items.is_empty(), "posts without text should be filtered out");
+    }
+
+    #[tokio::test]
+    async fn bsky_multiple_posts_all_parsed() {
+        let src = make_test_source();
+        let body = r#"{
+            "posts": [
+                {
+                    "uri": "at://did:plc:a/app.bsky.feed.post/1",
+                    "record": {"text": "First post", "created_at": "2024-07-01T08:00:00.000Z"},
+                    "author": {"handle": "user1.bsky.social"}
+                },
+                {
+                    "uri": "at://did:plc:b/app.bsky.feed.post/2",
+                    "record": {"text": "Second post", "created_at": "2024-07-01T09:00:00.000Z"},
+                    "author": {"handle": "user2.bsky.social", "display_name": "User Two"}
+                }
+            ]
+        }"#;
+        let items = parse_bluesky(&src, body).await;
+        assert_eq!(items.len(), 2);
+        assert!(items[0].title.contains("First post"));
+        assert!(items[1].title.contains("Second post"));
+        assert_eq!(items[1].author.as_deref(), Some("User Two"));
+    }
 }

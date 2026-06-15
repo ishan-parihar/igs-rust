@@ -1,5 +1,7 @@
 pub mod cache;
+pub mod clustering;
 pub mod config;
+pub mod fusion;
 pub mod http;
 pub mod lightpanda;
 pub mod lightpanda_mcp;

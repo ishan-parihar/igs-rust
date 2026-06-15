@@ -27,6 +27,7 @@ pub async fn intelligence_collect(
         cache_mode: input.cache_mode,
         urgency: None,
         format: Some("json".to_string()),
+        depth: input.depth,
     };
 
     let fetch_output = news::news_fetch(fetch_input).await?;
@@ -55,6 +56,8 @@ pub async fn intelligence_collect(
                 "source_name": item.source_name,
                 "pool_id": item.pool_id,
                 "content_snippet": item.content_snippet,
+                "date_confidence": item.date_confidence,
+                "freshness_score": item.freshness_score,
             })
         }).collect::<Vec<_>>()
     } else {
@@ -67,6 +70,8 @@ pub async fn intelligence_collect(
                 source_name: item.source_name.clone(),
                 pool_id: item.pool_id.clone(),
                 content_snippet: Some(item.content_snippet.clone()),
+                date_confidence: item.date_confidence.clone(),
+                freshness_score: item.freshness_score,
             }).collect(),
             extract: None,
             format: Some("json".to_string()),

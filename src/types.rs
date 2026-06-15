@@ -78,6 +78,10 @@ pub struct Source {
     pub rate_limit: Option<RateLimit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_score: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -422,6 +426,12 @@ pub struct NewsItem {
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub media_url: Option<String>,
+    /// Date extraction confidence: "high" (RFC3339/datetime attr), "medium" (text parsed), "low" (fallback to Utc::now)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_confidence: Option<String>,
+    /// Freshness score 0.0-100.0 based on recency (exponential decay)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freshness_score: Option<f64>,
 }
 
 // ─── Cache Entry Types ──────────────────────────────────────────

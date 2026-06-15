@@ -349,14 +349,14 @@ impl IgsMcpServer {
 
     // ── Parser Tools ────────────────────────────────────────────
 
-    #[tool(name = "parsers.list", description = "List available source parser keys. Use these keys in sources.upsert parser field. Available: rss (RSS/Atom feeds), ofac (US Treasury OFAC), who_dons (WHO Disease Outbreak News), newslaundry (Newslaundry JSON-in-script), generic_html (CSS selector-based HTML scraping), ussf_cfc (US Space Force). Auto-detects if parser not specified.")]
+    #[tool(name = "parsers.list", description = "List available source parser keys. Use these keys in sources.upsert parser field. Available: rss (RSS/Atom feeds), ofac (US Treasury OFAC), who_dons (WHO Disease Outbreak News), newslaundry (Newslaundry JSON-in-script), generic_html (CSS selector-based HTML scraping), ussf_cfc (US Space Force), hackernews (HN Algolia JSON), youtube (YouTube Atom RSS), github (GitHub releases/search), bluesky (Bluesky AT Protocol), semantic_scholar (Semantic Scholar API). Auto-detects if parser not specified.")]
     async fn parsers_list(&self) -> Result<Json<ParserListOutput>, String> {
         parsers_tools::parsers_list().await.map(Json)
     }
 
     // ── News Tools ──────────────────────────────────────────────
 
-    #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use pools.list to see available pools. Returns NewsItem[] with title, link, pub_date, source_name, content_snippet. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
+    #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use depth='deep' for source site crawl with date_confidence scoring; depth='full' for multi-source enrichment. Returns NewsItem[] with date_confidence, freshness_score. At depth='deep' with >=5 items, returns ClusterInfo with entity clusters. Weighted RRF fusion auto-deduplicates across sources. Per-author dedup caps items per author. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = params.0.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
@@ -404,7 +404,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch output (map id, title, link, pub_date, source_name, pool_id, content_snippet). Output: items with topics (word frequency), entities (capitalized word sequences), sentiment (keyword-based), summary (first sentence). No external API calls. Use with insights.indexArticles to enable cross-article analysis.")]
+    #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch output (map id, title, link, pub_date, source_name, pool_id, content_snippet). Output: items with topics (word frequency), entities (capitalized word sequences), sentiment (keyword-based), summary (first sentence). Pass extract=['topics','entities','sentiment','summary'] to select what to extract, or omit for all. Add 'diversity' to extract for source diversity metrics. No external API calls. Use with insights.indexArticles to enable cross-article analysis.")]
     async fn news_enrich(&self, params: Parameters<NewsEnrichInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = format!("enrich-{}", params.0.items.len());
@@ -673,7 +673,7 @@ impl IgsMcpServer {
 
     // ── Intelligence Pipeline Tools ─────────────────────────────
 
-    #[tool(name = "intelligence.collect", description = "Full intelligence pipeline in one call: fetch news → enrich with NLP → index in insight engine. Combines news.fetch, news.enrich, and insights.indexArticles. Use skip_enrich=true or skip_index=true to skip steps. After indexing, use insights.findConnections or insights.trendingEntities for cross-article analysis.")]
+    #[tool(name = "intelligence.collect", description = "Full intelligence pipeline in one call: fetch news → enrich with NLP → index in insight engine. Combines news.fetch, news.enrich, and insights.indexArticles. Use skip_enrich=true or skip_index=true to skip steps. Pass depth='deep' to enable source site crawl with date_confidence scoring and entity clustering. After indexing, use insights.findConnections or insights.trendingEntities for cross-article analysis.")]
     async fn intelligence_collect(&self, params: Parameters<IntelligenceCollectInput>) -> Result<CallToolResult, String> {
         let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = intelligence::intelligence_collect(&self.insights, params.0).await?;
