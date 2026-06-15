@@ -23,23 +23,23 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
     let http = Arc::new(HttpClient::new(&settings.http, &cache_dir));
     let sf = config::load_sources().await.map_err(|e| format!("Sources: {}", e))?;
 
-    let cache_mode = input.cache_mode.unwrap_or_else(|| "prefer".to_string());
-    let depth = input.depth.unwrap_or_else(|| "default".to_string());
+    let cache_mode = input.filters.cache_mode.unwrap_or_else(|| "prefer".to_string());
+    let depth = input.depth_opts.depth.unwrap_or_else(|| "default".to_string());
     let (max_sources, max_results) = depth_limits(&depth);
-    let limit = input.limit.unwrap_or(max_results as i32).clamp(1, 500) as usize;
+    let limit = input.filters.limit.unwrap_or(max_results as i32).clamp(1, 500) as usize;
 
     let mut sources = sf.sources;
     sources.retain(|s| s.is_active.unwrap_or(true));
 
     // Filter sources by pool
-    if let Some(ref pool_ids) = input.pools {
+    if let Some(ref pool_ids) = input.filters.pools {
         if !pool_ids.is_empty() {
             sources.retain(|s| s.pools.iter().any(|p| pool_ids.contains(p)));
         }
     }
 
     // Filter by country/city/domain
-    if let Some(ref countries) = input.countries {
+    if let Some(ref countries) = input.filters.countries {
         if !countries.is_empty() {
             sources.retain(|s| {
                 s.countries.iter().any(|sc| {
@@ -48,12 +48,12 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
             });
         }
     }
-    if let Some(ref cities) = input.cities {
+    if let Some(ref cities) = input.filters.cities {
         if !cities.is_empty() {
             sources.retain(|s| s.cities.iter().any(|c| cities.iter().any(|cc| c.to_lowercase() == cc.to_lowercase())));
         }
     }
-    if let Some(ref domains) = input.domains {
+    if let Some(ref domains) = input.filters.domains {
         if !domains.is_empty() {
             sources.retain(|s| {
                 s.domains.iter().any(|d| domains.iter().any(|dd| d.to_lowercase() == dd.to_lowercase()))
@@ -115,28 +115,28 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
     };
 
     // Time filter
-    if input.start.is_some() || input.end.is_some() {
+    if input.filters.start.is_some() || input.filters.end.is_some() {
         all_items = parsers::filter_by_time(
             all_items,
-            input.start.as_deref(),
-            input.end.as_deref(),
+            input.filters.start.as_deref(),
+            input.filters.end.as_deref(),
         );
     }
 
     // Keyword filter
     let mut keyword_vec: Vec<String> = Vec::new();
-    if let Some(ref kw) = input.keywords {
+    if let Some(ref kw) = input.filters.keywords {
         if let Some(arr) = kw.as_array() {
             keyword_vec = arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
         }
     }
     if !input.discovery_mode.unwrap_or(false) {
-        let exclude = input.exclude_keywords.as_ref().cloned().unwrap_or_default();
+        let exclude = input.filters.exclude_keywords.as_ref().cloned().unwrap_or_default();
         all_items = parsers::filter_by_keywords(
             all_items,
-            input.keywords.as_ref(),
+            input.filters.keywords.as_ref(),
             &exclude,
-            input.match_all.unwrap_or(false),
+            input.filters.match_all.unwrap_or(false),
         );
     }
 
@@ -153,7 +153,7 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
         sources_succeeded: succeeded,
         sources_failed: failed,
         total_sources: total,
-        pool_ids: input.pools.unwrap_or_default(),
+        pool_ids: input.filters.pools.unwrap_or_default(),
         keywords: keyword_vec,
         count,
     };

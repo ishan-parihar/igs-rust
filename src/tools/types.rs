@@ -3,6 +3,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::types_base::{DepthOptions, DiscoveryFilters, OutputOptions};
+
 // ─── Pool Tool Types ───────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -42,8 +44,8 @@ pub struct PoolDeleteOutput {
 pub struct SourceListInput {
     pub pools: Option<Vec<String>>,
     pub active_only: Option<bool>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -127,8 +129,8 @@ pub struct EnableScraperOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GeoListInput {
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -169,24 +171,14 @@ pub struct DomainsOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsFetchInput {
-    pub pools: Option<Vec<String>>,
-    pub sources: Option<Vec<String>>,
-    pub countries: Option<Vec<String>>,
-    pub cities: Option<Vec<String>>,
-    pub domains: Option<Vec<String>>,
-    pub start: Option<String>,
-    pub end: Option<String>,
-    pub keywords: Option<serde_json::Value>,
-    pub exclude_keywords: Option<Vec<String>>,
-    pub match_all: Option<bool>,
+    #[serde(flatten)]
+    pub filters: DiscoveryFilters,
     pub discovery_mode: Option<bool>,
-    pub limit: Option<i32>,
-    pub cache_mode: Option<String>,
     pub urgency: Option<String>,
-    /// Depth: "quick" (2 pools, 5/pool), "default" (5 pools, 20/pool), "deep" (20 pools, 50/pool)
-    pub depth: Option<String>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub depth_opts: DepthOptions,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -222,8 +214,8 @@ pub struct NewsFetchOutput {
 pub struct NewsTestInput {
     pub id: String,
     pub cache_mode: Option<String>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -251,8 +243,8 @@ pub struct EnrichItemInput {
 pub struct NewsEnrichInput {
     pub items: Vec<EnrichItemInput>,
     pub extract: Option<Vec<String>>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -270,8 +262,8 @@ pub struct RedditSearchInput {
     pub sort: Option<String>,
     pub time: Option<String>,
     pub limit: Option<i32>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -297,8 +289,8 @@ pub struct RedditFeedInput {
     pub subreddits: Vec<String>,
     /// Limit per subreddit (default: 25, max: 100)
     pub limit: Option<i32>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -318,8 +310,8 @@ pub struct ResearchSearchInput {
     pub year_from: Option<i32>,
     pub year_to: Option<i32>,
     pub limit: Option<i32>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -378,7 +370,8 @@ pub struct ResearchPaperOutput {
 pub struct ResearchDownloadInput {
     pub paper_id: String,
     pub output_path: Option<String>,
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
     pub convert_to_markdown: Option<bool>,
 }
 
@@ -402,8 +395,8 @@ pub struct WebSearchInput {
     pub exclude_domains: Option<Vec<String>>,
     pub days: Option<i32>,
     pub include_answer: Option<bool>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -447,8 +440,8 @@ pub struct WebScrapeInput {
     pub include_frames: Option<bool>,
     /// Wait until event: "load", "domcontentloaded", "networkidle", "done" (Lightpanda only)
     pub wait_until: Option<String>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -486,8 +479,8 @@ pub struct WebCrawlInput {
     pub wait_selector: Option<String>,
     /// Strip mode: "js", "css", "ui", "full"
     pub strip_mode: Option<String>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -527,8 +520,8 @@ pub struct WebMapInput {
     pub provider: Option<String>,
     pub limit: Option<i32>,
     pub search: Option<String>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -570,8 +563,8 @@ pub struct InsightConnectionOutput {
 pub struct InsightAllConnectionsInput {
     pub min_domains: Option<i32>,
     pub limit: Option<i32>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -586,8 +579,8 @@ pub struct InsightTrendingInput {
     pub time_window_hours: Option<i64>,
     pub min_growth: Option<f64>,
     pub min_current_mentions: Option<u32>,
-    /// Output format: "toon" (default, token-efficient) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -633,38 +626,16 @@ pub struct InsightClearOutput {
 /// Input for intelligence.collect — runs fetch→enrich→index pipeline
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct IntelligenceCollectInput {
-    /// Pool IDs to fetch from
-    pub pools: Option<Vec<String>>,
-    /// Source IDs to fetch from
-    pub sources: Option<Vec<String>>,
-    /// Country filters
-    pub countries: Option<Vec<String>>,
-    /// City filters
-    pub cities: Option<Vec<String>>,
-    /// Domain filters
-    pub domains: Option<Vec<String>>,
-    /// Time range start (ISO 8601)
-    pub start: Option<String>,
-    /// Time range end (ISO 8601)
-    pub end: Option<String>,
-    /// Keywords to filter by (string or array of arrays for clusters)
-    pub keywords: Option<serde_json::Value>,
-    /// Keywords to exclude
-    pub exclude_keywords: Option<Vec<String>>,
-    /// Match all keywords
-    pub match_all: Option<bool>,
-    /// Max items to fetch
-    pub limit: Option<i32>,
-    /// Cache mode: "prefer", "bypass", "only"
-    pub cache_mode: Option<String>,
+    #[serde(flatten)]
+    pub filters: DiscoveryFilters,
     /// Skip NLP enrichment step
     pub skip_enrich: Option<bool>,
     /// Skip insight indexing step
     pub skip_index: Option<bool>,
-    /// Fetch depth: "quick" (direct RSS), "deep" (source site crawl), "full" (multi-source enrichment)
-    pub depth: Option<String>,
-    /// Output format: "toon" (default) or "json"
-    pub format: Option<String>,
+    #[serde(flatten)]
+    pub depth_opts: DepthOptions,
+    #[serde(flatten)]
+    pub output: OutputOptions,
 }
 
 /// Output from intelligence.collect pipeline

@@ -38,9 +38,9 @@ pub struct DiscoveryFilters {
     /// End date (ISO 8601: "2024-12-31T23:59:59Z"). For date range filtering.
     #[serde(default)]
     pub end: Option<String>,
-    /// Keywords for content matching. Inclusion matches are applied after fetch.
+    /// Keywords for content matching. Accepts string, array, or array-of-arrays for clusters.
     #[serde(default)]
-    pub keywords: Option<Vec<String>>,
+    pub keywords: Option<serde_json::Value>,
     /// Keywords to exclude. Items matching any exclusion keyword are dropped.
     #[serde(default)]
     pub exclude_keywords: Option<Vec<String>>,
@@ -49,7 +49,7 @@ pub struct DiscoveryFilters {
     pub match_all: Option<bool>,
     /// Maximum items to return. Default: 20. Range: 1-500.
     #[serde(default)]
-    pub limit: Option<u32>,
+    pub limit: Option<i32>,
     /// Cache mode: "fresh" (new only), "all" (fresh + cached), "only" (cached only).
     /// Default: "all" for most tools, "fresh" for intelligence.collect.
     #[serde(default)]

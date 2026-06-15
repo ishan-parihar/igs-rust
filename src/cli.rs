@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use igs_rust_mcp::server::IgsMcpServer;
 use igs_rust_mcp::tools::{news, pools, sources, reddit, research, web, helpers::toon_encode, parsers as parsers_tools};
 use igs_rust_mcp::tools::types::*;
+use igs_rust_mcp::tools::types_base::{DiscoveryFilters, DepthOptions, OutputOptions};
 use rmcp::ServiceExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -443,11 +444,24 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(igs_rust_mcp::tools::intelligence::intelligence_collect(
                     &Arc::new(Mutex::new(igs_rust_mcp::server::InsightStorage::new())),
                     IntelligenceCollectInput {
-                        pools, sources: srcs, countries, cities: None, domains: None,
-                        start, end, keywords: kw, exclude_keywords: None, match_all: None,
-                        limit: Some(limit), cache_mode: Some(cache_mode),
-                        skip_enrich: Some(skip_enrich), skip_index: Some(skip_index),
-                        depth, format: Some(fmt.clone()),
+                        filters: DiscoveryFilters {
+                            pools,
+                            sources: srcs,
+                            countries,
+                            cities: None,
+                            domains: None,
+                            start,
+                            end,
+                            keywords: kw,
+                            exclude_keywords: None,
+                            match_all: None,
+                            limit: Some(limit),
+                            cache_mode: Some(cache_mode),
+                        },
+                        skip_enrich: Some(skip_enrich),
+                        skip_index: Some(skip_index),
+                        depth_opts: DepthOptions { depth },
+                        output: OutputOptions { format: Some(fmt.clone()) },
                     },
                 ).await)?;
                 output(fmt, &result);
@@ -472,7 +486,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Sources { action } => match action {
             SourceAction::List { pool, active_only } => {
                 let pools = pool.map(|p| vec![p]);
-                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), format: None }).await)?;
+                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), output: OutputOptions { format: None } }).await)?;
                 output(fmt, &result);
             }
             SourceAction::Discover { url, pool, name } => {
@@ -498,14 +512,19 @@ async fn main() -> anyhow::Result<()> {
             NewsAction::Fetch { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode, depth } => {
                 let kw = keywords.map(|k| serde_json::json!(k));
                 let result = r(news::news_fetch(NewsFetchInput {
-                    pools, sources: srcs, countries, cities: None, domains: None,
-                    start, end, keywords: kw, exclude_keywords: None, match_all: None,
-                    discovery_mode: None, limit: Some(limit), cache_mode: Some(cache_mode), urgency: None, format: None, depth,
+                    filters: DiscoveryFilters {
+                        pools, sources: srcs, countries, cities: None, domains: None,
+                        start, end, keywords: kw, exclude_keywords: None, match_all: None,
+                        limit: Some(limit), cache_mode: Some(cache_mode),
+                    },
+                    discovery_mode: None, urgency: None,
+                    depth_opts: DepthOptions { depth },
+                    output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
             NewsAction::Test { id, cache_mode } => {
-                let result = r(news::news_test_source(NewsTestInput { id, cache_mode: Some(cache_mode), format: None }).await)?;
+                let result = r(news::news_test_source(NewsTestInput { id, cache_mode: Some(cache_mode), output: OutputOptions { format: None } }).await)?;
                 output(fmt, &result);
             }
             NewsAction::Enrich { input, extract } => {
@@ -521,7 +540,7 @@ async fn main() -> anyhow::Result<()> {
                     return Err(anyhow::anyhow!("Provide --input <file> or --input - for stdin"));
                 };
                 let items: Vec<EnrichItemInput> = serde_json::from_str(&items_json)?;
-                let result = r(news::news_enrich(NewsEnrichInput { items, extract, format: None }).await)?;
+                let result = r(news::news_enrich(NewsEnrichInput { items, extract, output: OutputOptions { format: None } }).await)?;
                 output(fmt, &result);
             }
         },
@@ -529,13 +548,13 @@ async fn main() -> anyhow::Result<()> {
         Commands::Reddit { action } => match action {
             RedditAction::Search { query, subreddits, sort, time, limit } => {
                 let result = r(reddit::reddit_search(RedditSearchInput {
-                    query, subreddits, sort: Some(sort), time: Some(time), limit: Some(limit), format: None,
+                    query, subreddits, sort: Some(sort), time: Some(time), limit: Some(limit), output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
             RedditAction::Feed { subreddits, limit } => {
                 let result = r(reddit::reddit_feed(RedditFeedInput {
-                    subreddits, limit: Some(limit), format: None,
+                    subreddits, limit: Some(limit), output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
@@ -544,7 +563,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Research { action } => match action {
             ResearchAction::Search { query, sources: srcs, categories, year_from, year_to, limit } => {
                 let result = r(research::research_search(ResearchSearchInput {
-                    query, sources: Some(srcs), categories, year_from, year_to, limit: Some(limit), format: None,
+                    query, sources: Some(srcs), categories, year_from, year_to, limit: Some(limit), output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
@@ -556,7 +575,7 @@ async fn main() -> anyhow::Result<()> {
             }
             ResearchAction::Download { id, output: out, convert_to_markdown } => {
                 let result = r(research::research_download(ResearchDownloadInput {
-                    paper_id: id, output_path: out, format: None, convert_to_markdown: Some(convert_to_markdown),
+                    paper_id: id, output_path: out, output: OutputOptions { format: None }, convert_to_markdown: Some(convert_to_markdown),
                 }).await)?;
                 output(fmt, &result);
             }
@@ -566,7 +585,7 @@ async fn main() -> anyhow::Result<()> {
             WebAction::Search { query, max_results, topic, include_domains, exclude_domains } => {
                 let result = r(web::web_search(WebSearchInput {
                     query, provider: None, max_results: Some(max_results), topic,
-                    include_domains, exclude_domains, days: None, include_answer: None, format: None,
+                    include_domains, exclude_domains, days: None, include_answer: None, output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
@@ -574,7 +593,7 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(web::web_scrape(WebScrapeInput {
                     url, provider: Some(provider), formats: None,
                     wait_selector, strip_mode, structured_data: None,
-                    include_frames: Some(include_frames), wait_until, format: None,
+                    include_frames: Some(include_frames), wait_until, output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
@@ -582,13 +601,13 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(web::web_crawl(WebCrawlInput {
                     url, provider: None, max_depth: Some(max_depth), max_pages: Some(max_pages),
                     obey_robots: Some(obey_robots), dump_format: Some(dump_format),
-                    wait_until: None, include_frames: None, wait_selector, strip_mode: None, format: None,
+                    wait_until: None, include_frames: None, wait_selector, strip_mode: None, output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }
             WebAction::Map { url, limit, search } => {
                 let result = r(web::web_map(WebMapInput {
-                    url, provider: None, limit: Some(limit), search, format: None,
+                    url, provider: None, limit: Some(limit), search, output: OutputOptions { format: None },
                 }).await)?;
                 output(fmt, &result);
             }

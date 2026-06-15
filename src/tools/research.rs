@@ -452,7 +452,7 @@ pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchD
         "paper_id": input.paper_id,
         "pdf_url": pdf_url,
         "file_size": bytes.len(),
-        "format": input.format.unwrap_or_else(|| "pdf".to_string()),
+        "format": input.output.format.unwrap_or_else(|| "pdf".to_string()),
     });
 
     Ok(ResearchDownloadOutput {

@@ -281,7 +281,7 @@ impl IgsMcpServer {
 
     #[tool(name = "sources.list", description = "List configured news sources (410+ across 47 countries). Filter by pools (pool IDs) or active_only=true. Returns Source[] with id, name, type, url, parser, pools, countries, cities, domains. Default output: TOON.")]
     async fn sources_list(&self, params: Parameters<SourceListInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = sources::sources_list(params.0).await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
@@ -313,7 +313,7 @@ impl IgsMcpServer {
 
     #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[] with name, ISO code, and source_count. Use ISO codes (IN, US, GB, etc.) as filters in news.fetch countries parameter. Default output: TOON.")]
     async fn sources_countries(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = sources::sources_countries().await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
@@ -325,7 +325,7 @@ impl IgsMcpServer {
 
     #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[] with name and source_count. Use city names as filters in news.fetch cities parameter. Sorted by source count descending. Default output: TOON.")]
     async fn sources_cities(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = sources::sources_cities().await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
@@ -337,7 +337,7 @@ impl IgsMcpServer {
 
     #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[] with name and source_count. Domains are topical tags (geopolitics, business, tech, cyber, defense, health, etc.). Use domain names as filters in news.fetch domains parameter. Default output: TOON.")]
     async fn sources_domains(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = sources::sources_domains().await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
@@ -358,8 +358,8 @@ impl IgsMcpServer {
 
     #[tool(name = "news.fetch", description = "Fetch news from 410+ configured sources across 47 countries. Filter by pools (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE), countries (ISO codes), cities, domains, time range, and keywords. Supports keyword clusters (OR within, AND across). Use depth='deep' for source site crawl with date_confidence scoring; depth='full' for multi-source enrichment. Returns NewsItem[] with date_confidence, freshness_score. At depth='deep' with >=5 items, returns ClusterInfo with entity clusters. Weighted RRF fusion auto-deduplicates across sources. Per-author dedup caps items per author. Default output: TOON (token-efficient). Use format='json' for standard JSON.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
-        let _subject = params.0.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
+        let _subject = params.0.filters.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
         let output = news::news_fetch(params.0).await?;
         #[cfg(not(test))]
         {
@@ -382,7 +382,7 @@ impl IgsMcpServer {
 
     #[tool(name = "news.testSource", description = "Test a single source and return up to 10 items. Input: source ID (from sources.list). Useful for debugging source configuration, parser issues, or verifying a new source works. Returns NewsItem[].")]
     async fn news_test_source(&self, params: Parameters<NewsTestInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = params.0.id.clone();
         let output = news::news_test_source(params.0).await?;
         #[cfg(not(test))]
@@ -406,7 +406,7 @@ impl IgsMcpServer {
 
     #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch output (map id, title, link, pub_date, source_name, pool_id, content_snippet). Output: items with topics (word frequency), entities (capitalized word sequences), sentiment (keyword-based), summary (first sentence). Pass extract=['topics','entities','sentiment','summary'] to select what to extract, or omit for all. Add 'diversity' to extract for source diversity metrics. No external API calls. Use with insights.indexArticles to enable cross-article analysis.")]
     async fn news_enrich(&self, params: Parameters<NewsEnrichInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = format!("enrich-{}", params.0.items.len());
         let output = news::news_enrich(params.0).await?;
         #[cfg(not(test))]
@@ -432,7 +432,7 @@ impl IgsMcpServer {
 
     #[tool(name = "reddit.search", description = "Search Reddit posts via reddit.com JSON API. Supports subreddits filter (e.g. [\"worldnews\",\"technology\"]), sort (relevance/hot/top/new), time (hour/day/week/month/year/all). Returns NewsItem[] compatible with news.enrich and insights.indexArticles for cross-platform analysis.")]
     async fn reddit_search(&self, params: Parameters<RedditSearchInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = params.0.subreddits.as_ref().and_then(|s| s.first()).cloned().unwrap_or_else(|| params.0.query.clone());
         let output = reddit::reddit_search(params.0).await?;
         #[cfg(not(test))]
@@ -456,7 +456,7 @@ impl IgsMcpServer {
 
     #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds (old.reddit.com/r/{sub}/.rss). Reliable cross-platform access that works without API keys or residential IPs. Pass subreddit names without r/ prefix. Returns NewsItem[] compatible with news.enrich and insights.indexArticles.")]
     async fn reddit_feed(&self, params: Parameters<RedditFeedInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = params.0.subreddits.first().cloned().unwrap_or_default();
         let output = reddit::reddit_feed(params.0).await?;
         #[cfg(not(test))]
@@ -482,7 +482,7 @@ impl IgsMcpServer {
 
     #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Supports categories (e.g. cs.AI, cs.CL), year_from, year_to filtering. Returns ResearchPaper[] with id (format: arxiv:XXXX or semanticscholar:XXXX), title, authors, abstract, year, citation_count, pdf_url. Use research.paper for details or research.download for PDF.")]
     async fn research_search(&self, params: Parameters<ResearchSearchInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = params.0.query.clone();
         let output = research::research_search(params.0).await?;
         #[cfg(not(test))]
@@ -531,7 +531,7 @@ impl IgsMcpServer {
 
     #[tool(name = "web.search", description = "Realtime web search via Tavily (default) or Firecrawl API. Requires tavily.enabled=true or firecrawl.enabled=true in settings.yml with API key. Supports include_domains, exclude_domains, days, include_answer. Returns results array with title, url, content, score. Default output: TOON. Use format='json' for structured JSON.")]
     async fn web_search(&self, params: Parameters<WebSearchInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = params.0.query.clone();
         let output = web::web_search(params.0).await?;
         #[cfg(not(test))]
@@ -555,7 +555,7 @@ impl IgsMcpServer {
 
     #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata (title, headings, og:description, link count). Provider 'default' uses HTTP+html-to-markdown. Provider 'lightpanda' renders JavaScript — set lightpanda.enabled=true in settings.yml first. Lightpanda supports wait_selector, strip_mode, wait_until, include_frames for JS-heavy sites. Default output: TOON.")]
     async fn web_scrape(&self, params: Parameters<WebScrapeInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_scrape(params.0).await?;
         #[cfg(not(test))]
@@ -579,7 +579,7 @@ impl IgsMcpServer {
 
     #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Renders JavaScript. Requires lightpanda.enabled=true in settings.yml (binary auto-downloads). Supports max_depth (default 2), max_pages (default 20), obey_robots, dump_format (markdown/html/semantic_tree), wait_until, wait_selector, strip_mode, include_frames. Returns pages with depth and status. Default output: TOON.")]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_crawl(params.0).await?;
         #[cfg(not(test))]
@@ -603,7 +603,7 @@ impl IgsMcpServer {
 
     #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Fetches /sitemap.xml, extracts <loc> URLs. Supports limit (default 100) and search filter. Returns WebMapOutput with links array containing url and optional title. Default output: TOON.")]
     async fn web_map(&self, params: Parameters<WebMapInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_map(params.0).await?;
         #[cfg(not(test))]
@@ -634,7 +634,7 @@ impl IgsMcpServer {
 
     #[tool(name = "insights.findAllConnections", description = "Discover all entities appearing across multiple domains in indexed articles. Returns EntityConnection[] sorted by connection_strength. Requires articles indexed via insights.indexArticles or intelligence.collect. Use min_domains (default 2) and limit to control output size.")]
     async fn insights_find_all_connections(&self, params: Parameters<InsightAllConnectionsInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = insights::insights_find_all_connections(&self.insights, params.0).await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
@@ -646,7 +646,7 @@ impl IgsMcpServer {
 
     #[tool(name = "insights.trendingEntities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.indexArticles or intelligence.collect. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3).")]
     async fn insights_trending(&self, params: Parameters<InsightTrendingInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = insights::insights_trending(&self.insights, params.0).await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()
@@ -675,7 +675,7 @@ impl IgsMcpServer {
 
     #[tool(name = "intelligence.collect", description = "Full intelligence pipeline in one call: fetch news → enrich with NLP → index in insight engine. Combines news.fetch, news.enrich, and insights.indexArticles. Use skip_enrich=true or skip_index=true to skip steps. Pass depth='deep' to enable source site crawl with date_confidence scoring and entity clustering. After indexing, use insights.findConnections or insights.trendingEntities for cross-article analysis.")]
     async fn intelligence_collect(&self, params: Parameters<IntelligenceCollectInput>) -> Result<CallToolResult, String> {
-        let format = params.0.format.clone().unwrap_or_else(|| "toon".to_string());
+        let format = params.0.output.format.clone().unwrap_or_else(|| "toon".to_string());
         let output = intelligence::intelligence_collect(&self.insights, params.0).await?;
         let text = if format == "json" {
             serde_json::to_string_pretty(&output).unwrap_or_default()

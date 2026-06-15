@@ -1,6 +1,7 @@
 use crate::server::InsightStorage;
 use crate::tools::news;
 use crate::tools::types::*;
+use crate::tools::types_base::OutputOptions;
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -12,22 +13,11 @@ pub async fn intelligence_collect(
 ) -> Result<IntelligenceCollectOutput, String> {
     // Step 1: Fetch news
     let fetch_input = NewsFetchInput {
-        pools: input.pools,
-        sources: input.sources,
-        countries: input.countries,
-        cities: input.cities,
-        domains: input.domains,
-        start: input.start,
-        end: input.end,
-        keywords: input.keywords,
-        exclude_keywords: input.exclude_keywords,
-        match_all: input.match_all,
+        filters: input.filters.clone(),
         discovery_mode: None,
-        limit: input.limit,
-        cache_mode: input.cache_mode,
         urgency: None,
-        format: Some("json".to_string()),
-        depth: input.depth,
+        depth_opts: input.depth_opts.clone(),
+        output: OutputOptions { format: Some("json".to_string()) },
     };
 
     let fetch_output = news::news_fetch(fetch_input).await?;
@@ -74,7 +64,7 @@ pub async fn intelligence_collect(
                 freshness_score: item.freshness_score,
             }).collect(),
             extract: None,
-            format: Some("json".to_string()),
+            output: OutputOptions { format: Some("json".to_string()) },
         };
 
         let enrich_output = news::news_enrich(enrich_input).await?;
