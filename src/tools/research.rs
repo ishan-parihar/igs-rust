@@ -448,12 +448,14 @@ pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchD
     };
 
     // Create metadata
-    let metadata = serde_json::json!({
-        "paper_id": input.paper_id,
-        "pdf_url": pdf_url,
-        "file_size": bytes.len(),
-        "format": input.output.format.unwrap_or_else(|| "pdf".to_string()),
-    });
+    let metadata = PaperMetadata {
+        title: input.paper_id.clone(),
+        id: input.paper_id.clone(),
+        year: None,
+        pages: None,
+        file_size: bytes.len() as u64,
+        file_path: output_path.clone(),
+    };
 
     Ok(ResearchDownloadOutput {
         pdf_path: Some(output_path),

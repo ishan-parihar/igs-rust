@@ -255,10 +255,13 @@ async fn web_scrape_tavily(input: &WebScrapeInput, settings: &crate::types::Sett
                     title: first["title"].as_str().map(|s| s.to_string()),
                     markdown: Some(markdown),
                     metadata: None,
-                    meta: serde_json::json!({
-                        "provider": "tavily",
-                        "formats": input.formats.as_deref().unwrap_or(&["markdown".to_string()]),
-                    }),
+                    meta: ScrapeMeta {
+                        url: input.url.clone(),
+                        status: 200,
+                        content_type: None,
+                        elapsed_ms: 0,
+                        js_rendered: false,
+                    },
                 });
             }
 
@@ -312,17 +315,20 @@ async fn web_scrape_firecrawl(input: &WebScrapeInput, settings: &crate::types::S
                 url: input.url.clone(),
                 title,
                 markdown,
-                metadata: Some(ScrapeMeta {
+                metadata: Some(ScrapeStructuredData {
                     description,
                     og_title,
                     og_description,
                     links_count: 0,
                     headings: Vec::new(),
                 }),
-                meta: serde_json::json!({
-                    "provider": "firecrawl",
-                    "formats": formats,
-                }),
+                meta: ScrapeMeta {
+                    url: input.url.clone(),
+                    status: 200,
+                    content_type: None,
+                    elapsed_ms: 0,
+                    js_rendered: false,
+                },
             })
         }
         Ok(http_mod::FetchOutcome::Cached(_)) => Err("Unexpected cache hit for Firecrawl scrape".into()),
@@ -330,7 +336,7 @@ async fn web_scrape_firecrawl(input: &WebScrapeInput, settings: &crate::types::S
     }
 }
 
-fn extract_scrape_output(url: &str, body: &str, provider: &str, formats: Option<&[String]>) -> Result<WebScrapeOutput, String> {
+fn extract_scrape_output(url: &str, body: &str, _provider: &str, _formats: Option<&[String]>) -> Result<WebScrapeOutput, String> {
     let doc = scraper::Html::parse_document(body);
 
     let title = scraper::Selector::parse("title")
@@ -387,17 +393,20 @@ fn extract_scrape_output(url: &str, body: &str, provider: &str, formats: Option<
         url: url.to_string(),
         title,
         markdown: Some(markdown),
-        metadata: Some(ScrapeMeta {
+        metadata: Some(ScrapeStructuredData {
             description,
             og_title,
             og_description,
             links_count,
             headings,
         }),
-        meta: serde_json::json!({
-            "provider": provider,
-            "formats": formats.unwrap_or(&["markdown".to_string()]),
-        }),
+        meta: ScrapeMeta {
+            url: url.to_string(),
+            status: 200,
+            content_type: None,
+            elapsed_ms: 0,
+            js_rendered: false,
+        },
     })
 }
 

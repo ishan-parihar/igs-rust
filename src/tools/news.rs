@@ -6,7 +6,7 @@ use crate::parsers;
 use crate::server::InsightStorage;
 use crate::tools::helpers::*;
 use crate::tools::types::*;
-use crate::tools::types_base::OutputOptions;
+use crate::tools::types_base::{KeywordFilter, OutputOptions};
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -129,8 +129,14 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
     // Keyword filter
     let mut keyword_vec: Vec<String> = Vec::new();
     if let Some(ref kw) = input.filters.keywords {
-        if let Some(arr) = kw.as_array() {
-            keyword_vec = arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
+        match kw {
+            KeywordFilter::Single(s) => keyword_vec.push(s.clone()),
+            KeywordFilter::Multiple(arr) => keyword_vec.extend(arr.iter().cloned()),
+            KeywordFilter::Nested(nested) => {
+                for cluster in nested.iter() {
+                    keyword_vec.extend(cluster.iter().cloned());
+                }
+            }
         }
     }
     if !input.discovery_mode.unwrap_or(false) {
@@ -208,9 +214,9 @@ pub async fn fetch_news_intelligent(
     }
 
     // Step 2: Enrich with NLP (unless skipped)
-    let enriched_items = if input.skip_enrich.unwrap_or(false) {
-        fetch_output.items.iter().map(|item| {
-            serde_json::json!({
+    let enriched_items: Vec<EnrichedItem> = if input.skip_enrich.unwrap_or(false) {
+        fetch_output.items.iter().map(|item| EnrichedItem {
+            item: serde_json::json!({
                 "id": item.id,
                 "title": item.title,
                 "link": item.link,
@@ -220,8 +226,12 @@ pub async fn fetch_news_intelligent(
                 "content_snippet": item.content_snippet,
                 "date_confidence": item.date_confidence,
                 "freshness_score": item.freshness_score,
-            })
-        }).collect::<Vec<_>>()
+            }),
+            topics: Vec::new(),
+            entities: Vec::new(),
+            sentiment: None,
+            summary: None,
+        }).collect()
     } else {
         let enrich_input = NewsEnrichInput {
             items: fetch_output.items.iter().map(|item| EnrichItemInput {
@@ -250,24 +260,14 @@ pub async fn fetch_news_intelligent(
         0
     } else {
         let articles: Vec<InsightIndexArticle> = enriched_items.iter().filter_map(|item| {
-            let id = item["id"].as_str()?.to_string();
-            let title = item["title"].as_str()?.to_string();
-            let pub_date = item["pub_date"].as_str()?.to_string();
-            let source_name = item["source_name"].as_str()?.to_string();
+            let id = item.item["id"].as_str()?.to_string();
+            let title = item.item["title"].as_str()?.to_string();
+            let pub_date = item.item["pub_date"].as_str()?.to_string();
+            let source_name = item.item["source_name"].as_str()?.to_string();
 
-            let entities = item.get("entities").and_then(|e| e.as_array()).map(|arr| {
-                arr.iter().filter_map(|e| {
-                    Some(EntityInfo {
-                        name: e["name"].as_str()?.to_string(),
-                        entity_type: e["type"].as_str().unwrap_or("Unknown").to_string(),
-                        mentions: e["mentions"].as_u64().map(|n| n as u32),
-                        confidence: e["confidence"].as_f64(),
-                        normalized_id: None,
-                    })
-                }).collect()
-            });
+            let entities = Some(item.entities.clone());
 
-            let domains = item.get("pool_id").and_then(|p| p.as_str()).map(|pool| {
+            let domains = item.item.get("pool_id").and_then(|p| p.as_str()).map(|pool| {
                 vec![DomainInfo {
                     domain: pool.to_string(),
                     score: Some(1.0),
@@ -329,46 +329,62 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
     let extract = input.extract.unwrap_or_else(|| vec![
         "topics".into(), "entities".into(), "sentiment".into(), "summary".into(),
     ]);
+    let features = extract.clone();
     let want: std::collections::HashSet<String> = extract.into_iter().collect();
 
     let mut out = Vec::new();
     for item in &input.items {
         let text = format!("{} {}", item.title, item.content_snippet.as_deref().unwrap_or(""));
 
-        let mut enriched = serde_json::json!({
-            "id": item.id,
-            "title": item.title,
-            "link": item.link,
-            "pub_date": item.pub_date,
-            "source_name": item.source_name,
-            "pool_id": item.pool_id,
-            "content_snippet": item.content_snippet,
-            "date_confidence": item.date_confidence,
-            "freshness_score": item.freshness_score,
-        });
+        let mut enriched = EnrichedItem {
+            item: serde_json::json!({
+                "id": item.id,
+                "title": item.title,
+                "link": item.link,
+                "pub_date": item.pub_date,
+                "source_name": item.source_name,
+                "pool_id": item.pool_id,
+                "content_snippet": item.content_snippet,
+                "date_confidence": item.date_confidence,
+                "freshness_score": item.freshness_score,
+            }),
+            topics: Vec::new(),
+            entities: Vec::new(),
+            sentiment: None,
+            summary: None,
+        };
 
         if want.contains("topics") {
-            let topics = extract_topics(&text, 8);
-            enriched["topics"] = serde_json::json!(topics);
+            enriched.topics = extract_topics(&text, 8);
         }
 
         if want.contains("entities") {
-            let entities = extract_basic_entities(&text);
-            enriched["entities"] = serde_json::json!(entities);
+            enriched.entities = extract_basic_entities(&text).into_iter().filter_map(|v| {
+                Some(EntityInfo {
+                    name: v["name"].as_str()?.to_string(),
+                    entity_type: v["type"].as_str().unwrap_or("Unknown").to_string(),
+                    mentions: v["mentions"].as_u64().map(|n| n as u32),
+                    confidence: v["confidence"].as_f64(),
+                    normalized_id: None,
+                })
+            }).collect();
         }
 
         if want.contains("sentiment") {
-            let sentiment = basic_sentiment(&text);
-            enriched["sentiment"] = serde_json::json!(sentiment);
+            let sentiment_value = basic_sentiment(&text);
+            enriched.sentiment = Some(SentimentResult {
+                score: sentiment_value["score"].as_f64().unwrap_or(0.0),
+                comparative: sentiment_value["comparative"].as_f64().unwrap_or(0.0),
+                label: sentiment_value["label"].as_str().unwrap_or("neutral").to_string(),
+            });
         }
 
         if want.contains("summary") {
-            let summary = item.content_snippet.as_deref()
+            enriched.summary = item.content_snippet.as_deref()
                 .and_then(|s| s.split(['.', '!', '?'])
                     .find(|s| !s.trim().is_empty())
                     .map(|s| s.trim().to_string()))
-                .unwrap_or_else(|| item.title.clone());
-            enriched["summary"] = serde_json::json!(summary);
+                .or_else(|| Some(item.title.clone()));
         }
 
         if want.contains("diversity") {
@@ -390,7 +406,10 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
                 .len();
             let diversity = if total_sources <= 1 { 0.0 }
                 else { (same_source_count as f64 / total_sources.max(1) as f64).min(1.0) };
-            enriched["source_diversity"] = serde_json::json!(diversity);
+            // diversity is not a field on EnrichedItem — keep as part of item value
+            if let Some(obj) = enriched.item.as_object_mut() {
+                obj.insert("source_diversity".to_string(), serde_json::json!(diversity));
+            }
         }
 
         out.push(enriched);
@@ -398,9 +417,9 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
 
     Ok(NewsEnrichOutput {
         items: out,
-        meta: serde_json::json!({
-            "items_enriched": input.items.len(),
-            "note": "Basic offline NLP enrichment (no external API calls)"
-        }),
+        meta: EnrichmentMeta {
+            enriched_count: input.items.len(),
+            features,
+        },
     })
 }

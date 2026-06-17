@@ -4,12 +4,25 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Flexible keyword filter that supports string, array, or nested array formats.
+/// Use Single("AI safety") for one keyword, Multiple(["AI", "safety"]) for AND-style flat list,
+/// or Nested([["AI","safety"], ["ML"]]) for OR-group clusters.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum KeywordFilter {
+    /// Single keyword string
+    Single(String),
+    /// Flat array of keywords (AND logic within the group)
+    Multiple(Vec<String>),
+    /// Nested arrays for OR-group logic (AND within inner, OR across outer)
+    Nested(Vec<Vec<String>>),
+}
+
 /// Base fields shared by all tools that produce output.
 /// Each tool embeds this as a single field instead of repeating these params.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct OutputOptions {
     /// Output format: "toon" (default, token-efficient) or "json" (standard)
-    #[serde(default)]
     pub format: Option<String>,
 }
 
@@ -18,41 +31,30 @@ pub struct OutputOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DiscoveryFilters {
     /// Pool IDs to search (e.g. ["GLOBAL_TECH_CYBER"]). If empty, searches all pools.
-    #[serde(default)]
     pub pools: Option<Vec<String>>,
     /// Source IDs to search (e.g. ["techcrunch", "bbc"]). Overrides pools.
-    #[serde(default)]
     pub sources: Option<Vec<String>>,
     /// ISO 3166-1 alpha-2 country codes (e.g. ["US", "IN"]). 47 countries supported.
-    #[serde(default)]
     pub countries: Option<Vec<String>>,
     /// City names (e.g. ["Delhi", "London"]).
-    #[serde(default)]
     pub cities: Option<Vec<String>>,
     /// Domains to filter by (e.g. ["example.com"]).
-    #[serde(default)]
     pub domains: Option<Vec<String>>,
     /// Start date (ISO 8601: "2024-01-01T00:00:00Z"). For date range filtering.
-    #[serde(default)]
     pub start: Option<String>,
     /// End date (ISO 8601: "2024-12-31T23:59:59Z"). For date range filtering.
-    #[serde(default)]
     pub end: Option<String>,
     /// Keywords for content matching. Accepts string, array, or array-of-arrays for clusters.
-    #[serde(default)]
-    pub keywords: Option<serde_json::Value>,
+    /// See [`KeywordFilter`] for accepted formats.
+    pub keywords: Option<KeywordFilter>,
     /// Keywords to exclude. Items matching any exclusion keyword are dropped.
-    #[serde(default)]
     pub exclude_keywords: Option<Vec<String>>,
     /// If true, all keywords must match (AND logic). Default: false (OR logic).
-    #[serde(default)]
     pub match_all: Option<bool>,
     /// Maximum items to return. Default: 20. Range: 1-500.
-    #[serde(default)]
     pub limit: Option<i32>,
     /// Cache mode: "fresh" (new only), "all" (fresh + cached), "only" (cached only).
-    /// Default: "all" for most tools, "fresh" for intelligence.collect.
-    #[serde(default)]
+    /// Default: "all" for most tools.
     pub cache_mode: Option<String>,
 }
 
@@ -61,7 +63,6 @@ pub struct DiscoveryFilters {
 pub struct DepthOptions {
     /// Crawl depth for web crawling: "shallow" (default, 1 level), "medium" (2 levels),
     /// "deep" (3 levels, full BFS). Used by news.fetch and web.crawl.
-    #[serde(default)]
     pub depth: Option<String>,
 }
 

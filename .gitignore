@@ -40,3 +40,10 @@ target/
 
 # Cloned reference repos (not part of IGS)
 last30days-skill/
+
+# Lightpanda binary (too large for git)
+config/bin/lightpanda
+config/bin/.lightpanda_*
+config/bin/.lightpanda_version
+config/bin/.lightpanda_last_check
+

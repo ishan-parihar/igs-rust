@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Integration test for all 29 igs-rust-mcp tools with proper MCP handshake."""
+"""Integration test for all 41 igs-rust-mcp tools with proper MCP handshake."""
 
 import subprocess
 import json
@@ -19,7 +19,7 @@ def mcp_session():
     """Yield (stdin_writer, stdout_reader) for a persistent MCP session."""
     env = {**os.environ, "IGS_CONFIG_DIR": CFG, "RUST_LOG": "error"}
     proc = subprocess.Popen(
-        [BIN],
+        [BIN, "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -140,6 +140,39 @@ proc.stdin.write(
 )
 proc.stdin.flush()
 
+# ── 0. Tools List ─────────────────────────────────────────────
+print("\n── Tools List ──")
+r = send(proc, "tools/list", {}, 99)
+if r and "result" in r:
+    tool_names = [t["name"] for t in r["result"].get("tools", [])]
+    expected = [
+        "pools.list", "pools.upsert", "pools.delete",
+        "sources.list", "sources.upsert", "sources.delete",
+        "sources.autodiscover", "sources.enableGenericScraper",
+        "sources.countries", "sources.cities", "sources.domains",
+        "parsers.list",
+        "news.fetch", "news.testSource", "news.enrich",
+        "research.search", "research.paper", "research.download",
+        "web.search", "web.scrape", "web.crawl", "web.map",
+        "insights.findConnections", "insights.trendingEntities",
+        "insights.indexArticles", "insights.getStats", "insights.clearIndex",
+        "reddit.search", "reddit.feed",
+        "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
+        "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
+        "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
+        "lightpanda.scroll", "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+    ]
+    missing = [t for t in expected if t not in tool_names]
+    extra = [t for t in tool_names if t not in expected]
+    if not missing:
+        ok(f"tools/list ({len(tool_names)} tools, {len(expected)} expected)", "")
+    else:
+        fail(f"tools/list", f"missing: {missing}")
+    if extra:
+        print(f"        extra tools: {extra}")
+else:
+    fail("tools/list", str(r)[:80] if r else "no response")
+
 # ── 1. Pools ────────────────────────────────────────────────
 print("\n── Pools ──")
 r = call(proc, "pools.list")
@@ -176,6 +209,18 @@ if r and "sources" in r:
     ok(f"sources.list(active={n2})", "")
 else:
     fail("sources.list(active)")
+
+r = call(proc, "sources.upsert", {"id": "_test_src_py", "name": "Py Test Src", "type": "rss", "url": "https://example.com/rss", "parser": "rss", "pools": ["GLOBAL_TECH_CYBER"]}, 50)
+if r and r.get("id"):
+    ok("sources.upsert", "")
+else:
+    fail("sources.upsert", str(r)[:100] if r else "no response")
+
+r = call(proc, "sources.delete", {"id": "_test_src_py"}, 51)
+if r and r.get("removed"):
+    ok("sources.delete", "")
+else:
+    fail("sources.delete")
 
 # ── 3. Autodiscover ─────────────────────────────────────────
 print("\n── Autodiscover ──")
@@ -276,9 +321,15 @@ else:
 print("\n── Reddit ──")
 r = call(proc, "reddit.search", {"query": "rust programming", "limit": 3, "format": "json"}, 15)
 if r and "posts" in r:
-    check(r.get("count", 0) > 0, f"reddit.search({r['count']})")
+    ok("reddit.search", f"({r.get('count', 0)} posts)")
 else:
-    ok("reddit.search", f"({r})" if r else "(no response)")
+    fail("reddit.search")
+
+r = call(proc, "reddit.feed", {"subreddit": "technology", "limit": 3, "format": "json"}, 52)
+if r and "posts" in r:
+    ok("reddit.feed", f"({r.get('count', 0)} posts)")
+else:
+    fail("reddit.feed")
 
 # ── 8. Research ─────────────────────────────────────────────
 print("\n── Research ──")
@@ -287,6 +338,14 @@ if r and "papers" in r:
     check(r.get("count", 0) > 0, f"research.search({r['count']})")
 else:
     fail("research.search")
+
+r = call(proc, "research.paper", {"id": "arxiv:2301.00001"}, 53)
+if r and ("title" in r or "paper_id" in r):
+    ok("research.paper", "")
+elif r and "_error" not in r:
+    ok("research.paper", "(no title)")
+else:
+    fail("research.paper")
 
 # ── 9. Web ──────────────────────────────────────────────────
 print("\n── Web ──")
@@ -302,6 +361,14 @@ if r and r.get("success"):
     show(r, ["count"])
 else:
     fail("web.map")
+
+r = call(proc, "web.crawl", {"url": "https://example.com", "max_depth": 1, "max_pages": 2, "format": "json"}, 54)
+if r and "_error" not in r:
+    ok("web.crawl", "")
+elif r and "not enabled" in str(r.get("_error", "")):
+    ok("web.crawl", "(Lightpanda not enabled)")
+else:
+    fail("web.crawl")
 
 r = call(proc, "web.search", {"query": "test", "format": "json"}, 18)
 if r is not None:
@@ -358,47 +425,29 @@ if r and r.get("count", 0) > 0:
 else:
     fail("insights.findConnections")
 
-r = call(proc, "insights.findAllConnections", {"min_domains": 1, "format": "json"}, 21)
-if r and r.get("total_found", 0) > 0:
-    ok("insights.findAllConnections", "")
-else:
-    fail("insights.findAllConnections")
-
-r = call(proc, "insights.trendingEntities", {"min_current_mentions": 1, "format": "json"}, 22)
+r = call(proc, "insights.trendingEntities", {"min_current_mentions": 1, "format": "json"}, 21)
 if r and "trending" in r:
     ok("insights.trendingEntities", "")
 else:
     fail("insights.trendingEntities")
 
-r = call(proc, "insights.getStats", rid=23)
+r = call(proc, "insights.getStats", rid=22)
 if r and r.get("stats", {}).get("total_articles", 0) > 0:
     ok("insights.getStats", "")
 else:
     fail("insights.getStats")
 
-r = call(proc, "insights.clearIndex", rid=24)
+r = call(proc, "insights.clearIndex", rid=23)
 if r and r.get("cleared"):
     ok("insights.clearIndex", "")
 else:
     fail("insights.clearIndex")
 
-r = call(proc, "insights.getStats", rid=25)
+r = call(proc, "insights.getStats", rid=24)
 if r and r["stats"]["total_articles"] == 0:
     ok("insights.getStats(cleared)", "")
 else:
     fail("insights.getStats(cleared)")
-
-# Test intelligence.collect pipeline
-r = call(
-    proc,
-    "intelligence.collect",
-    {"pools": ["GLOBAL_TECH_CYBER"], "limit": 3, "cache_mode": "bypass", "skip_enrich": True, "skip_index": True, "format": "json"},
-    rid=26,
-)
-if r and r.get("fetched", 0) > 0:
-    ok("intelligence.collect", f"{r['fetched']} fetched")
-else:
-    fail("intelligence.collect")
 
 # Cleanup
 proc.stdin.close()

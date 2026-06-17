@@ -27,7 +27,7 @@ Tools are organized into 7 domain groups. Load only the groups you need to conse
 | **Research** | `research.search`, `research.paper`, `research.download` | ~3% | Academic paper search and retrieval |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | ~4% | Web search, scraping, crawling |
 | **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
-| **Social** | `reddit.search` | ~1% | Searching Reddit posts |
+| **Social** | `reddit.search`, `reddit.feed` | ~1% | Search Reddit posts and follow subreddit feeds |
 | **Browser** | `lightpanda.*` (12 tools) | ~8% | JS-rendered browsing, form interaction |
 
 **Recommended loading patterns:**
@@ -46,7 +46,7 @@ Tools are organized into 7 domain groups. Load only the groups you need to conse
 | **Research** | `research.search`, `research.paper`, `research.download` |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` |
 | **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` |
-| **Social** | `reddit.search` |
+| **Social** | `reddit.search`, `reddit.feed` |
 | **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` |
 
 ## Recommended Workflows

@@ -1,4 +1,5 @@
 use crate::http::{FetchOutcome, HttpClient};
+use crate::tools::types_base::KeywordFilter;
 use crate::types::{NewsItem, Source};
 use anyhow::Result;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
@@ -1014,7 +1015,7 @@ pub fn strip_html_tags(s: &str) -> String {
 /// Filter news items by keywords (accepts both single keywords and keyword clusters)
 pub fn filter_by_keywords(
     items: Vec<NewsItem>,
-    keywords: Option<&serde_json::Value>,
+    keywords: Option<&KeywordFilter>,
     exclude_keywords: &[String],
     match_all: bool,
 ) -> Vec<NewsItem> {
@@ -1026,32 +1027,18 @@ pub fn filter_by_keywords(
 
     // Normalize keywords into clusters
     let clusters: Vec<Vec<String>> = match keywords {
-        Some(kw) if kw.is_array() => {
-            if let Some(arr) = kw.as_array() {
-                if arr.first().is_some_and(|v| v.is_array()) {
-                    // Already clustered: [[...], [...]]
-                    arr.iter()
-                        .map(|cluster| {
-                            cluster
-                                .as_array()
-                                .unwrap_or(&vec![])
-                                .iter()
-                                .map(|v| v.as_str().unwrap_or("").to_lowercase())
-                                .collect()
-                        })
-                        .collect()
-                } else {
-                    // Flat array: ["a", "b"]
-                    vec![arr
-                        .iter()
-                        .map(|v| v.as_str().unwrap_or("").to_lowercase())
-                        .collect()]
-                }
-            } else {
-                vec![]
-            }
+        Some(KeywordFilter::Single(s)) => {
+            vec![vec![s.to_lowercase()]]
         }
-        _ => vec![],
+        Some(KeywordFilter::Multiple(arr)) => {
+            vec![arr.iter().map(|s| s.to_lowercase()).collect()]
+        }
+        Some(KeywordFilter::Nested(nested)) => {
+            nested.iter()
+                .map(|cluster| cluster.iter().map(|s| s.to_lowercase()).collect())
+                .collect()
+        }
+        None => vec![],
     };
 
     items

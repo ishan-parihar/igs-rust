@@ -238,65 +238,24 @@ pub trait HasFormat {
     fn format(&self) -> &Option<String>;
 }
 
-impl HasFormat for SourceListInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
+macro_rules! impl_has_format {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl HasFormat for $ty {
+                fn format(&self) -> &Option<String> { &self.output.format }
+            }
+        )*
+    };
 }
 
-impl HasFormat for GeoListInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for NewsFetchInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for NewsTestInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for NewsEnrichInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for RedditSearchInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for RedditFeedInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for ResearchSearchInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for ResearchDownloadInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for WebSearchInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for WebScrapeInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for WebCrawlInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for WebMapInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for InsightFindConnectionsInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
-
-impl HasFormat for InsightTrendingInput {
-    fn format(&self) -> &Option<String> { &self.output.format }
-}
+impl_has_format!(
+    SourceListInput, GeoListInput,
+    NewsFetchInput, NewsTestInput, NewsEnrichInput,
+    RedditSearchInput, RedditFeedInput,
+    ResearchSearchInput, ResearchDownloadInput,
+    WebSearchInput, WebScrapeInput, WebCrawlInput, WebMapInput,
+    InsightFindConnectionsInput, InsightTrendingInput,
+);
 
 // ─── Server State ────────────────────────────────────────────────
 
@@ -365,19 +324,19 @@ impl IgsMcpServer {
 
     // ── Pool Tools ──────────────────────────────────────────────
 
-    #[tool(name = "pools.list", description = "List all configured source pools. Pools group related news sources (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE). Use pool IDs as filters in news.fetch. Returns Pool[] with id, name, description, is_active.")]
+    #[tool(name = "pools.list", description = "List all configured source pools. Pools group related news sources (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE). Use pool IDs as filters in news.fetch. Returns Pool[] with id, name, description, is_active. Do NOT use to fetch news content — use news.fetch instead.")]
     async fn pools_list(&self) -> Result<Json<PoolListOutput>, String> {
         let result: PoolListOutput = pools::pools_list().await?;
         Ok(Json(result))
     }
 
-    #[tool(name = "pools.upsert", description = "Create or update a source pool. Pools group related news sources for batch fetching. Input: id (unique identifier like GLOBAL_TECH_CYBER), name (display name), description (what the pool covers), is_active (default true). Use pools.list to see existing pools.")]
+    #[tool(name = "pools.upsert", description = "Create or update a source pool. Pools group related news sources for batch fetching. Input: id (unique identifier like GLOBAL_TECH_CYBER), name (display name), description (what the pool covers), is_active (default true). Use pools.list to see existing pools. Do NOT use to fetch news — use news.fetch.")]
     async fn pools_upsert(&self, params: Parameters<PoolUpsertInput>) -> Result<Json<PoolUpsertOutput>, String> {
         let result: PoolUpsertOutput = pools::pools_upsert(params.0).await?;
         Ok(Json(result))
     }
 
-    #[tool(name = "pools.delete", description = "Permanently delete a pool by ID. Does not delete sources in the pool — only removes the grouping. Use pools.list to find the pool ID first.")]
+    #[tool(name = "pools.delete", description = "Permanently delete a pool by ID. Does not delete sources in the pool — only removes the grouping. Use pools.list to find the pool ID first. Do NOT use to modify sources — use sources.delete.")]
     async fn pools_delete(&self, params: Parameters<PoolDeleteInput>) -> Result<Json<PoolDeleteOutput>, String> {
         let result: PoolDeleteOutput = pools::pools_delete(params.0).await?;
         Ok(Json(result))
@@ -385,7 +344,7 @@ impl IgsMcpServer {
 
     // ── Source Tools ────────────────────────────────────────────
 
-    #[tool(name = "sources.list", description = "List configured news sources (410+ across 47 countries). Filter by pools (pool IDs) or active_only=true. Returns Source[] with id, name, type, url, parser, pools, countries, cities, domains. Default output: TOON.")]
+    #[tool(name = "sources.list", description = "List configured news sources (410+ across 47 countries). Filter by pools (pool IDs) or active_only=true. Returns Source[] with id, name, type, url, parser, pools, countries, cities, domains. Default output: TOON. Do NOT use to fetch news — use news.fetch.")]
     async fn sources_list(&self, params: Parameters<SourceListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_list(params.0).await?;
@@ -397,27 +356,27 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "sources.upsert", description = "Create or update a news source. Required: name, type (rss/generic_html/ofac/who_dons/newslaundry), url. Optional: id (auto-generated from name), headers (custom HTTP headers), parser (key from parsers.list), pools (pool IDs), countries (ISO codes), cities, domains, is_active. Use sources.autodiscover to auto-detect feeds first.")]
+    #[tool(name = "sources.upsert", description = "Create or update a news source. Required: name, type (rss/generic_html/ofac/who_dons/newslaundry), url. Optional: id (auto-generated from name), headers (custom HTTP headers), parser (key from parsers.list), pools (pool IDs), countries (ISO codes), cities, domains, is_active. Use sources.autodiscover to auto-detect feeds first. Do NOT use to fetch news — use news.fetch.")]
     async fn sources_upsert(&self, params: Parameters<SourceUpsertInput>) -> Result<Json<SourceUpsertOutput>, String> {
         sources::sources_upsert(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.delete", description = "Permanently delete a source by ID from sources.yml. Cannot be undone. Use sources.list to find the source ID first.")]
+    #[tool(name = "sources.delete", description = "Permanently delete a source by ID from sources.yml. Cannot be undone. Use sources.list to find the source ID first. Do NOT use to modify pools — use pools.delete.")]
     async fn sources_delete(&self, params: Parameters<SourceDeleteInput>) -> Result<Json<SourceDeleteOutput>, String> {
         sources::sources_delete(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.autodiscover", description = "Auto-discover RSS/Atom feeds or sitemap from a homepage URL. Fetches the URL, looks for <link rel='alternate'> RSS/Atom tags, falls back to /sitemap.xml. Returns kind (rss/sitemap/none), url, sample items. Optionally adds discovered source to sources.yml with pools and name.")]
+    #[tool(name = "sources.autodiscover", description = "Auto-discover RSS/Atom feeds or sitemap from a homepage URL. Fetches the URL, looks for <link rel='alternate'> RSS/Atom tags, falls back to /sitemap.xml. Returns kind (rss/sitemap/none), url, sample items. Optionally adds discovered source to sources.yml with pools and name. Do NOT use to search the web — use web.search.")]
     async fn sources_autodiscover(&self, params: Parameters<AutodiscoverInput>) -> Result<Json<AutodiscoverOutput>, String> {
         sources::sources_autodiscover(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.enableGenericScraper", description = "Enable generic HTML scraping for a source. Sets parser to generic_html with CSS selectors. Input: source id, optional list_url (page to scrape), selectors (item, title, link, date, desc CSS selectors). Use sources.autodiscover first to find the source, then enable scraping for non-RSS sources.")]
+    #[tool(name = "sources.enableGenericScraper", description = "Enable generic HTML scraping for a source. Sets parser to generic_html with CSS selectors. Input: source id, optional list_url (page to scrape), selectors (item, title, link, date, desc CSS selectors). Use sources.autodiscover first to find the source, then enable scraping for non-RSS sources. Do NOT use for RSS feeds — RSS sources work automatically.")]
     async fn sources_enable_scraper(&self, params: Parameters<EnableScraperInput>) -> Result<Json<EnableScraperOutput>, String> {
         sources::sources_enable_scraper(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[] with name, ISO code, and source_count. Use ISO codes (IN, US, GB, etc.) as filters in news.fetch countries parameter. Default output: TOON.")]
+    #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[] with name, ISO code, and source_count. Use ISO codes (IN, US, GB, etc.) as filters in news.fetch countries parameter. Default output: TOON. Do NOT use for city-level data — use sources.cities.")]
     async fn sources_countries(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_countries().await?;
@@ -429,7 +388,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[] with name and source_count. Use city names as filters in news.fetch cities parameter. Sorted by source count descending. Default output: TOON.")]
+    #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[] with name and source_count. Use city names as filters in news.fetch cities parameter. Sorted by source count descending. Default output: TOON. Do NOT use for country-level data — use sources.countries.")]
     async fn sources_cities(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_cities().await?;
@@ -441,7 +400,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[] with name and source_count. Domains are topical tags (geopolitics, business, tech, cyber, defense, health, etc.). Use domain names as filters in news.fetch domains parameter. Default output: TOON.")]
+    #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[] with name and source_count. Domains are topical tags (geopolitics, business, tech, cyber, defense, health, etc.). Use domain names as filters in news.fetch domains parameter. Default output: TOON. Do NOT use to search — use web.search or news.fetch.")]
     async fn sources_domains(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_domains().await?;
@@ -455,14 +414,14 @@ impl IgsMcpServer {
 
     // ── Parser Tools ────────────────────────────────────────────
 
-    #[tool(name = "parsers.list", description = "List available source parser keys (rss, ofac, who_dons, newslaundry, generic_html, ussf_cfc, hackernews, youtube, github, bluesky, semantic_scholar). Auto-detects if parser not specified in sources.upsert.")]
+    #[tool(name = "parsers.list", description = "List available source parser keys (rss, generic_html, semantic_scholar, etc.). Auto-detects if parser not specified in sources.upsert.")]
     async fn parsers_list(&self) -> Result<Json<ParserListOutput>, String> {
         parsers_tools::parsers_list().await.map(Json)
     }
 
     // ── News Tools ──────────────────────────────────────────────
 
-    #[tool(name = "news.fetch", description = "Fetch news from 410+ sources across 47 countries. Filter by pools, countries, cities, domains, time range, and keywords. Keyword clusters: OR within, AND across. depth='deep' runs full pipeline (fetch→enrich→index). skip_enrich/skip_index to skip steps. Default output: TOON. Use format='json' for JSON.")]
+    #[tool(name = "news.fetch", description = "Fetch news from sources. Filter by pools, countries, cities, domains, time range, and keywords. depth='deep' runs full pipeline (fetch→enrich→index). Default output: TOON, use format='json' for JSON.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let depth = params.0.depth_opts.depth.clone().unwrap_or_else(|| "default".to_string());
@@ -499,7 +458,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "news.testSource", description = "Test a single source and return up to 10 items. Input: source ID (from sources.list). Useful for debugging source configuration, parser issues, or verifying a new source works. Returns NewsItem[].")]
+    #[tool(name = "news.testSource", description = "Test a single source and return up to 10 items. Input: source ID (from sources.list). Useful for debugging source configuration, parser issues, or verifying a new source works. Returns NewsItem[]. Do NOT use to fetch multiple articles — use news.fetch.")]
     async fn news_test_source(&self, params: Parameters<NewsTestInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.id.clone();
@@ -523,7 +482,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Input: items from news.fetch. Output: items with topics, entities, sentiment, summary. Pass extract=['topics','entities','sentiment','summary'] to select. No external API calls. Use with insights.indexArticles for cross-article analysis.")]
+    #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Extracts topics, entities, sentiment, and summary. No external API calls. Use with insights.indexArticles for cross-article analysis.")]
     async fn news_enrich(&self, params: Parameters<NewsEnrichInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = format!("enrich-{}", params.0.items.len());
@@ -549,7 +508,7 @@ impl IgsMcpServer {
 
     // ── Reddit Tools ────────────────────────────────────────────
 
-    #[tool(name = "reddit.search", description = "Search Reddit posts via reddit.com JSON API. Supports subreddits filter (e.g. [\"worldnews\",\"technology\"]), sort (relevance/hot/top/new), time (hour/day/week/month/year/all). Returns NewsItem[] compatible with news.enrich and insights.indexArticles for cross-platform analysis.")]
+    #[tool(name = "reddit.search", description = "Search Reddit posts via reddit.com JSON API. Supports subreddits filter (e.g. [\"worldnews\",\"technology\"]), sort (relevance/hot/top/new), time (hour/day/week/month/year/all). Returns NewsItem[] compatible with news.enrich and insights.indexArticles for cross-platform analysis. Do NOT use for general web search, news articles, or academic papers — use web.search, news.fetch, or research.* respectively.")]
     async fn reddit_search(&self, params: Parameters<RedditSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.subreddits.as_ref().and_then(|s| s.first()).cloned().unwrap_or_else(|| params.0.query.clone());
@@ -573,7 +532,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds (old.reddit.com/r/{sub}/.rss). Reliable cross-platform access that works without API keys or residential IPs. Pass subreddit names without r/ prefix. Returns NewsItem[] compatible with news.enrich and insights.indexArticles.")]
+    #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds (old.reddit.com/r/{sub}/.rss). Reliable cross-platform access that works without API keys or residential IPs. Pass subreddit names without r/ prefix. Returns NewsItem[] compatible with news.enrich and insights.indexArticles. Do NOT use to search — use reddit.search for queries.")]
     async fn reddit_feed(&self, params: Parameters<RedditFeedInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.subreddits.first().cloned().unwrap_or_default();
@@ -599,7 +558,7 @@ impl IgsMcpServer {
 
     // ── Research Tools ──────────────────────────────────────────
 
-    #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Supports categories (e.g. cs.AI, cs.CL), year_from, year_to filtering. Returns ResearchPaper[] with id (format: arxiv:XXXX or semanticscholar:XXXX), title, authors, abstract, year, citation_count, pdf_url. Use research.paper for details or research.download for PDF.")]
+    #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Supports categories (e.g. cs.AI, cs.CL), year_from, year_to filtering. Returns ResearchPaper[] with id (format: arxiv:XXXX or semanticscholar:XXXX), title, authors, abstract, year, citation_count, pdf_url. Use research.paper for details or research.download for PDF. Do NOT use for general web search, news articles, or Reddit discussions — use web.search, news.fetch, or reddit.* respectively.")]
     async fn research_search(&self, params: Parameters<ResearchSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -623,7 +582,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "research.paper", description = "Get detailed paper information by ID. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. Returns PaperDetail with title, authors, abstract, year, citations, references, pdf_url. Optionally include_citations, include_references, extract_pdf.")]
+    #[tool(name = "research.paper", description = "Get detailed paper information by ID. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. Returns PaperDetail with title, authors, abstract, year, citations, references, pdf_url. Optionally include_citations, include_references, extract_pdf. Do NOT use to search — use research.search first.")]
     async fn research_paper(&self, params: Parameters<ResearchPaperInput>) -> Result<Json<ResearchPaperOutput>, String> {
         let _subject = params.0.paper_id.clone();
         let output = research::research_paper(params.0).await?;
@@ -641,14 +600,14 @@ impl IgsMcpServer {
         Ok(Json(output))
     }
 
-    #[tool(name = "research.download", description = "Download a research paper PDF to disk. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. For Semantic Scholar, fetches PDF URL from API first. Optional output_path (default: {paper_id}.pdf) and format. Returns file path and size.")]
+    #[tool(name = "research.download", description = "Download a research paper PDF to disk. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. For Semantic Scholar, fetches PDF URL from API first. Optional output_path (default: {paper_id}.pdf) and format. Returns file path and size. Do NOT use to view abstracts — use research.paper for metadata.")]
     async fn research_download(&self, params: Parameters<ResearchDownloadInput>) -> Result<Json<ResearchDownloadOutput>, String> {
         research::research_download(params.0).await.map(Json)
     }
 
     // ── Web Tools ───────────────────────────────────────────────
 
-    #[tool(name = "web.search", description = "Realtime web search via Tavily (default) or Firecrawl API. Requires tavily.enabled=true or firecrawl.enabled=true in settings.yml with API key. Supports include_domains, exclude_domains, days, include_answer. Returns results array with title, url, content, score. Default output: TOON. Use format='json' for structured JSON.")]
+    #[tool(name = "web.search", description = "Realtime web search via Tavily (default) or Firecrawl API. Requires tavily.enabled=true or firecrawl.enabled=true in settings.yml with API key. Supports include_domains, exclude_domains, days, include_answer. Returns results array with title, url, content, score. Default output: TOON. Use format='json' for structured JSON. Do NOT use for academic papers, news articles, or Reddit posts — use research.search, news.fetch, or reddit.* respectively.")]
     async fn web_search(&self, params: Parameters<WebSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -672,7 +631,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata (title, headings, og:description, link count). Provider 'default' uses HTTP+html-to-markdown. Provider 'lightpanda' renders JavaScript — set lightpanda.enabled=true in settings.yml first. Lightpanda supports wait_selector, strip_mode, wait_until, include_frames for JS-heavy sites. Default output: TOON.")]
+    #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata (title, headings, og:description, link count). Provider 'default' uses HTTP+html-to-markdown. Provider 'lightpanda' renders JavaScript — set lightpanda.enabled=true in settings.yml first. Lightpanda supports wait_selector, strip_mode, wait_until, include_frames for JS-heavy sites. Default output: TOON. Do NOT use for multiple pages, search results, or news — use web.crawl, web.search, or news.fetch respectively.")]
     async fn web_scrape(&self, params: Parameters<WebScrapeInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -696,7 +655,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Renders JavaScript. Requires lightpanda.enabled=true in settings.yml (binary auto-downloads). Supports max_depth (default 2), max_pages (default 20), obey_robots, dump_format (markdown/html/semantic_tree), wait_until, wait_selector, strip_mode, include_frames. Returns pages with depth and status. Default output: TOON.")]
+    #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Renders JavaScript. Requires lightpanda.enabled=true in settings.yml (binary auto-downloads). Supports max_depth (default 2), max_pages (default 20), obey_robots, dump_format (markdown/html/semantic_tree), wait_until, wait_selector, strip_mode, include_frames. Returns pages with depth and status. Default output: TOON. Do NOT use for single pages, search, or news — use web.scrape, web.search, or news.fetch respectively.")]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -720,7 +679,7 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Fetches /sitemap.xml, extracts <loc> URLs. Supports limit (default 100) and search filter. Returns WebMapOutput with links array containing url and optional title. Default output: TOON.")]
+    #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Fetches /sitemap.xml, extracts <loc> URLs. Supports limit (default 100) and search filter. Returns WebMapOutput with links array containing url and optional title. Default output: TOON. Do NOT use to fetch content — use web.scrape or web.crawl.")]
     async fn web_map(&self, params: Parameters<WebMapInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -746,12 +705,12 @@ impl IgsMcpServer {
 
     // ── Insight Tools ───────────────────────────────────────────
 
-    #[tool(name = "insights.findConnections", description = "Find cross-domain entity connections in indexed articles. Pass entity to look up specific entity, or omit to discover all cross-domain entities. Requires articles indexed via insights.indexArticles or news.fetch with depth='deep'. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2), limit for max results (default 20).")]
+    #[tool(name = "insights.findConnections", description = "Find cross-domain entity connections in indexed articles. Pass entity to look up specific entity, or omit to discover all cross-domain entities. Requires articles indexed via insights.indexArticles or news.fetch with depth='deep'. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2), limit for max results (default 20). Do NOT use for fetching news, web search, or paper research — use news.fetch, web.search, or research.* respectively.")]
     async fn insight_find_connections(&self, params: Parameters<InsightFindConnectionsInput>) -> Result<Json<InsightFindConnectionsOutput>, String> {
         insights::insights_find_connections(&self.insights, params.0).await.map(Json)
     }
 
-    #[tool(name = "insights.trendingEntities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.indexArticles. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3).")]
+    #[tool(name = "insights.trendingEntities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.indexArticles. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3). Do NOT use to find connections — use insights.findConnections.")]
     async fn insights_trending(&self, params: Parameters<InsightTrendingInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = insights::insights_trending(&self.insights, params.0).await?;
@@ -763,101 +722,101 @@ impl IgsMcpServer {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "insights.indexArticles", description = "Index articles in the in-memory insight engine for cross-article entity analysis. Input: articles with id, title, pub_date, source_name, and optionally domains (Vec<DomainInfo>) and entities (Vec<EntityInfo>). Use news.fetch with depth='deep' to automate fetch→enrich→index pipeline. After indexing, use insights.findConnections or insights.trendingEntities.")]
+    #[tool(name = "insights.indexArticles", description = "Index articles in the in-memory insight engine for cross-article entity analysis. Input: articles with id, title, pub_date, source_name, and optionally domains (Vec<DomainInfo>) and entities (Vec<EntityInfo>). Use news.fetch with depth='deep' to automate fetch→enrich→index pipeline. After indexing, use insights.findConnections or insights.trendingEntities. Do NOT use to search — use insights.findConnections or insights.trendingEntities.")]
     async fn insights_index(&self, params: Parameters<InsightIndexInput>) -> Result<Json<InsightIndexOutput>, String> {
         insights::insights_index(&self.insights, params.0).await.map(Json)
     }
 
-    #[tool(name = "insights.getStats", description = "Get insight engine statistics. Returns total_articles, total_entities, total_domains, avg_entities_per_article, avg_domains_per_article. Use to check what's been indexed before running insights.findConnections or insights.trendingEntities.")]
+    #[tool(name = "insights.getStats", description = "Get insight engine statistics. Returns total_articles, total_entities, total_domains, avg_entities_per_article, avg_domains_per_article. Use to check what's been indexed before running insights.findConnections or insights.trendingEntities. Do NOT use to find connections — use insights.findConnections.")]
     async fn insights_stats(&self) -> Result<Json<InsightStatsOutput>, String> {
         insights::insights_stats(&self.insights).await.map(Json)
     }
 
-    #[tool(name = "insights.clearIndex", description = "Clear all indexed articles from the in-memory insight engine. Resets all entity connections, trending data, and statistics. Use insights.getStats first to see what will be lost.")]
+    #[tool(name = "insights.clearIndex", description = "Clear all indexed articles from the in-memory insight engine. Resets all entity connections, trending data, and statistics. Use insights.getStats first to see what will be lost. Do NOT use unless you need to reset the insight engine.")]
     async fn insights_clear(&self) -> Result<Json<InsightClearOutput>, String> {
         insights::insights_clear(&self.insights).await.map(Json)
     }
 
     // ── Lightpanda MCP Browser Automation Tools ──────────────────
 
-    #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript. Spawns persistent browser session on first call. Use wait_until to control when page is considered loaded.")]
+    #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript. Spawns persistent browser session on first call. Use wait_until to control when page is considered loaded. Do NOT use for simple HTTP fetching, API calls, or non-web content — use web.scrape for simple fetching.")]
     async fn lp_goto(&self, params: Parameters<LpGotoInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_goto(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown. Supports strip_mode to remove js/css/ui elements.")]
+    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown. Supports strip_mode to remove js/css/ui elements. Do NOT use to navigate — call lightpanda.goto first.")]
     async fn lp_markdown(&self, params: Parameters<LpMarkdownInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_markdown(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text.")]
+    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text. Do NOT use to navigate — call lightpanda.goto first.")]
     async fn lp_links(&self, params: Parameters<LpLinksInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_links(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result. Example: document.title, document.querySelectorAll('h1').length")]
+    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result. Example: document.title, document.querySelectorAll('h1').length. Do NOT use for simple content extraction — use lightpanda.markdown.")]
     async fn lp_evaluate(&self, params: Parameters<LpEvaluateInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_evaluate(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation of page structure.")]
+    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation of page structure. Do NOT use for full page content — use lightpanda.markdown.")]
     async fn lp_semantic_tree(&self, params: Parameters<LpSemanticTreeInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_semantic_tree(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.structuredData", description = "Extract structured data from the current page: JSON-LD, OpenGraph metadata, microdata.")]
+    #[tool(name = "lightpanda.structuredData", description = "Extract structured data from the current page: JSON-LD, OpenGraph metadata, microdata. Do NOT use for raw content — use lightpanda.markdown.")]
     async fn lp_structured_data(&self, params: Parameters<LpStructuredDataInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_structured_data(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.detectForms", description = "Detect forms on the current page. Returns form fields, actions, and methods.")]
+    #[tool(name = "lightpanda.detectForms", description = "Detect forms on the current page. Returns form fields, actions, and methods. Do NOT use to fill forms — use lightpanda.fill.")]
     async fn lp_detect_forms(&self, params: Parameters<LpDetectFormsInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_detect_forms(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector. Optionally wait for navigation.")]
+    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector. Optionally wait for navigation. Do NOT use to fill forms — use lightpanda.fill.")]
     async fn lp_click(&self, params: Parameters<LpClickInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_click(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field.")]
+    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field. Do NOT use to click buttons — use lightpanda.click.")]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_fill(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right. Pixels: amount to scroll.")]
+    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right. Pixels: amount to scroll. Do NOT use for navigation — use lightpanda.goto.")]
     async fn lp_scroll(&self, params: Parameters<LpScrollInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_scroll(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.waitForSelector", description = "Wait for a CSS selector to appear on the page. Useful for SPAs that load content dynamically.")]
+    #[tool(name = "lightpanda.waitForSelector", description = "Wait for a CSS selector to appear on the page. Useful for SPAs that load content dynamically. Do NOT use for navigation — use lightpanda.goto.")]
     async fn lp_wait_for_selector(&self, params: Parameters<LpWaitForSelectorInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_wait_for_selector(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.interactiveElements", description = "Find interactive elements on the current page (buttons, links, inputs). Returns clickable/fillable elements.")]
+    #[tool(name = "lightpanda.interactiveElements", description = "Find interactive elements on the current page (buttons, links, inputs). Returns clickable/fillable elements. Do NOT use to interact — use lightpanda.click or lightpanda.fill.")]
     async fn lp_interactive_elements(&self, params: Parameters<LpInteractiveElementsInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;

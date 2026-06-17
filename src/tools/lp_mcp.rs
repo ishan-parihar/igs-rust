@@ -22,13 +22,23 @@ async fn call_lp_tool(
             Ok(LpToolOutput {
                 success: !result.is_error,
                 content: text,
-                meta: serde_json::json!({ "tool": tool_name }),
+                meta: BrowserMeta {
+                    url: String::new(),
+                    title: None,
+                    operation: tool_name.to_string(),
+                    elapsed_ms: 0,
+                },
             })
         }
         Err(e) => Ok(LpToolOutput {
             success: false,
             content: format!("Lightpanda MCP error: {}", e),
-            meta: serde_json::json!({ "tool": tool_name, "error": true }),
+            meta: BrowserMeta {
+                url: String::new(),
+                title: None,
+                operation: tool_name.to_string(),
+                elapsed_ms: 0,
+            },
         }),
     }
 }

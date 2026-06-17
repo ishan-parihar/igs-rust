@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use igs_rust_mcp::server::IgsMcpServer;
 use igs_rust_mcp::tools::{news, pools, sources, reddit, research, web, helpers::toon_encode, parsers as parsers_tools, registry};
 use igs_rust_mcp::tools::types::*;
-use igs_rust_mcp::tools::types_base::{DiscoveryFilters, DepthOptions, OutputOptions};
+use igs_rust_mcp::tools::types_base::{DepthOptions, DiscoveryFilters, KeywordFilter, OutputOptions};
 use rmcp::ServiceExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -488,7 +488,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::News { action } => match action {
             NewsAction::Fetch { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode, depth } => {
-                let kw = keywords.map(|k| serde_json::json!(k));
+                let kw = keywords.map(KeywordFilter::Multiple);
                 let result = r(news::news_fetch(NewsFetchInput {
                     filters: DiscoveryFilters {
                         pools, sources: srcs, countries, cities: None, domains: None,

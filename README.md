@@ -3,11 +3,11 @@
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
 
-MCP server + CLI for intelligence gathering. 42 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
+MCP server + CLI for intelligence gathering. 41 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
 
 | Metric | Value |
 |--------|-------|
-| Tools | 42 (30 core + 12 Lightpanda browser automation) |
+| Tools | 41 (29 core + 12 Lightpanda browser automation) |
 | Sources | 411 across 47 countries |
 | Pools | 18 (geopolitics, tech, India, defense, health, etc.) |
 | Binary | Single `igs` binary (~19 MB musl static) |
@@ -21,7 +21,7 @@ MCP server + CLI for intelligence gathering. 42 tools, 411 sources, 47 countries
 
 ```bash
 # Download latest release
-curl -L -o igs.tar.gz https://github.com/ishan-parihar/igs-rust-mcp/releases/latest/download/igs-v0.3.0-x86_64-linux-musl.tar.gz
+curl -L -o igs.tar.gz https://github.com/ishan-parihar/igs-rust-mcp/releases/latest/download/igs-v0.4.0-x86_64-linux-musl.tar.gz
 
 # Extract
 tar -xzf igs.tar.gz
@@ -218,7 +218,7 @@ output:
 
 ## Tools
 
-### Core Tools (30)
+### Core Tools (29)
 
 | Domain | Tools | Description |
 |--------|-------|-------------|
@@ -226,11 +226,10 @@ output:
 | **Sources** | `sources.list/upsert/delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains` | CRUD + auto-discovery + geo |
 | **Parsers** | `parsers.list` | List available parser keys |
 | **News** | `news.fetch`, `news.testSource`, `news.enrich` | Fetch, test, NLP enrichment |
-| **Reddit** | `reddit.search` | Search Reddit posts |
+| **Reddit** | `reddit.search`, `reddit.feed` | Search Reddit posts, follow subreddit feeds |
 | **Research** | `research.search`, `research.paper`, `research.download` | arXiv + Semantic Scholar |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | Search, scrape, crawl, sitemap |
-| **Insights** | `insights.findConnections`, `insights.findAllConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | Cross-article analysis |
-| **Intelligence** | `intelligence.collect` | Full pipeline: fetch→enrich→index |
+| **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | Cross-article analysis |
 
 ### Lightpanda Browser Tools (12)
 

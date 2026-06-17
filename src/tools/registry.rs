@@ -1,5 +1,5 @@
 //! Tool registry with domain-based filtering for progressive discovery.
-//! AI agents load 5-12 tools at a time instead of all 43.
+//! AI agents load 5-12 tools at a time instead of all 41.
 
 /// Tool group definitions for progressive discovery.
 /// Each group is a bounded context with 5-12 tools.
