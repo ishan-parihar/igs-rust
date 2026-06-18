@@ -4,17 +4,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Flexible keyword filter that supports string, array, or nested array formats.
-/// Use Single("AI safety") for one keyword, Multiple(["AI", "safety"]) for AND-style flat list,
-/// or Nested([["AI","safety"], ["ML"]]) for OR-group clusters.
+/// Keyword filter: string, flat array, or nested array for OR-group clusters.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum KeywordFilter {
-    /// Single keyword string
+    /// Single keyword
     Single(String),
-    /// Flat array of keywords (AND logic within the group)
+    /// Flat array (AND within group)
     Multiple(Vec<String>),
-    /// Nested arrays for OR-group logic (AND within inner, OR across outer)
+    /// Nested arrays (OR across groups)
     Nested(Vec<Vec<String>>),
 }
 
@@ -22,7 +20,7 @@ pub enum KeywordFilter {
 /// Each tool embeds this as a single field instead of repeating these params.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct OutputOptions {
-    /// Output format: "toon" (default, token-efficient) or "json" (standard)
+    /// Output format: "toon" (default) or "json"
     pub format: Option<String>,
 }
 
@@ -30,39 +28,36 @@ pub struct OutputOptions {
 /// Covers filtering, date ranges, geographic scoping, and content matching.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DiscoveryFilters {
-    /// Pool IDs to search (e.g. ["GLOBAL_TECH_CYBER"]). If empty, searches all pools.
+    /// Pool IDs (e.g. ["GLOBAL_TECH_CYBER"])
     pub pools: Option<Vec<String>>,
-    /// Source IDs to search (e.g. ["techcrunch", "bbc"]). Overrides pools.
+    /// Source IDs (overrides pools)
     pub sources: Option<Vec<String>>,
-    /// ISO 3166-1 alpha-2 country codes (e.g. ["US", "IN"]). 47 countries supported.
+    /// ISO country codes (e.g. ["US", "IN"])
     pub countries: Option<Vec<String>>,
-    /// City names (e.g. ["Delhi", "London"]).
+    /// City names filter
     pub cities: Option<Vec<String>>,
-    /// Domains to filter by (e.g. ["example.com"]).
+    /// Domain filter
     pub domains: Option<Vec<String>>,
-    /// Start date (ISO 8601: "2024-01-01T00:00:00Z"). For date range filtering.
+    /// Start date (ISO 8601)
     pub start: Option<String>,
-    /// End date (ISO 8601: "2024-12-31T23:59:59Z"). For date range filtering.
+    /// End date (ISO 8601)
     pub end: Option<String>,
-    /// Keywords for content matching. Accepts string, array, or array-of-arrays for clusters.
-    /// See [`KeywordFilter`] for accepted formats.
+    /// Keywords (string, array, or nested arrays)
     pub keywords: Option<KeywordFilter>,
-    /// Keywords to exclude. Items matching any exclusion keyword are dropped.
+    /// Exclude keywords
     pub exclude_keywords: Option<Vec<String>>,
-    /// If true, all keywords must match (AND logic). Default: false (OR logic).
+    /// AND logic (default: OR)
     pub match_all: Option<bool>,
-    /// Maximum items to return. Default: 20. Range: 1-500.
+    /// Max items (1-500, default: 20)
     pub limit: Option<i32>,
-    /// Cache mode: "fresh" (new only), "all" (fresh + cached), "only" (cached only).
-    /// Default: "all" for most tools.
+    /// Cache mode: fresh/all/only
     pub cache_mode: Option<String>,
 }
 
 /// Base fields shared by crawl/depth-aware tools.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DepthOptions {
-    /// Crawl depth for web crawling: "shallow" (default, 1 level), "medium" (2 levels),
-    /// "deep" (3 levels, full BFS). Used by news.fetch and web.crawl.
+    /// Crawl depth: shallow/medium/deep
     pub depth: Option<String>,
 }
 

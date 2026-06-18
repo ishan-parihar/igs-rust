@@ -47,9 +47,9 @@ pub struct PoolDeleteOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SourceListInput {
-    /// Filter sources by pool IDs (e.g., ["GLOBAL_TECH_CYBER"]). Returns all if omitted.
+    /// Pool IDs to filter by
     pub pools: Option<Vec<String>>,
-    /// If true, return only active sources. Default: false (returns all).
+    /// Active sources only (default: all)
     pub active_only: Option<bool>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -62,28 +62,28 @@ pub struct SourceListOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SourceUpsertInput {
-    /// Unique identifier for the source (auto-generated from name if omitted, e.g., "reuters")
+    /// Source ID (auto-generated from name if omitted)
     pub id: Option<String>,
-    /// Human-readable name of the source (e.g., "Reuters", "BBC World")
+    /// Source name
     pub name: String,
-    /// Source type identifier (e.g., "rss", "generic_html", "hackernews", "youtube")
+    /// Source type (rss/generic_html/hackernews/youtube)
     #[serde(rename = "type")]
     pub source_type: String,
-    /// URL of the feed or webpage (e.g., "https://www.reuters.com/world/feed.xml")
+    /// Feed or webpage URL
     pub url: String,
-    /// Custom HTTP headers for requests (e.g., {"Authorization": "Bearer token"})
+    /// Custom HTTP headers
     pub headers: Option<HashMap<String, String>>,
-    /// Parser key: "rss" (default), "generic_html", "hackernews", etc. See parsers.list.
+    /// Parser key (see parsers.list)
     pub parser: Option<String>,
-    /// Pool IDs this source belongs to (e.g., ["GLOBAL_TECH_CYBER", "GLOBAL_BREAKING"])
+    /// Pool IDs for this source
     pub pools: Option<Vec<String>>,
-    /// ISO 3166-1 alpha-2 country codes (e.g., ["US", "IN", "GB"])
+    /// ISO country codes
     pub countries: Option<Vec<String>>,
-    /// City names for local sources (e.g., ["Delhi", "London", "New York"])
+    /// City names
     pub cities: Option<Vec<String>>,
-    /// Topical domain tags (e.g., ["tech", "cyber", "defense", "health"])
+    /// Domain tags (tech/cyber/defense/health)
     pub domains: Option<Vec<String>>,
-    /// Whether the source is active and fetched on queries (default: true)
+    /// Active and fetched (default: true)
     pub is_active: Option<bool>,
 }
 
@@ -120,11 +120,11 @@ pub struct ParserListOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AutodiscoverInput {
-    /// Homepage URL to discover RSS/Atom feeds or sitemaps from (e.g., "https://example.com")
+    /// Homepage URL to discover feeds from
     pub url: String,
-    /// Pool IDs to assign the discovered source to (e.g., ["GLOBAL_TECH_CYBER"])
+    /// Pool IDs to assign discovered source to
     pub pools: Option<Vec<String>>,
-    /// Optional name override for the discovered source
+    /// Name override for discovered source
     pub name: Option<String>,
 }
 
@@ -137,11 +137,11 @@ pub struct AutodiscoverOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EnableScraperInput {
-    /// Source ID to enable generic HTML scraping for
+    /// Source ID to enable scraping for
     pub id: String,
-    /// URL to fetch the listing page from (defaults to the source's base URL)
+    /// Listing page URL (defaults to source URL)
     pub list_url: Option<String>,
-    /// CSS selectors for scraping: {"item": "div.article", "title": "h2 a", "link": "h2 a", "date": ".date", "desc": ".summary"}
+    /// CSS selectors: item/title/link/date/desc
     pub selectors: Option<HashMap<String, String>>,
 }
 
@@ -198,13 +198,13 @@ pub struct DomainsOutput {
 pub struct NewsFetchInput {
     #[serde(flatten)]
     pub filters: DiscoveryFilters,
-    /// If true, perform a broad shallow scan across all pools to discover relevant sources
+    /// Broad shallow scan across all pools
     pub discovery_mode: Option<bool>,
-    /// Filter by urgency level (implementation-defined values)
+    /// Urgency level filter
     pub urgency: Option<String>,
-    /// Skip NLP enrichment step (only applies when depth > quick)
+    /// Skip NLP enrichment step
     pub skip_enrich: Option<bool>,
-    /// Skip insight indexing step (only applies when depth > quick)
+    /// Skip insight indexing step
     pub skip_index: Option<bool>,
     #[serde(flatten)]
     pub depth_opts: DepthOptions,
@@ -243,9 +243,9 @@ pub struct NewsFetchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsTestInput {
-    /// Source ID to test (e.g., "bbc_world", "techcrunch")
+    /// Source ID to test
     pub id: String,
-    /// Cache mode: "prefer" (use cache if fresh), "bypass" (force fetch), "only" (cache only)
+    /// Cache mode: prefer/bypass/only
     pub cache_mode: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -261,31 +261,31 @@ pub struct NewsTestOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EnrichItemInput {
-    /// Unique identifier for the news item
+    /// Item ID
     pub id: String,
-    /// Title of the news article
+    /// Article title
     pub title: String,
-    /// URL to the full article
+    /// Article URL
     pub link: String,
-    /// Publication date as ISO 8601 string (e.g., "2026-01-15T10:30:00Z")
+    /// Publication date (ISO 8601)
     pub pub_date: String,
-    /// Name of the source that published this item (e.g., "Reuters", "TechCrunch")
+    /// Source name
     pub source_name: String,
-    /// Pool ID the item was fetched from (e.g., "GLOBAL_TECH_CYBER")
+    /// Pool ID
     pub pool_id: String,
-    /// Content snippet or excerpt from the article
+    /// Content snippet
     pub content_snippet: Option<String>,
-    /// Confidence level of the parsed date: "high", "medium", "low"
+    /// Date confidence: high/medium/low
     pub date_confidence: Option<String>,
-    /// Freshness score: 0.0–100.0 based on recency (exponential decay)
+    /// Freshness score (0-100)
     pub freshness_score: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsEnrichInput {
-    /// News items to enrich with NLP processing (sourced from news.fetch output)
+    /// Items to enrich (from news.fetch)
     pub items: Vec<EnrichItemInput>,
-    /// NLP features to extract: "topics", "entities", "sentiment", "summary", "diversity". Omit for all.
+    /// NLP features: topics/entities/sentiment/summary/diversity
     pub extract: Option<Vec<String>>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -332,15 +332,15 @@ pub struct NewsEnrichOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct RedditSearchInput {
-    /// Search query string to find Reddit posts
+    /// Search query
     pub query: String,
-    /// Subreddit names to search within (e.g., ["worldnews", "technology"]). Searches all if omitted.
+    /// Subreddits to search (omit for all)
     pub subreddits: Option<Vec<String>>,
-    /// Sort order: "relevance" (default), "hot", "top", "new", "comments"
+    /// Sort: relevance/hot/top/new/comments
     pub sort: Option<String>,
-    /// Time filter: "hour", "day", "week", "month", "year", "all" (default: "all")
+    /// Time filter: hour/day/week/month/year/all
     pub time: Option<String>,
-    /// Maximum number of results to return (default: 25)
+    /// Max results (default: 25)
     pub limit: Option<i32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -365,9 +365,9 @@ pub struct RedditSearchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct RedditFeedInput {
-    /// Subreddit name(s) without r/ prefix (e.g. ["worldnews", "technology"])
+    /// Subreddits without r/ prefix
     pub subreddits: Vec<String>,
-    /// Limit per subreddit (default: 25, max: 100)
+    /// Per-subreddit limit (default: 25, max: 100)
     pub limit: Option<i32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -384,17 +384,17 @@ pub struct RedditFeedOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchSearchInput {
-    /// Search query string (e.g., "transformer architecture attention mechanism")
+    /// Search query
     pub query: String,
-    /// Search engines to query: "arxiv", "semanticscholar" (default: both)
+    /// Engines: arxiv/semanticscholar (default: both)
     pub sources: Option<Vec<String>>,
-    /// arXiv category IDs to filter by (e.g., ["cs.AI", "cs.CL", "cs.LG"])
+    /// arXiv categories (e.g. ["cs.AI", "cs.CL"])
     pub categories: Option<Vec<String>>,
-    /// Earliest publication year (inclusive, e.g., 2020)
+    /// Earliest year (inclusive)
     pub year_from: Option<i32>,
-    /// Latest publication year (inclusive, e.g., 2024)
+    /// Latest year (inclusive)
     pub year_to: Option<i32>,
-    /// Maximum number of results to return (default: 25)
+    /// Max results (default: 25)
     pub limit: Option<i32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -416,13 +416,13 @@ pub struct ResearchSearchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchPaperInput {
-    /// Paper ID in format "arxiv:XXXX.XXXXX" or "semanticscholar:XXXX"
+    /// Paper ID (arxiv:XXXX.XXXXX or semanticscholar:XXXX)
     pub paper_id: String,
-    /// Include list of papers that cite this paper (default: false)
+    /// Include citing papers
     pub include_citations: Option<bool>,
-    /// Include list of papers referenced by this paper (default: false)
+    /// Include referenced papers
     pub include_references: Option<bool>,
-    /// Extract PDF content as plain text (default: false)
+    /// Extract PDF text
     pub extract_pdf: Option<bool>,
 }
 
@@ -458,13 +458,13 @@ pub struct ResearchPaperOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchDownloadInput {
-    /// Paper ID in format "arxiv:XXXX.XXXXX" or "semanticscholar:XXXX"
+    /// Paper ID (arxiv:XXXX.XXXXX or semanticscholar:XXXX)
     pub paper_id: String,
-    /// Custom output file path (default: "{paper_id}.pdf" in working directory)
+    /// Output file path (default: {paper_id}.pdf)
     pub output_path: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
-    /// Also generate a markdown sidecar file alongside the PDF (default: false)
+    /// Generate markdown sidecar alongside PDF
     pub convert_to_markdown: Option<bool>,
 }
 
@@ -499,19 +499,19 @@ pub struct ResearchDownloadOutput {
 pub struct WebSearchInput {
     /// Search query string
     pub query: String,
-    /// Search provider: "tavily" (default) or "firecrawl"
+    /// Provider: tavily (default) or firecrawl
     pub provider: Option<String>,
-    /// Maximum number of results to return (default: 10, max: 20)
+    /// Max results (default: 10, max: 20)
     pub max_results: Option<i32>,
-    /// Topic type: "general" (default) or "news"
+    /// Topic: general (default) or news
     pub topic: Option<String>,
-    /// Domains to restrict results to (e.g., ["arxiv.org", "github.com"])
+    /// Include domains
     pub include_domains: Option<Vec<String>>,
-    /// Domains to exclude from results (e.g., ["reddit.com"])
+    /// Exclude domains
     pub exclude_domains: Option<Vec<String>>,
-    /// Lookback period in days from current date (only applies when topic="news")
+    /// Lookback period in days (news topic only)
     pub days: Option<i32>,
-    /// Include an AI-generated answer summary (default: false)
+    /// Include AI answer summary
     pub include_answer: Option<bool>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -544,21 +544,21 @@ pub struct WebSearchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebScrapeInput {
-    /// URL to scrape content from (must be http:// or https://)
+    /// URL to scrape (http/https)
     pub url: String,
-    /// Provider: "default" (HTTP+scraper), "lightpanda" (JS rendering, requires lightpanda.enabled=true)
+    /// Provider: default (HTTP) or lightpanda (JS rendering)
     pub provider: Option<String>,
-    /// Content formats to return: "markdown", "html", "text", "screenshot" (Lightpanda only)
+    /// Formats: markdown/html/text/screenshot (Lightpanda)
     pub formats: Option<Vec<String>>,
-    /// Wait for CSS selector before scraping (Lightpanda only)
+    /// Wait for CSS selector (Lightpanda)
     pub wait_selector: Option<String>,
-    /// Strip mode: "js", "css", "ui", "full" (Lightpanda only)
+    /// Strip mode: js/css/ui/full (Lightpanda)
     pub strip_mode: Option<String>,
-    /// Extract structured data (JSON-LD, OpenGraph) (Lightpanda only)
+    /// Extract structured data (Lightpanda)
     pub structured_data: Option<bool>,
-    /// Include iframe content (Lightpanda only)
+    /// Include iframes (Lightpanda)
     pub include_frames: Option<bool>,
-    /// Wait until event: "load", "domcontentloaded", "networkidle", "done" (Lightpanda only)
+    /// Wait event: load/domcontentloaded/networkidle/done (Lightpanda)
     pub wait_until: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -603,25 +603,25 @@ pub struct ScrapeMeta {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebCrawlInput {
-    /// Starting URL for the BFS crawl (must be http:// or https://)
+    /// Starting URL (http/https)
     pub url: String,
-    /// Crawl provider: "default" or "lightpanda" (requires lightpanda.enabled=true, renders JS)
+    /// Provider: default or lightpanda (renders JS)
     pub provider: Option<String>,
-    /// Maximum BFS depth from the starting URL (default: 2)
+    /// Max BFS depth (default: 2)
     pub max_depth: Option<i32>,
-    /// Maximum number of pages to crawl before stopping (default: 20)
+    /// Max pages (default: 20)
     pub max_pages: Option<i32>,
-    /// Respect robots.txt directives (default: true)
+    /// Respect robots.txt (default: true)
     pub obey_robots: Option<bool>,
-    /// Output content format: "markdown" (default), "html", "semantic_tree"
+    /// Dump format: markdown/html/semantic_tree
     pub dump_format: Option<String>,
-    /// When to consider the page captured: "load", "domcontentloaded", "networkidle" (default), "done"
+    /// Wait event: load/domcontentloaded/networkidle/done
     pub wait_until: Option<String>,
-    /// Include iframe content in results (default: false, Lightpanda only)
+    /// Include iframes (Lightpanda)
     pub include_frames: Option<bool>,
-    /// Wait for CSS selector before capturing page content (Lightpanda only)
+    /// Wait for CSS selector (Lightpanda)
     pub wait_selector: Option<String>,
-    /// Strip mode: "js", "css", "ui", "full" (Lightpanda only)
+    /// Strip mode: js/css/ui/full (Lightpanda)
     pub strip_mode: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -660,13 +660,13 @@ pub struct WebCrawlOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebMapInput {
-    /// Website URL to discover sitemap entries from (fetches /sitemap.xml)
+    /// Website URL (fetches /sitemap.xml)
     pub url: String,
-    /// Provider: "default" (HTTP) or "lightpanda" (requires lightpanda.enabled=true)
+    /// Provider: default or lightpanda
     pub provider: Option<String>,
-    /// Maximum number of links to return (default: 100)
+    /// Max links (default: 100)
     pub limit: Option<i32>,
-    /// Filter discovered URLs containing this substring
+    /// Filter URLs by substring
     pub search: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -697,11 +697,11 @@ pub struct WebMapOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightFindConnectionsInput {
-    /// Entity to find connections for (omit to discover all cross-domain entities)
+    /// Entity name (omit for all cross-domain)
     pub entity: Option<String>,
-    /// Minimum number of domains for a connection to be included (default: 2)
+    /// Min domains for connection (default: 2)
     pub min_domains: Option<i32>,
-    /// Maximum number of results to return (default: 20, only used when entity is omitted)
+    /// Max results (default: 20, all-connections mode)
     pub limit: Option<i32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -719,11 +719,11 @@ pub struct InsightFindConnectionsOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightTrendingInput {
-    /// Time window in hours for trend detection compared to prior window (default: 24)
+    /// Time window hours (default: 24)
     pub time_window_hours: Option<i64>,
-    /// Minimum growth ratio vs prior period to qualify as trending (default: 2.0)
+    /// Min growth ratio (default: 2.0)
     pub min_growth: Option<f64>,
-    /// Minimum mentions in the current window to be considered (default: 3)
+    /// Min current mentions (default: 3)
     pub min_current_mentions: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -738,23 +738,23 @@ pub struct InsightTrendingOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightIndexArticle {
-    /// Unique identifier for the article
+    /// Article ID
     pub id: String,
-    /// Article title
+    /// Title
     pub title: String,
-    /// Publication date as ISO 8601 string (e.g., "2026-01-15T10:30:00Z")
+    /// Publication date (ISO 8601)
     pub pub_date: String,
-    /// Name of the source that published this article
+    /// Source name
     pub source_name: String,
-    /// Topical domains for this article (leave empty for auto-detection)
+    /// Domains (omit for auto-detection)
     pub domains: Option<Vec<DomainInfo>>,
-    /// Extracted entities from this article (leave empty for auto-extraction)
+    /// Entities (omit for auto-extraction)
     pub entities: Option<Vec<EntityInfo>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightIndexInput {
-    /// Articles to index for cross-article entity analysis (use enriched items for best results)
+    /// Articles to index (use enriched items for best results)
     pub articles: Vec<InsightIndexArticle>,
 }
 
