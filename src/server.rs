@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, insights, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, security, sources, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, finance, insights, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, security, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -258,6 +258,7 @@ impl_has_format!(
     WebSearchInput, WebScrapeInput, WebCrawlInput, WebMapInput,
     InsightFindConnectionsInput, InsightTrendingInput,
     WeatherForecastInput, WeatherCurrentInput, WeatherAlertsInput,
+    FinanceMarketInput, FinanceCryptoInput, FinanceTrendingInput,
     CveSearchInput, SecurityAdvisoriesInput,
 );
 
@@ -649,6 +650,49 @@ impl IgsMcpServer {
     #[tool(name = "research.download", description = "Download a research paper PDF to disk. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. For Semantic Scholar, fetches PDF URL from API first. Optional output_path (default: {paper_id}.pdf) and format. Returns file path and size. Do NOT use to view abstracts — use research.paper for metadata.")]
     async fn research_download(&self, params: Parameters<ResearchDownloadInput>) -> Result<Json<ResearchDownloadOutput>, String> {
         research::research_download(params.0).await.map(Json)
+    }
+
+    // ── Finance Tools ────────────────────────────────────────────
+
+    #[tool(name = "finance.market", description = "Get stock market quotes for given symbols. Uses Yahoo Finance API (free, no key). Returns symbol, name, price, change, change_pct, volume. Default output: TOON.")]
+    async fn finance_market(&self, params: Parameters<FinanceMarketInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.symbols.join(",");
+        let output = finance::finance_market(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "finance.market",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "finance.crypto", description = "Get cryptocurrency prices in USD. Uses CoinGecko API (free, no key). Input: CoinGecko IDs (e.g. [\"bitcoin\", \"ethereum\", \"solana\"]). Returns price_usd, change_24h_pct, market_cap, volume_24h. Default output: TOON.")]
+    async fn finance_crypto(&self, params: Parameters<FinanceCryptoInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.symbols.join(",");
+        let output = finance::finance_crypto(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "finance.crypto",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "finance.trending", description = "Get trending cryptocurrencies on CoinGecko (free, no key). Returns top 7 trending coins by search volume with name, symbol, market_cap_rank, score. Default output: TOON.")]
+    async fn finance_trending(&self, params: Parameters<FinanceTrendingInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = finance::finance_trending(params.0).await?;
+        Ok(format_output(&output, &format))
     }
 
     // ── Security Tools ──────────────────────────────────────────

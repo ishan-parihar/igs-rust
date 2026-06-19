@@ -1086,3 +1086,75 @@ pub struct WeatherAlert {
     pub end: String,
     pub description: String,
 }
+
+// ─── Finance Types ─────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FinanceMarketInput {
+    /// Stock symbols (e.g., ["AAPL", "GOOGL", "MSFT"])
+    pub symbols: Vec<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FinanceMarketOutput {
+    pub quotes: Vec<MarketQuote>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MarketQuote {
+    pub symbol: String,
+    pub name: String,
+    pub price: f64,
+    pub change: f64,
+    pub change_pct: f64,
+    pub volume: u64,
+    pub market_cap: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FinanceCryptoInput {
+    /// CoinGecko coin IDs (e.g., ["bitcoin", "ethereum", "solana"])
+    pub symbols: Vec<String>,
+    /// CoinGecko IDs for API call (defaults to symbols if omitted)
+    #[serde(default)]
+    pub ids: Vec<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FinanceCryptoOutput {
+    pub prices: Vec<CryptoPrice>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CryptoPrice {
+    pub id: String,
+    pub symbol: String,
+    pub name: String,
+    pub price_usd: f64,
+    pub change_24h_pct: f64,
+    pub market_cap: u64,
+    pub volume_24h: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FinanceTrendingInput {
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FinanceTrendingOutput {
+    pub trending: Vec<TrendingCoin>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TrendingCoin {
+    pub name: String,
+    pub symbol: String,
+    pub market_cap_rank: u32,
+    pub score: f64,
+}

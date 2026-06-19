@@ -65,6 +65,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "finance",
+        description: "Get stock market quotes, cryptocurrency prices, and trending coins. Uses Yahoo Finance for stocks and CoinGecko for crypto (both free, no API key required).",
+        tools: &[
+            "finance.market", "finance.crypto", "finance.trending",
+        ],
+    },
+    ToolGroup {
         name: "security",
         description: "Search CVE vulnerabilities and GitHub Security Advisories. Use for threat intelligence, vulnerability monitoring, and dependency security.",
         tools: &[
@@ -112,4 +119,63 @@ pub fn filter_tools_by_group(tool_names: &[String], group: &str) -> Vec<String> 
 /// Get total count of tools across all groups.
 pub fn total_tool_count() -> usize {
     TOOL_GROUPS.iter().map(|g| g.tools.len()).sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_no_duplicate_tools_across_groups() {
+        let mut all_tools = Vec::new();
+        for group in TOOL_GROUPS {
+            for tool in group.tools {
+                assert!(!all_tools.contains(tool), "Tool '{}' appears in multiple groups", tool);
+                all_tools.push(tool);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_all_groups_have_tools() {
+        for group in TOOL_GROUPS {
+            assert!(!group.tools.is_empty(), "Group '{}' has no tools", group.name);
+        }
+    }
+    
+    #[test]
+    fn test_registry_tools_match_expected() {
+        let expected = vec![
+            "pools.list", "pools.upsert", "pools.delete",
+            "sources.list", "sources.upsert", "sources.delete",
+            "sources.autodiscover", "sources.enableGenericScraper",
+            "sources.countries", "sources.cities", "sources.domains",
+            "parsers.list", "tool.guide",
+            "news.fetch", "news.testSource", "news.enrich",
+            "reddit.search", "reddit.feed",
+            "research.search", "research.paper", "research.download",
+            "web.search", "web.scrape", "web.crawl", "web.map",
+            "insights.findConnections", "insights.trendingEntities",
+            "insights.indexArticles", "insights.getStats", "insights.clearIndex",
+            "weather.forecast", "weather.current", "weather.alerts",
+            "finance.market", "finance.crypto", "finance.trending",
+            "security.cve", "security.advisories",
+            "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
+            "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
+            "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
+            "lightpanda.scroll", "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+        ];
+        
+        let registry_tools: Vec<&str> = TOOL_GROUPS.iter()
+            .flat_map(|g| g.tools.iter())
+            .copied()
+            .collect();
+        
+        for tool in &expected {
+            assert!(registry_tools.contains(tool), "Tool '{}' not in registry", tool);
+        }
+        for tool in &registry_tools {
+            assert!(expected.contains(tool), "Tool '{}' in registry but not in expected list", tool);
+        }
+    }
 }

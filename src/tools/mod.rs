@@ -15,4 +15,5 @@ pub mod web;
 pub mod weather;
 
 pub mod dump;
+pub mod finance;
 pub mod registry;
