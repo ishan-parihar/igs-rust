@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, finance, govt, insights, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, security, sources, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, finance, govt, insights, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, security, sop, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -21,6 +21,8 @@ use tokio::sync::Mutex;
 #[allow(dead_code)]
 pub struct InsightStorage {
     articles: Vec<ArticleInsight>,
+    entity_index: std::collections::HashMap<String, Vec<usize>>,
+    domain_index: std::collections::HashMap<String, Vec<usize>>,
     db: Option<rusqlite::Connection>,
 }
 
@@ -31,6 +33,20 @@ impl Default for InsightStorage {
 }
 
 impl InsightStorage {
+    fn rebuild_indices(articles: &[ArticleInsight]) -> (std::collections::HashMap<String, Vec<usize>>, std::collections::HashMap<String, Vec<usize>>) {
+        let mut entity_index: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+        let mut domain_index: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+        for (i, article) in articles.iter().enumerate() {
+            for e in &article.entities {
+                entity_index.entry(e.name.to_lowercase()).or_default().push(i);
+            }
+            for d in &article.domains {
+                domain_index.entry(d.domain.clone()).or_default().push(i);
+            }
+        }
+        (entity_index, domain_index)
+    }
+
     pub fn new() -> Self {
         // Try to open SQLite database for persistence
         let db_path = persistence::default_db_path();
@@ -40,7 +56,8 @@ impl InsightStorage {
                 match persistence::load_articles(&conn) {
                     Ok(articles) => {
                         tracing::info!("Loaded {} articles from {}", articles.len(), db_path.display());
-                        return Self { articles, db: Some(conn) };
+                        let (entity_index, domain_index) = Self::rebuild_indices(&articles);
+                        return Self { articles, entity_index, domain_index, db: Some(conn) };
                     }
                     Err(e) => {
                         tracing::warn!("Failed to load articles: {}", e);
@@ -53,7 +70,7 @@ impl InsightStorage {
                 None
             }
         };
-        Self { articles: vec![], db }
+        Self { articles: vec![], entity_index: std::collections::HashMap::new(), domain_index: std::collections::HashMap::new(), db }
     }
 
     pub fn add_article(&mut self, article: ArticleInsight) {
@@ -63,7 +80,51 @@ impl InsightStorage {
                 tracing::warn!("Failed to persist article {}: {}", article.id, e);
             }
         }
+        let idx = self.articles.len();
+        for e in &article.entities {
+            self.entity_index.entry(e.name.to_lowercase()).or_default().push(idx);
+        }
+        for d in &article.domains {
+            self.domain_index.entry(d.domain.clone()).or_default().push(idx);
+        }
         self.articles.push(article);
+    }
+
+    pub fn add_articles_batch(&mut self, articles: Vec<ArticleInsight>) {
+        if let Some(ref conn) = self.db {
+            let tx = match conn.unchecked_transaction() {
+                Ok(tx) => tx,
+                Err(e) => {
+                    tracing::warn!("Failed to start transaction: {}", e);
+                    for article in articles {
+                        self.articles.push(article);
+                    }
+                    return;
+                }
+            };
+
+            for article in &articles {
+                if let Err(e) = persistence::save_article(&tx, article) {
+                    tracing::warn!("Failed to persist article {}: {}", article.id, e);
+                }
+            }
+
+            if let Err(e) = tx.commit() {
+                tracing::warn!("Failed to commit transaction: {}", e);
+            }
+        }
+
+        let base = self.articles.len();
+        for (i, article) in articles.iter().enumerate() {
+            let idx = base + i;
+            for e in &article.entities {
+                self.entity_index.entry(e.name.to_lowercase()).or_default().push(idx);
+            }
+            for d in &article.domains {
+                self.domain_index.entry(d.domain.clone()).or_default().push(idx);
+            }
+        }
+        self.articles.extend(articles);
     }
 
     pub fn clear(&mut self) {
@@ -74,24 +135,16 @@ impl InsightStorage {
             }
         }
         self.articles.clear();
+        self.entity_index.clear();
+        self.domain_index.clear();
     }
 
     pub fn stats(&self) -> InsightStats {
         let total_articles = self.articles.len();
-        let mut entities = std::collections::HashSet::new();
-        let mut domains = std::collections::HashSet::new();
-        for a in &self.articles {
-            for e in &a.entities {
-                entities.insert(e.name.clone());
-            }
-            for d in &a.domains {
-                domains.insert(d.domain.clone());
-            }
-        }
         InsightStats {
             total_articles,
-            total_entities: entities.len(),
-            total_domains: domains.len(),
+            total_entities: self.entity_index.len(),
+            total_domains: self.domain_index.len(),
             avg_entities_per_article: if total_articles > 0 {
                 self.articles.iter().map(|a| a.entities.len() as f64).sum::<f64>() / total_articles as f64
             } else {
@@ -106,14 +159,44 @@ impl InsightStorage {
     }
 
     pub fn find_inter_domain_connections(&self, entity: &str, min_domains: usize) -> Vec<EntityConnection> {
+        let key = entity.to_lowercase();
         let mut domain_map: std::collections::HashMap<String, DomainConnection> = std::collections::HashMap::new();
-        for article in &self.articles {
-            let matches_entity = article.entities.iter().any(|e| {
-                e.name.to_lowercase() == entity.to_lowercase()
-                    || e.normalized_id.as_ref().is_some_and(|id| id.to_lowercase() == entity.to_lowercase())
-            });
-            if !matches_entity { continue; }
+        let mut entity_type = String::new();
 
+        if let Some(indices) = self.entity_index.get(&key) {
+            for &idx in indices {
+                let article = &self.articles[idx];
+                if entity_type.is_empty() {
+                    entity_type = article.entities.iter()
+                        .find(|e| e.name.to_lowercase() == key)
+                        .map(|e| e.entity_type.clone())
+                        .unwrap_or_default();
+                }
+                for d in &article.domains {
+                    let entry = domain_map.entry(d.domain.clone()).or_insert_with(|| DomainConnection {
+                        domain: d.domain.clone(),
+                        article_ids: vec![],
+                        article_titles: vec![],
+                    });
+                    entry.article_ids.push(article.id.clone());
+                    entry.article_titles.push(article.title.clone());
+                }
+            }
+        }
+
+        for article in &self.articles {
+            let matches_normalized = article.entities.iter().any(|e| {
+                e.normalized_id.as_ref().is_some_and(|id| id.to_lowercase() == key)
+                    && !e.name.to_lowercase().eq(&key)
+            });
+            if !matches_normalized { continue; }
+
+            if entity_type.is_empty() {
+                entity_type = article.entities.iter()
+                    .find(|e| e.normalized_id.as_ref().is_some_and(|id| id.to_lowercase() == key))
+                    .map(|e| e.entity_type.clone())
+                    .unwrap_or_default();
+            }
             for d in &article.domains {
                 let entry = domain_map.entry(d.domain.clone()).or_insert_with(|| DomainConnection {
                     domain: d.domain.clone(),
@@ -128,11 +211,6 @@ impl InsightStorage {
         let domains_vec: Vec<DomainConnection> = domain_map.into_values().collect();
         let ndomains = domains_vec.len();
         if ndomains >= min_domains {
-            let entity_type = self.articles.iter()
-                .flat_map(|a| a.entities.iter())
-                .find(|e| e.name.to_lowercase() == entity.to_lowercase())
-                .map(|e| e.entity_type.clone())
-                .unwrap_or_default();
             vec![EntityConnection {
                 entity: entity.to_string(),
                 entity_type,
@@ -145,15 +223,19 @@ impl InsightStorage {
     }
 
     pub fn find_all_inter_domain_connections(&self, min_domains: usize) -> Vec<EntityConnection> {
-        let mut entity_domains: std::collections::HashMap<String, (String, std::collections::HashMap<String, DomainConnection>)> = std::collections::HashMap::new();
-        for article in &self.articles {
-            for e in &article.entities {
-                let key = e.name.to_lowercase();
-                let (etype, domain_map) = entity_domains.entry(key).or_insert_with(|| {
-                    (e.entity_type.clone(), std::collections::HashMap::new())
-                });
+        let mut results: Vec<EntityConnection> = Vec::new();
+
+        for (key, indices) in &self.entity_index {
+            let mut domain_map: std::collections::HashMap<String, DomainConnection> = std::collections::HashMap::new();
+            let mut etype = String::new();
+
+            for &idx in indices {
+                let article = &self.articles[idx];
                 if etype.is_empty() {
-                    *etype = e.entity_type.clone();
+                    etype = article.entities.iter()
+                        .find(|e| e.name.to_lowercase() == key.as_str())
+                        .map(|e| e.entity_type.clone())
+                        .unwrap_or_default();
                 }
                 for d in &article.domains {
                     let entry = domain_map.entry(d.domain.clone()).or_insert_with(|| DomainConnection {
@@ -165,22 +247,19 @@ impl InsightStorage {
                     entry.article_titles.push(article.title.clone());
                 }
             }
+
+            let nd = domain_map.len();
+            if nd >= min_domains {
+                results.push(EntityConnection {
+                    entity: key.clone(),
+                    entity_type: etype,
+                    domains: domain_map.into_values().collect(),
+                    connection_strength: nd as f64,
+                });
+            }
         }
 
-        entity_domains
-            .into_iter()
-            .filter_map(|(key, (etype, dm))| {
-                let nd = dm.len();
-                if nd < min_domains { return None; }
-                let d2: Vec<DomainConnection> = dm.into_values().collect();
-                Some(EntityConnection {
-                    entity: key,
-                    entity_type: etype,
-                    domains: d2,
-                    connection_strength: nd as f64,
-                })
-            })
-            .collect()
+        results
     }
 
     pub fn detect_trending(&self, time_window_ms: i64, min_growth: f64, min_current: u32) -> Vec<TrendingEntity> {
@@ -188,47 +267,53 @@ impl InsightStorage {
         let cutoff = now - time_window_ms;
         let half_cutoff = now - (time_window_ms * 2);
 
-        let mut current: std::collections::HashMap<String, (u32, String)> = std::collections::HashMap::new();
-        let mut previous: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut results: Vec<TrendingEntity> = Vec::new();
 
-        for article in &self.articles {
-            let t = chrono::DateTime::parse_from_rfc3339(&article.pub_date)
-                .ok()
-                .map(|dt| dt.timestamp_millis())
-                .unwrap_or(0);
+        for (name, indices) in &self.entity_index {
+            let mut current_count: u32 = 0;
+            let mut previous_count: u32 = 0;
+            let mut etype = String::new();
 
-            for e in &article.entities {
-                let name = e.name.to_lowercase();
+            for &idx in indices {
+                let article = &self.articles[idx];
+                let t = chrono::DateTime::parse_from_rfc3339(&article.pub_date)
+                    .ok()
+                    .map(|dt| dt.timestamp_millis())
+                    .unwrap_or(0);
+
+                if etype.is_empty() {
+                    etype = article.entities.iter()
+                        .find(|e| e.name.to_lowercase() == name.as_str())
+                        .map(|e| e.entity_type.clone())
+                        .unwrap_or_default();
+                }
+
                 if t >= cutoff {
-                    let (count, _etype) = current.entry(name).or_insert((0, e.entity_type.clone()));
-                    *count += 1;
+                    current_count += 1;
                 } else if t >= half_cutoff {
-                    *previous.entry(name).or_insert(0) += 1;
+                    previous_count += 1;
                 }
             }
+
+            if current_count < min_current { continue; }
+            let growth = if previous_count > 0 {
+                current_count as f64 / previous_count as f64
+            } else {
+                current_count as f64
+            };
+            if growth < min_growth { continue; }
+
+            results.push(TrendingEntity {
+                entity: name.clone(),
+                entity_type: etype,
+                current_mentions: current_count,
+                previous_mentions: previous_count,
+                growth,
+                normalized_growth: (growth / (1.0 + growth)).min(1.0),
+            });
         }
 
-        current
-            .into_iter()
-            .filter_map(|(name, (current_count, etype))| {
-                if current_count < min_current { return None; }
-                let prev_count = previous.get(&name).copied().unwrap_or(0);
-                let growth = if prev_count > 0 {
-                    current_count as f64 / prev_count as f64
-                } else {
-                    current_count as f64
-                };
-                if growth < min_growth { return None; }
-                Some(TrendingEntity {
-                    entity: name,
-                    entity_type: etype,
-                    current_mentions: current_count,
-                    previous_mentions: prev_count,
-                    growth,
-                    normalized_growth: (growth / (1.0 + growth)).min(1.0),
-                })
-            })
-            .collect()
+        results
     }
 }
 
@@ -262,6 +347,7 @@ impl_has_format!(
     CveSearchInput, SecurityAdvisoriesInput,
     GovtBillsInput, GovtRegulationsInput,
     PatentSearchInput, PatentDetailsInput,
+    SopListInput, SopExecuteInput,
 );
 
 // ─── Sync Settings Loader ───────────────────────────────────────
@@ -988,6 +1074,22 @@ impl IgsMcpServer {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_interactive_elements(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+    }
+
+    // ── SOP Tools ─────────────────────────────────────────────
+
+    #[tool(name = "sop.list", description = "List available SOP (Standard Operating Procedure) chains for composable multi-step intelligence workflows. Each chain defines a sequence of tool calls with dependency ordering. Use sop.execute to run a chain. Default output: TOON.")]
+    async fn sop_list(&self, params: Parameters<SopListInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = sop::sop_list();
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "sop.execute", description = "Execute a named SOP chain. Pass chain_name from sop.list. Chains chain multiple IGS tools with dependency ordering. Use $QUERY placeholder in chain params — it will be replaced by your query context. Returns step-by-step results with status. Default output: TOON.")]
+    async fn sop_execute(&self, params: Parameters<SopExecuteInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = sop::sop_execute(params.0)?;
+        Ok(format_output(&output, &format))
     }
 }
 

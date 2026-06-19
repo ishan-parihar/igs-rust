@@ -52,19 +52,18 @@ pub(crate) async fn insights_index(
     input: InsightIndexInput,
 ) -> Result<InsightIndexOutput, String> {
     let mut storage = storage.lock().await;
-    let mut indexed = 0usize;
+    let indexed = input.articles.len();
 
-    for article in &input.articles {
-        storage.add_article(ArticleInsight {
-            id: article.id.clone(),
-            title: article.title.clone(),
-            pub_date: article.pub_date.clone(),
-            source_name: article.source_name.clone(),
-            domains: article.domains.clone().unwrap_or_default(),
-            entities: article.entities.clone().unwrap_or_default(),
-        });
-        indexed += 1;
-    }
+    let articles: Vec<ArticleInsight> = input.articles.iter().map(|a| ArticleInsight {
+        id: a.id.clone(),
+        title: a.title.clone(),
+        pub_date: a.pub_date.clone(),
+        source_name: a.source_name.clone(),
+        domains: a.domains.clone().unwrap_or_default(),
+        entities: a.entities.clone().unwrap_or_default(),
+    }).collect();
+
+    storage.add_articles_batch(articles);
 
     let stats = storage.stats();
     Ok(InsightIndexOutput { indexed, stats })

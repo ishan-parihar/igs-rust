@@ -1263,3 +1263,70 @@ pub struct RegulationEntry {
     pub agency: String,
     pub url: String,
 }
+
+// ─── SOP Types ─────────────────────────────────────────────
+
+/// A single step in an SOP chain.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SopStep {
+    /// Tool to execute (e.g. "news.fetch", "web.search")
+    pub tool: String,
+    /// Parameters to pass to the tool
+    pub params: serde_json::Value,
+    /// Index of a prior step this depends on (must succeed first)
+    pub depends_on: Option<usize>,
+}
+
+/// A named chain of composable SOP steps.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SopChain {
+    /// Unique chain name (e.g. "deep-threat-intel")
+    pub name: String,
+    /// Human-readable description
+    pub description: String,
+    /// Ordered steps to execute
+    pub steps: Vec<SopStep>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SopListInput {
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SopListOutput {
+    pub chains: Vec<SopChainInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SopChainInfo {
+    pub name: String,
+    pub description: String,
+    pub step_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SopExecuteInput {
+    /// Chain name to execute (from sop.list)
+    pub chain_name: String,
+    /// Optional parameter overrides per step index (merge with step defaults)
+    pub overrides: Option<Vec<serde_json::Value>>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SopExecuteOutput {
+    pub chain_name: String,
+    pub steps_completed: usize,
+    pub results: Vec<SopStepResult>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SopStepResult {
+    pub step: usize,
+    pub tool: String,
+    pub status: String,
+    pub output: String,
+}

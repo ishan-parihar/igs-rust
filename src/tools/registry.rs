@@ -103,6 +103,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
             "lightpanda.waitForSelector", "lightpanda.interactiveElements",
         ],
     },
+    ToolGroup {
+        name: "sop",
+        description: "Composable multi-step intelligence workflows. List built-in chains or execute them with parameterized queries.",
+        tools: &[
+            "sop.list", "sop.execute",
+        ],
+    },
 ];
 
 /// Get tools available for a specific group name.
@@ -180,6 +187,7 @@ mod tests {
             "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
             "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
             "lightpanda.scroll", "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+            "sop.list", "sop.execute",
         ];
         
         let registry_tools: Vec<&str> = TOOL_GROUPS.iter()
