@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, politics, reddit, research, satellite, security, sop, sources, supply_chain, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, politics, reddit, research, satellite, security, sop, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -348,11 +348,10 @@ impl_has_format!(
     GovtBillsInput, GovtRegulationsInput,
     PatentSearchInput, PatentDetailsInput,
     SopListInput, SopExecuteInput,
-    HealthCdcInput, HealthCdcCovidInput, HealthWhoInput,
-    PoliticsFecInput, PoliticsFecCommitteesInput, PoliticsOpenSecretsInput,
+    HealthCdcInput, HealthWhoInput,
+    PoliticsFecInput, PoliticsFecCommitteesInput,
     SatelliteFirmsInput,
     ClimateNoaaInput, ClimateNoaaStationsInput,
-    SupplyChainTradeInput,
     EnvEpaFacilitiesInput, EnvEpaEmissionsInput,
     LegalSearchInput, LegalCaseDetailsInput,
 );
@@ -886,13 +885,6 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "politics.opensecrets", description = "Search OpenSecrets for campaign finance donor data. Returns individual contributors to a candidate. Requires OpenSecrets API key (free for non-commercial use).")]
-    async fn politics_opensecrets(&self, params: Parameters<PoliticsOpenSecretsInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
-        let output = politics::politics_opensecrets(params.0).await?;
-        Ok(format_output(&output, &format))
-    }
-
     // ── Patent Tools ────────────────────────────────────────────
 
     #[tool(name = "patents.search", description = "Search USPTO patents via PatentsView API. Returns patent number, title, date, abstract, and Google Patents URL. Supports years_back (default 5). Default output: TOON.")]
@@ -967,28 +959,12 @@ impl IgsMcpServer {
         legal::legal_case_details(params.0).await.map(Json)
     }
 
-    // ── Supply Chain Tools ─────────────────────────────────────
-
-    #[tool(name = "supply_chain.trade_flows", description = "Query international trade flow data via UN Comtrade API. Returns bilateral trade volumes by commodity between countries. Supports reporter/partner country codes, period (year or month), commodity code (HS classification), flow direction (M=Import, X=Export). Default: US imports from World. Requires comtrade.apiKey in settings.yml. Default output: TOON.")]
-    async fn supply_chain_trade_flows(&self, params: Parameters<SupplyChainTradeInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
-        let output = supply_chain::supply_chain_trade_flows(params.0).await?;
-        Ok(format_output(&output, &format))
-    }
-
     // ── Health Tools ─────────────────────────────────────────
 
     #[tool(name = "health.cdc_leading_causes", description = "Query CDC leading causes of death data. Returns cause of death, state, year, deaths, age-adjusted rate. Use for US health statistics and mortality analysis.")]
     async fn health_cdc_leading_causes(&self, params: Parameters<HealthCdcInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = health::health_cdc_leading_causes(params.0).await?;
-        Ok(format_output(&output, &format))
-    }
-
-    #[tool(name = "health.cdc_covid", description = "Query CDC COVID-19 data. Returns state, date, total cases, total deaths, new cases, new deaths. Use for pandemic tracking and public health monitoring.")]
-    async fn health_cdc_covid(&self, params: Parameters<HealthCdcCovidInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
-        let output = health::health_cdc_covid(params.0).await?;
         Ok(format_output(&output, &format))
     }
 

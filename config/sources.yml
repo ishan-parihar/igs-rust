@@ -188,6 +188,7 @@ sources:
   parser: rss
   pools:
   - GLOBAL_BREAKING
+  - GLOBAL_GEOECON
   countries:
   - ALL
   cities: []
@@ -250,6 +251,7 @@ sources:
   parser: rss
   pools:
   - GLOBAL_GEOECON
+  - GLOBAL_DEFENSE_SECURITY
   countries:
   - ALL
   cities: []
@@ -579,6 +581,25 @@ sources:
   - finance
   - geopolitics
   is_active: true
+- id: propublica
+  name: ProPublica
+  type: rss
+  url: "https://www.propublica.org/feeds/rss.xml"
+  parser: rss
+  pools:
+  - GLOBAL_LAW_REG
+  - GLOBAL_GEOECON
+  countries:
+  - US
+  cities: []
+  domains:
+  - law
+  - geopolitics
+  - investigation
+  - finance
+  is_active: true
+  weight: 1.2
+  trust_score: 0.9
 - id: mit_tech_review
   name: MIT Technology Review
   type: rss
@@ -628,6 +649,7 @@ sources:
   parser: rss
   pools:
   - GLOBAL_TECH_CYBER
+  - GLOBAL_DEFENSE_SECURITY
   countries:
   - US
   cities: []
@@ -690,20 +712,6 @@ sources:
   cities: []
   domains:
   - cyber
-  is_active: true
-- id: hackernews
-  name: Hacker News
-  type: rss
-  url: https://hnrss.org/frontpage
-  parser: rss
-  pools:
-  - GLOBAL_TECH_CYBER
-  countries:
-  - ALL
-  cities: []
-  domains:
-  - tech
-  - startups
   is_active: true
 - id: medianama
   name: MediaNama
@@ -785,6 +793,7 @@ sources:
   - GLOBAL_ENVIRONMENT
   - GLOBAL_TECH_CYBER
   - GLOBAL_SCIENCE
+  - GLOBAL_HEALTH
   countries:
   - ALL
   cities: []
@@ -801,6 +810,7 @@ sources:
   - GLOBAL_ENVIRONMENT
   - GLOBAL_TECH_CYBER
   - GLOBAL_SCIENCE
+  - GLOBAL_HEALTH
   countries:
   - ALL
   cities: []
@@ -4418,19 +4428,6 @@ sources:
   - tech
   - business
   is_active: true
-- id: moscow_times_dup
-  name: The Moscow Times (News)
-  type: rss
-  url: https://www.themoscowtimes.com/rss/news
-  parser: rss
-  pools:
-  - GLOBAL_COUNTRIES
-  countries:
-  - ALL
-  cities: []
-  domains:
-  - geopolitics
-  is_active: true
 - id: bbc_africa
   name: BBC Africa
   type: rss
@@ -4582,7 +4579,7 @@ sources:
   url: https://www.scientificamerican.com/feed/
   parser: rss
   pools:
-  - GLOBAL_ENV_HEALTH
+  - GLOBAL_HEALTH
   - GLOBAL_TECH_CYBER
   - GLOBAL_SCIENCE
   countries:
@@ -4599,7 +4596,7 @@ sources:
   url: https://www.newscientist.com/feed/home
   parser: rss
   pools:
-  - GLOBAL_ENV_HEALTH
+  - GLOBAL_HEALTH
   - GLOBAL_TECH_CYBER
   - GLOBAL_SCIENCE
   countries:
@@ -4616,7 +4613,7 @@ sources:
   url: https://phys.org/rss-feed/
   parser: rss
   pools:
-  - GLOBAL_ENV_HEALTH
+  - GLOBAL_HEALTH
   - GLOBAL_TECH_CYBER
   - GLOBAL_SCIENCE
   countries:

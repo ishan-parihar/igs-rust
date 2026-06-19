@@ -26,4 +26,3 @@ pub mod satellite;
 pub mod climate;
 pub mod env;
 pub mod sop;
-pub mod supply_chain;

@@ -100,17 +100,10 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
-        name: "satellite",
-        description: "Satellite-based fire detection using NASA FIRMS API. Query active fire hotspots worldwide via VIIRS and MODIS sensors.",
-        tools: &[
-            "satellite.firms_fires",
-        ],
-    },
-    ToolGroup {
         name: "environment",
-        description: "EPA environmental facility and emissions data via Envirofacts API. Query regulated facilities, TRI emissions, and environmental compliance data.",
+        description: "EPA environmental facility and emissions data via Envirofacts API, plus satellite-based fire detection via NASA FIRMS. Query regulated facilities, TRI emissions, fire hotspots, and environmental compliance data.",
         tools: &[
-            "env.epa_facilities", "env.epa_emissions",
+            "env.epa_facilities", "env.epa_emissions", "satellite.firms_fires",
         ],
     },
     ToolGroup {
@@ -121,24 +114,17 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
-        name: "supply_chain",
-        description: "International trade flow data via UN Comtrade. Query bilateral trade, imports/exports by commodity code between countries.",
-        tools: &[
-            "supply_chain.trade_flows",
-        ],
-    },
-    ToolGroup {
         name: "health",
         description: "WHO Global Health Observatory data and CDC health statistics. Query global health indicators, disease data, and vital statistics.",
         tools: &[
-            "health.cdc_leading_causes", "health.cdc_covid", "health.who_gho",
+            "health.cdc_leading_causes", "health.who_gho",
         ],
     },
     ToolGroup {
         name: "politics",
-        description: "Campaign finance and political data. Search FEC candidates, committees, and OpenSecrets donor contributions.",
+        description: "Campaign finance and political data. Search FEC candidates and committees.",
         tools: &[
-            "politics.fec_candidates", "politics.fec_committees", "politics.opensecrets",
+            "politics.fec_candidates", "politics.fec_committees",
         ],
     },
     ToolGroup {
@@ -232,11 +218,9 @@ mod tests {
             "security.cve", "security.advisories",
             "patents.search", "patents.details",
             "govt.bills", "govt.regulations",
-            "satellite.firms_fires",
-            "env.epa_facilities", "env.epa_emissions",
-            "supply_chain.trade_flows",
-            "health.cdc_leading_causes", "health.cdc_covid", "health.who_gho",
-            "politics.fec_candidates", "politics.fec_committees", "politics.opensecrets",
+            "env.epa_facilities", "env.epa_emissions", "satellite.firms_fires",
+            "health.cdc_leading_causes", "health.who_gho",
+            "politics.fec_candidates", "politics.fec_committees",
             "climate.noaa_observations", "climate.noaa_stations",
             "legal.search_cases", "legal.case_details",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",

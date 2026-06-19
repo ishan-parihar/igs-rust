@@ -3,12 +3,12 @@
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
 
-MCP server + CLI for intelligence gathering. 71 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
+MCP server + CLI for intelligence gathering. 68 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
 
 | Metric | Value |
 |--------|-------|
-| Tools | 71 (59 core + 12 Lightpanda browser automation) |
-| Intelligence Domains | 17 (News, Research, Web, Weather, Finance, Security, Patents, Government, Politics, Health, Satellite, Climate, Legal, Environment, Supply Chain, SOP, Browser) |
+| Tools | 68 (56 core + 12 Lightpanda browser automation) |
+| Intelligence Domains | 16 (News, Research, Web, Weather, Finance, Security, Patents, Government, Politics, Health, Climate, Legal, Environment, SOP, Browser, Insights) |
 | Sources | 411 across 47 countries |
 | Pools | 14 (geopolitics, tech, India, defense, health, etc.) |
 | Binary | Single `igs` binary (~26 MB musl static) |
@@ -238,14 +238,6 @@ noaa:
 courtlistener:
   enabled: false
   apiKey: ${COURTLISTENER_API_KEY}
-
-opensecrets:
-  enabled: false
-  apiKey: ${OPENSECRETS_API_KEY}
-
-comtrade:
-  enabled: false
-  apiKey: ${COMTRADE_API_KEY}
 ```
 
 ### Environment Variables
@@ -259,8 +251,6 @@ comtrade:
 | `OPENWEATHER_API_KEY` | — | OpenWeatherMap API key (free tier: 1000/day) |
 | `NOAA_API_KEY` | — | NOAA Climate Data Online API key (free) |
 | `COURTLISTENER_API_KEY` | — | CourtListener API token (free) |
-| `OPENSECRETS_API_KEY` | — | OpenSecrets API key (free for non-commercial) |
-| `COMTRADE_API_KEY` | — | UN Comtrade API key (free: 500/day) |
 
 ---
 
@@ -364,26 +354,26 @@ comtrade:
 | `govt.bills` | Search congressional bills | Not required (DEMO_KEY) |
 | `govt.regulations` | Search federal regulations | Not required |
 
-### Politics (3 tools)
+### Politics (2 tools)
 
 | Tool | Description | API Key |
 |------|-------------|---------|
 | `politics.fec_candidates` | Search FEC candidates | Not required (optional) |
 | `politics.fec_committees` | Search FEC committees | Not required (optional) |
-| `politics.opensecrets` | Search OpenSecrets donor data | Required |
 
 ### Health (3 tools)
 
 | Tool | Description | API Key |
 |------|-------------|---------|
 | `health.cdc_leading_causes` | Leading causes of death (US) | Not required |
-| `health.cdc_covid` | COVID-19 statistics (US) | Not required |
 | `health.who_gho` | Global health indicators (194 countries) | Not required |
 
-### Satellite (1 tool)
+### Environment (3 tools)
 
 | Tool | Description | API Key |
 |------|-------------|---------|
+| `env.epa_facilities` | EPA-regulated facilities | Not required |
+| `env.epa_emissions` | Toxic release inventory | Not required |
 | `satellite.firms_fires` | NASA FIRMS fire hotspots | Not required (DEMO_KEY) |
 
 ### Climate (2 tools)
@@ -406,12 +396,6 @@ comtrade:
 |------|-------------|---------|
 | `env.epa_facilities` | EPA-regulated facilities | Not required |
 | `env.epa_emissions` | Toxic release inventory | Not required |
-
-### Supply Chain (1 tool)
-
-| Tool | Description | API Key |
-|------|-------------|---------|
-| `supply_chain.trade_flows` | International trade statistics | Required |
 
 ### SOP (2 tools)
 
@@ -473,7 +457,6 @@ comtrade:
 | OpenWeatherMap | Weather data | 1000 calls/day | Yes |
 | NOAA CDO | Climate data | 10,000 req/day | Yes |
 | CourtListener | Case law | 125 req/day | Yes |
-| OpenSecrets | Campaign finance | Unlimited | Yes |
 | UN Comtrade | Trade statistics | 500 calls/day | Yes |
 | Tavily | Web search | 1000 req/month | Yes |
 | Yahoo Finance | Stock quotes | Unlimited | No |
@@ -568,13 +551,11 @@ src/
     ├── security.rs      NVD + GitHub Advisory
     ├── patents.rs       PatentsView API
     ├── govt.rs          Congress.gov + Federal Register
-    ├── politics.rs      FEC + OpenSecrets
+    ├── politics.rs      FEC API
     ├── health.rs        CDC + WHO GHO
-    ├── satellite.rs     NASA FIRMS
     ├── climate.rs       NOAA CDO
     ├── legal.rs         CourtListener
-    ├── env.rs           EPA Envirofacts
-    ├── supply_chain.rs  UN Comtrade
+    ├── env.rs           EPA Envirofacts + NASA FIRMS
     ├── sop.rs           Multi-step workflows
     └── lp_mcp.rs        Lightpanda MCP tool wrappers
 ```
