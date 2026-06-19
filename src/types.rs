@@ -274,6 +274,15 @@ fn default_lp_max_concurrent() -> u32 {
     10
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenWeatherSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+}
+
 impl Default for LightpandaSettings {
     fn default() -> Self {
         Self {
@@ -403,6 +412,8 @@ pub struct Settings {
     pub output: OutputSettings,
     #[serde(default)]
     pub tool_groups: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openweather: Option<OpenWeatherSettings>,
 }
 
 // ─── News Types ─────────────────────────────────────────────────

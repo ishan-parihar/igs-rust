@@ -5,6 +5,31 @@ use std::collections::HashMap;
 
 use super::types_base::{DepthOptions, DiscoveryFilters, OutputOptions};
 
+// ─── Tool Guide Types ──────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ToolGuideInput {}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ToolGuideOutput {
+    pub decision_tree: HashMap<String, String>,
+    pub categories: HashMap<String, Vec<ToolGuideItem>>,
+    pub drill_down_chains: Vec<DrillDownChain>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ToolGuideItem {
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct DrillDownChain {
+    pub name: String,
+    pub description: String,
+    pub steps: Vec<String>,
+}
+
 // ─── Pool Tool Types ───────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -774,6 +799,75 @@ pub struct InsightClearOutput {
     pub cleared: bool,
 }
 
+// ─── Security Types ───────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CveSearchInput {
+    /// Search term (vulnerability name, CVE ID, product name)
+    pub query: String,
+    /// Severity filter: "LOW", "MEDIUM", "HIGH", "CRITICAL"
+    pub severity: Option<String>,
+    /// Days back to search (default: 30)
+    pub days_back: Option<u32>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CveSearchOutput {
+    pub query: String,
+    pub total: usize,
+    pub vulnerabilities: Vec<CveEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct CveEntry {
+    pub id: String,
+    pub source: String,
+    pub published: String,
+    pub description: String,
+    pub severity: String,
+    pub cvss_score: Option<f64>,
+    pub affected_products: Vec<String>,
+    pub references: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SecurityAdvisoriesInput {
+    /// Package ecosystem: "npm", "pip", "maven", "go", "rust"
+    pub ecosystem: String,
+    /// Severity filter: "low", "medium", "high", "critical"
+    pub severity: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SecurityAdvisoryOutput {
+    pub ecosystem: String,
+    pub total: usize,
+    pub advisories: Vec<SecurityAdvisory>,
+}
+
+pub type SecurityAdvisoriesOutput = SecurityAdvisoryOutput;
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SecurityAdvisory {
+    pub ghsa_id: String,
+    pub cve_id: Option<String>,
+    pub summary: String,
+    pub severity: String,
+    pub published: String,
+    pub updated: String,
+    pub vulnerable_range: String,
+    pub patched_versions: String,
+    pub references: Vec<String>,
+}
+
 // ─── Lightpanda MCP Browser Automation Types ───────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -881,4 +975,78 @@ pub struct LpToolOutput {
     pub success: bool,
     pub content: String,
     pub meta: BrowserMeta,
+}
+
+// ─── Weather Types ────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherForecastInput {
+    /// City name or "lat,lon"
+    pub location: String,
+    /// Forecast days (1-5, default 3)
+    pub days: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherForecastOutput {
+    pub location: String,
+    pub country: String,
+    pub forecasts: Vec<WeatherDay>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherDay {
+    pub date: String,
+    pub temp_high: f64,
+    pub temp_low: f64,
+    pub condition: String,
+    pub description: String,
+    pub humidity: u32,
+    pub wind_speed: f64,
+    pub precipitation_pct: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherCurrentInput {
+    pub location: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherCurrentOutput {
+    pub location: String,
+    pub country: String,
+    pub temp: f64,
+    pub feels_like: f64,
+    pub condition: String,
+    pub description: String,
+    pub humidity: u32,
+    pub wind_speed: f64,
+    pub visibility: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherAlertsInput {
+    pub latitude: f64,
+    pub longitude: f64,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherAlertsOutput {
+    pub location: String,
+    pub alerts: Vec<WeatherAlert>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WeatherAlert {
+    pub sender: String,
+    pub event: String,
+    pub start: String,
+    pub end: String,
+    pub description: String,
 }

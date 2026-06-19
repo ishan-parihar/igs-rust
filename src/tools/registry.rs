@@ -18,7 +18,7 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
             "sources.list", "sources.upsert", "sources.delete",
             "sources.autodiscover", "sources.enableGenericScraper",
             "sources.countries", "sources.cities", "sources.domains",
-            "parsers.list",
+            "parsers.list", "tool.guide",
         ],
     },
     ToolGroup {
@@ -55,6 +55,20 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         description: "Search Reddit for posts and comments. Supports all subreddits with time filtering.",
         tools: &[
             "reddit.search", "reddit.feed",
+        ],
+    },
+    ToolGroup {
+        name: "weather",
+        description: "Get weather forecasts, current conditions, and severe weather alerts for any location. Uses OpenWeatherMap free tier API.",
+        tools: &[
+            "weather.forecast", "weather.current", "weather.alerts",
+        ],
+    },
+    ToolGroup {
+        name: "security",
+        description: "Search CVE vulnerabilities and GitHub Security Advisories. Use for threat intelligence, vulnerability monitoring, and dependency security.",
+        tools: &[
+            "security.cve", "security.advisories",
         ],
     },
     ToolGroup {

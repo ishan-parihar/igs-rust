@@ -1,8 +1,9 @@
 use crate::config;
+use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, insights, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, sources, types::*, web};
+use crate::tools::{helpers::toon_encode, insights, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, security, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -11,6 +12,7 @@ use rmcp::{
     model::*,
     tool, tool_handler, tool_router,
 };
+use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -255,7 +257,61 @@ impl_has_format!(
     ResearchSearchInput, ResearchDownloadInput,
     WebSearchInput, WebScrapeInput, WebCrawlInput, WebMapInput,
     InsightFindConnectionsInput, InsightTrendingInput,
+    WeatherForecastInput, WeatherCurrentInput, WeatherAlertsInput,
+    CveSearchInput, SecurityAdvisoriesInput,
 );
+
+// ─── Sync Settings Loader ───────────────────────────────────────
+
+/// Load settings synchronously (for use in non-async constructors).
+/// Replicates config::load_settings() using std::fs.
+fn load_settings_sync() -> Result<Settings, String> {
+    let user_dir = config::user_config_dir();
+    let _ = std::fs::create_dir_all(&user_dir);
+
+    let file = user_dir.join("settings.yml");
+    let raw = std::fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read {}: {}", file.display(), e))?;
+
+    // Expand env vars (same logic as config::expand_env_vars)
+    let mut expanded = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            chars.next();
+            let mut var_name = String::new();
+            for ch in chars.by_ref() {
+                if ch == '}' { break; }
+                var_name.push(ch);
+            }
+            match std::env::var(&var_name) {
+                Ok(val) => expanded.push_str(&val),
+                Err(_) => {
+                    expanded.push_str("${");
+                    expanded.push_str(&var_name);
+                    expanded.push('}');
+                }
+            }
+        } else {
+            expanded.push(c);
+        }
+    }
+
+    serde_yaml::from_str(&expanded)
+        .map_err(|e| format!("Failed to parse {}: {}", file.display(), e))
+}
+
+// ─── Format Output Helper ───────────────────────────────────────
+
+/// Serialize a value to the requested format (TOON or JSON) and wrap in CallToolResult.
+fn format_output<T: Serialize>(value: &T, format: &str) -> CallToolResult {
+    let text = if format == "json" {
+        serde_json::to_string_pretty(value).unwrap_or_default()
+    } else {
+        toon_encode(value)
+    };
+    CallToolResult::success(vec![Content::text(text)])
+}
 
 // ─── Server State ────────────────────────────────────────────────
 
@@ -266,6 +322,8 @@ pub struct IgsMcpServer {
     lightpanda_mcp: Arc<Mutex<Option<LightpandaMcpClient>>>,
     /// Tool groups for progressive discovery. Empty = all groups available.
     tool_groups: Vec<String>,
+    http_client: Arc<HttpClient>,
+    settings: Arc<Settings>,
 }
 
 // ─── Tool Router ────────────────────────────────────────────────
@@ -277,13 +335,10 @@ impl Default for IgsMcpServer {
 }
 
 impl IgsMcpServer {
-    /// Resolve the output format from any input type that carries format options.
     pub fn resolve_format(params: &impl HasFormat) -> String {
         params.format().as_deref().unwrap_or("toon").to_string()
     }
 
-    /// Get filtered tool list based on configured groups.
-    /// If tool_groups is empty, returns all tool names.
     pub fn filtered_tool_names(&self, all_tools: Vec<String>) -> Vec<String> {
         if self.tool_groups.is_empty() {
             return all_tools;
@@ -305,21 +360,38 @@ impl IgsMcpServer {
 #[tool_router(router = tool_router)]
 impl IgsMcpServer {
     pub fn new() -> Self {
+        let settings = load_settings_sync().expect("Failed to load settings");
+        let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
+        let http_client = HttpClient::new(&settings.http, &cache_dir);
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
             lightpanda_mcp: Arc::new(Mutex::new(None)),
             tool_groups: Vec::new(),
+            http_client: Arc::new(http_client),
+            settings: Arc::new(settings),
         }
     }
 
     pub fn new_with_groups(tool_groups: Vec<String>) -> Self {
+        let settings = load_settings_sync().expect("Failed to load settings");
+        let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
+        let http_client = HttpClient::new(&settings.http, &cache_dir);
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
             lightpanda_mcp: Arc::new(Mutex::new(None)),
             tool_groups,
+            http_client: Arc::new(http_client),
+            settings: Arc::new(settings),
         }
+    }
+
+    // ── Tool Guide ─────────────────────────────────────────────
+
+    #[tool(name = "tool.guide", description = "Categorized tool index with decision tree. Call this FIRST to find the right tool for your task. Returns decision_tree (maps questions to tools), categories (tools grouped by domain), and drill_down_chains (multi-step investigation sequences).")]
+    async fn tool_guide(&self) -> Result<Json<ToolGuideOutput>, String> {
+        tool_guide::get_tool_guide().await.map(Json::<ToolGuideOutput>)
     }
 
     // ── Pool Tools ──────────────────────────────────────────────
@@ -348,12 +420,7 @@ impl IgsMcpServer {
     async fn sources_list(&self, params: Parameters<SourceListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_list(params.0).await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "sources.upsert", description = "Create or update a news source. Required: name, type (rss/generic_html/ofac/who_dons/newslaundry), url. Optional: id (auto-generated from name), headers (custom HTTP headers), parser (key from parsers.list), pools (pool IDs), countries (ISO codes), cities, domains, is_active. Use sources.autodiscover to auto-detect feeds first. Do NOT use to fetch news — use news.fetch.")]
@@ -380,36 +447,21 @@ impl IgsMcpServer {
     async fn sources_countries(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_countries().await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[] with name and source_count. Use city names as filters in news.fetch cities parameter. Sorted by source count descending. Default output: TOON. Do NOT use for country-level data — use sources.countries.")]
     async fn sources_cities(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_cities().await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[] with name and source_count. Domains are topical tags (geopolitics, business, tech, cyber, defense, health, etc.). Use domain names as filters in news.fetch domains parameter. Default output: TOON. Do NOT use to search — use web.search or news.fetch.")]
     async fn sources_domains(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sources::sources_domains().await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     // ── Parser Tools ────────────────────────────────────────────
@@ -426,36 +478,23 @@ impl IgsMcpServer {
         let format = Self::resolve_format(&params.0);
         let depth = params.0.depth_opts.depth.clone().unwrap_or_else(|| "default".to_string());
 
-        let text = if depth == "deep" {
-            // Deep mode: full intelligence pipeline
+        if depth == "deep" {
             let output = news::fetch_news_intelligent(params.0, &self.insights).await?;
-            if format == "json" {
-                serde_json::to_string_pretty(&output).unwrap_or_default()
-            } else {
-                toon_encode(&output)
-            }
+            Ok(format_output(&output, &format))
         } else {
-            // Normal mode: just fetch
             let _subject = params.0.filters.pools.as_ref().and_then(|p| p.first()).cloned().unwrap_or_else(|| "news".to_string());
             let output = news::news_fetch(params.0).await?;
             #[cfg(not(test))]
             {
-                if let Ok(settings) = crate::config::load_settings().await {
-                    crate::tools::dump::maybe_dump(
-                        &settings,
-                        "news.fetch",
-                        &_subject,
-                        &toon_encode(&output),
-                    );
-                }
+                crate::tools::dump::maybe_dump(
+                    &self.settings,
+                    "news.fetch",
+                    &_subject,
+                    &toon_encode(&output),
+                );
             }
-            if format == "json" {
-                serde_json::to_string_pretty(&output).unwrap_or_default()
-            } else {
-                toon_encode(&output)
-            }
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+            Ok(format_output(&output, &format))
+        }
     }
 
     #[tool(name = "news.testSource", description = "Test a single source and return up to 10 items. Input: source ID (from sources.list). Useful for debugging source configuration, parser issues, or verifying a new source works. Returns NewsItem[]. Do NOT use to fetch multiple articles — use news.fetch.")]
@@ -465,21 +504,14 @@ impl IgsMcpServer {
         let output = news::news_test_source(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "news.testSource",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "news.testSource",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "news.enrich", description = "Offline NLP enrichment for news items. Extracts topics, entities, sentiment, and summary. No external API calls. Use with insights.indexArticles for cross-article analysis.")]
@@ -489,21 +521,37 @@ impl IgsMcpServer {
         let output = news::news_enrich(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "news.enrich",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "news.enrich",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
+    }
+
+    // ── Weather Tools ──────────────────────────────────────────
+
+    #[tool(name = "weather.forecast", description = "Get weather forecast for a location. Returns daily forecasts with temp, condition, humidity, wind. Uses OpenWeatherMap API (free tier). Location: city name or lat,lon. Days: 1-5 (default 3). Default output: TOON.")]
+    async fn weather_forecast(&self, params: Parameters<WeatherForecastInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = weather::weather_forecast(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "weather.current", description = "Get current weather for a location. Returns temp, feels_like, condition, humidity, wind, visibility. Uses OpenWeatherMap API. Location: city name or lat,lon. Default output: TOON.")]
+    async fn weather_current(&self, params: Parameters<WeatherCurrentInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = weather::weather_current(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "weather.alerts", description = "Get weather alerts for a lat/lon location. Returns active severe weather warnings. Uses OpenWeatherMap One Call API. Input: latitude and longitude. Default output: TOON.")]
+    async fn weather_alerts(&self, params: Parameters<WeatherAlertsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = weather::weather_alerts(params.0).await?;
+        Ok(format_output(&output, &format))
     }
 
     // ── Reddit Tools ────────────────────────────────────────────
@@ -515,21 +563,14 @@ impl IgsMcpServer {
         let output = reddit::reddit_search(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "reddit.search",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "reddit.search",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds (old.reddit.com/r/{sub}/.rss). Reliable cross-platform access that works without API keys or residential IPs. Pass subreddit names without r/ prefix. Returns NewsItem[] compatible with news.enrich and insights.indexArticles. Do NOT use to search — use reddit.search for queries.")]
@@ -539,21 +580,14 @@ impl IgsMcpServer {
         let output = reddit::reddit_feed(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "reddit.feed",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "reddit.feed",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     // ── Research Tools ──────────────────────────────────────────
@@ -565,21 +599,14 @@ impl IgsMcpServer {
         let output = research::research_search(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "research.search",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "research.search",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "research.paper", description = "Get detailed paper information by ID. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. Returns PaperDetail with title, authors, abstract, year, citations, references, pdf_url. Optionally include_citations, include_references, extract_pdf. Do NOT use to search — use research.search first.")]
@@ -588,14 +615,12 @@ impl IgsMcpServer {
         let output = research::research_paper(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "research.paper",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "research.paper",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
         Ok(Json(output))
     }
@@ -603,6 +628,42 @@ impl IgsMcpServer {
     #[tool(name = "research.download", description = "Download a research paper PDF to disk. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. For Semantic Scholar, fetches PDF URL from API first. Optional output_path (default: {paper_id}.pdf) and format. Returns file path and size. Do NOT use to view abstracts — use research.paper for metadata.")]
     async fn research_download(&self, params: Parameters<ResearchDownloadInput>) -> Result<Json<ResearchDownloadOutput>, String> {
         research::research_download(params.0).await.map(Json)
+    }
+
+    // ── Security Tools ──────────────────────────────────────────
+
+    #[tool(name = "security.cve", description = "Search CVE vulnerabilities from NVD (National Vulnerability Database). Returns CVE ID, severity, CVSS score, affected products, references. Use for threat intelligence and vulnerability monitoring. Supports days_back (default 30), severity filter, limit. Default output: TOON.")]
+    async fn security_cve(&self, params: Parameters<CveSearchInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.query.clone();
+        let output = security::security_cve_search(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "security.cve",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "security.advisories", description = "Search GitHub Security Advisories by ecosystem (npm, pip, maven, go, rust). Returns advisory ID (GHSA), CVE ID, severity, vulnerable version range, patched versions. Use for dependency vulnerability monitoring. Default output: TOON.")]
+    async fn security_advisories(&self, params: Parameters<SecurityAdvisoriesInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.ecosystem.clone();
+        let output = security::security_advisories(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "security.advisories",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
     }
 
     // ── Web Tools ───────────────────────────────────────────────
@@ -614,21 +675,14 @@ impl IgsMcpServer {
         let output = web::web_search(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "web.search",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "web.search",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata (title, headings, og:description, link count). Provider 'default' uses HTTP+html-to-markdown. Provider 'lightpanda' renders JavaScript — set lightpanda.enabled=true in settings.yml first. Lightpanda supports wait_selector, strip_mode, wait_until, include_frames for JS-heavy sites. Default output: TOON. Do NOT use for multiple pages, search results, or news — use web.crawl, web.search, or news.fetch respectively.")]
@@ -638,21 +692,14 @@ impl IgsMcpServer {
         let output = web::web_scrape(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "web.scrape",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "web.scrape",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Renders JavaScript. Requires lightpanda.enabled=true in settings.yml (binary auto-downloads). Supports max_depth (default 2), max_pages (default 20), obey_robots, dump_format (markdown/html/semantic_tree), wait_until, wait_selector, strip_mode, include_frames. Returns pages with depth and status. Default output: TOON. Do NOT use for single pages, search, or news — use web.scrape, web.search, or news.fetch respectively.")]
@@ -662,21 +709,14 @@ impl IgsMcpServer {
         let output = web::web_crawl(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "web.crawl",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "web.crawl",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Fetches /sitemap.xml, extracts <loc> URLs. Supports limit (default 100) and search filter. Returns WebMapOutput with links array containing url and optional title. Default output: TOON. Do NOT use to fetch content — use web.scrape or web.crawl.")]
@@ -686,21 +726,14 @@ impl IgsMcpServer {
         let output = web::web_map(params.0).await?;
         #[cfg(not(test))]
         {
-            if let Ok(settings) = crate::config::load_settings().await {
-                crate::tools::dump::maybe_dump(
-                    &settings,
-                    "web.map",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "web.map",
+                &_subject,
+                &toon_encode(&output),
+            );
         }
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     // ── Insight Tools ───────────────────────────────────────────
@@ -714,12 +747,7 @@ impl IgsMcpServer {
     async fn insights_trending(&self, params: Parameters<InsightTrendingInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = insights::insights_trending(&self.insights, params.0).await?;
-        let text = if format == "json" {
-            serde_json::to_string_pretty(&output).unwrap_or_default()
-        } else {
-            toon_encode(&output)
-        };
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(format_output(&output, &format))
     }
 
     #[tool(name = "insights.indexArticles", description = "Index articles in the in-memory insight engine for cross-article entity analysis. Input: articles with id, title, pub_date, source_name, and optionally domains (Vec<DomainInfo>) and entities (Vec<EntityInfo>). Use news.fetch with depth='deep' to automate fetch→enrich→index pipeline. After indexing, use insights.findConnections or insights.trendingEntities. Do NOT use to search — use insights.findConnections or insights.trendingEntities.")]
@@ -741,84 +769,84 @@ impl IgsMcpServer {
 
     #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript. Spawns persistent browser session on first call. Use wait_until to control when page is considered loaded. Do NOT use for simple HTTP fetching, API calls, or non-web content — use web.scrape for simple fetching.")]
     async fn lp_goto(&self, params: Parameters<LpGotoInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_goto(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown. Supports strip_mode to remove js/css/ui elements. Do NOT use to navigate — call lightpanda.goto first.")]
     async fn lp_markdown(&self, params: Parameters<LpMarkdownInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_markdown(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text. Do NOT use to navigate — call lightpanda.goto first.")]
     async fn lp_links(&self, params: Parameters<LpLinksInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_links(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result. Example: document.title, document.querySelectorAll('h1').length. Do NOT use for simple content extraction — use lightpanda.markdown.")]
     async fn lp_evaluate(&self, params: Parameters<LpEvaluateInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_evaluate(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation of page structure. Do NOT use for full page content — use lightpanda.markdown.")]
     async fn lp_semantic_tree(&self, params: Parameters<LpSemanticTreeInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_semantic_tree(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.structuredData", description = "Extract structured data from the current page: JSON-LD, OpenGraph metadata, microdata. Do NOT use for raw content — use lightpanda.markdown.")]
     async fn lp_structured_data(&self, params: Parameters<LpStructuredDataInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_structured_data(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.detectForms", description = "Detect forms on the current page. Returns form fields, actions, and methods. Do NOT use to fill forms — use lightpanda.fill.")]
     async fn lp_detect_forms(&self, params: Parameters<LpDetectFormsInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_detect_forms(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector. Optionally wait for navigation. Do NOT use to fill forms — use lightpanda.fill.")]
     async fn lp_click(&self, params: Parameters<LpClickInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_click(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field. Do NOT use to click buttons — use lightpanda.click.")]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_fill(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right. Pixels: amount to scroll. Do NOT use for navigation — use lightpanda.goto.")]
     async fn lp_scroll(&self, params: Parameters<LpScrollInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_scroll(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.waitForSelector", description = "Wait for a CSS selector to appear on the page. Useful for SPAs that load content dynamically. Do NOT use for navigation — use lightpanda.goto.")]
     async fn lp_wait_for_selector(&self, params: Parameters<LpWaitForSelectorInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_wait_for_selector(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
     #[tool(name = "lightpanda.interactiveElements", description = "Find interactive elements on the current page (buttons, links, inputs). Returns clickable/fillable elements. Do NOT use to interact — use lightpanda.click or lightpanda.fill.")]
     async fn lp_interactive_elements(&self, params: Parameters<LpInteractiveElementsInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&config::load_settings().await.map_err(|e| format!("{}", e))?.lightpanda)
+        let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_interactive_elements(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }

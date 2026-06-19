@@ -6,10 +6,13 @@ pub mod parsers;
 pub mod pools;
 pub mod reddit;
 pub mod research;
+pub mod security;
 pub mod sources;
+pub mod tool_guide;
 pub mod types;
 pub mod types_base;
 pub mod web;
+pub mod weather;
 
 pub mod dump;
 pub mod registry;
