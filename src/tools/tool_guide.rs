@@ -37,6 +37,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     // Health & Environment
     decision_tree.insert("I need health statistics".to_string(), "health.cdc_leading_causes".to_string());
     decision_tree.insert("I need COVID-19 data".to_string(), "health.cdc_covid".to_string());
+    decision_tree.insert("I need global health data".to_string(), "health.who_gho".to_string());
     decision_tree.insert("I need fire hotspot data".to_string(), "satellite.firms_fires".to_string());
     decision_tree.insert("I need EPA facility data".to_string(), "env.epa_facilities".to_string());
     
@@ -114,8 +115,9 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
         ToolGuideItem { name: "politics.opensecrets".to_string(), description: "Search OpenSecrets donor data".to_string() },
     ]);
     categories.insert("Health".to_string(), vec![
-        ToolGuideItem { name: "health.cdc_leading_causes".to_string(), description: "Leading causes of death".to_string() },
-        ToolGuideItem { name: "health.cdc_covid".to_string(), description: "COVID-19 statistics".to_string() },
+        ToolGuideItem { name: "health.cdc_leading_causes".to_string(), description: "Leading causes of death (US)".to_string() },
+        ToolGuideItem { name: "health.cdc_covid".to_string(), description: "COVID-19 statistics (US)".to_string() },
+        ToolGuideItem { name: "health.who_gho".to_string(), description: "Global health indicators (194 countries)".to_string() },
     ]);
     categories.insert("Satellite".to_string(), vec![
         ToolGuideItem { name: "satellite.firms_fires".to_string(), description: "NASA FIRMS fire hotspots".to_string() },
