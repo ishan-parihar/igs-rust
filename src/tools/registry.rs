@@ -16,7 +16,7 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         tools: &[
             "pools.list", "pools.upsert", "pools.delete",
             "sources.list", "sources.upsert", "sources.delete",
-            "sources.autodiscover", "sources.enableGenericScraper",
+            "sources.autodiscover", "sources.enable_generic_scraper",
             "sources.countries", "sources.cities", "sources.domains",
             "parsers.list", "tool.guide",
         ],
@@ -25,7 +25,7 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         name: "news",
         description: "Fetch, test, and enrich news from RSS feeds and web crawling. Use news.fetch for general news gathering, news.fetch with depth=deep for full intelligence pipeline.",
         tools: &[
-            "news.fetch", "news.testSource", "news.enrich",
+            "news.fetch", "news.test_source", "news.enrich",
         ],
     },
     ToolGroup {
@@ -44,10 +44,10 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
     },
     ToolGroup {
         name: "insights",
-        description: "Find cross-entity connections and trending topics across indexed articles. Requires prior news.fetch with depth=deep or insights.indexArticles to populate the index.",
+        description: "Find cross-entity connections and trending topics across indexed articles. Requires prior news.fetch with depth=deep or insights.index_articles to populate the index.",
         tools: &[
-            "insights.findConnections", "insights.trendingEntities",
-            "insights.getStats", "insights.indexArticles", "insights.clearIndex",
+            "insights.find_connections", "insights.trending_entities",
+            "insights.get_stats", "insights.index_articles", "insights.clear_index",
         ],
     },
     ToolGroup {
@@ -133,9 +133,9 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         tools: &[
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
             "lightpanda.evaluate", "lightpanda.semantic_tree",
-            "lightpanda.structuredData", "lightpanda.detectForms",
+            "lightpanda.structured_data", "lightpanda.detect_forms",
             "lightpanda.click", "lightpanda.fill", "lightpanda.scroll",
-            "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+            "lightpanda.wait_for_selector", "lightpanda.interactive_elements",
         ],
     },
     ToolGroup {
@@ -204,15 +204,15 @@ mod tests {
         let expected = vec![
             "pools.list", "pools.upsert", "pools.delete",
             "sources.list", "sources.upsert", "sources.delete",
-            "sources.autodiscover", "sources.enableGenericScraper",
+            "sources.autodiscover", "sources.enable_generic_scraper",
             "sources.countries", "sources.cities", "sources.domains",
             "parsers.list", "tool.guide",
-            "news.fetch", "news.testSource", "news.enrich",
+            "news.fetch", "news.test_source", "news.enrich",
             "reddit.search", "reddit.feed",
             "research.search", "research.paper", "research.download", "research.pubmed_search",
             "web.search", "web.scrape", "web.crawl", "web.map",
-            "insights.findConnections", "insights.trendingEntities",
-            "insights.indexArticles", "insights.getStats", "insights.clearIndex",
+            "insights.find_connections", "insights.trending_entities",
+            "insights.index_articles", "insights.get_stats", "insights.clear_index",
             "weather.forecast", "weather.current", "weather.alerts",
             "finance.market", "finance.crypto", "finance.trending",
             "security.cve", "security.advisories",
@@ -224,9 +224,9 @@ mod tests {
             "climate.noaa_observations", "climate.noaa_stations",
             "legal.search_cases", "legal.case_details",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
-            "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
-            "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
-            "lightpanda.scroll", "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+            "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structured_data",
+            "lightpanda.detect_forms", "lightpanda.click", "lightpanda.fill",
+            "lightpanda.scroll", "lightpanda.wait_for_selector", "lightpanda.interactive_elements",
             "sop.list", "sop.execute",
         ];
         

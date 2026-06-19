@@ -18,15 +18,15 @@ Guide for AI agents using IGS as an intelligence gathering tool.
 
 ### Tool Discovery (Progressive Loading)
 
-Tools are organized into 17 domain groups. Load only the groups you need to conserve context.
+Tools are organized into 16 domain groups. Load only the groups you need to conserve context.
 
 | Group | Tools | Context Est. | When to Load |
 |-------|-------|-------------|--------------|
 | **Discovery** | `pools.*`, `sources.*`, `parsers.list`, `tool.guide` | ~6% | Initial setup, exploring available sources |
-| **News** | `news.fetch`, `news.testSource`, `news.enrich` | ~3% | Fetching and enriching news articles |
+| **News** | `news.fetch`, `news.test_source`, `news.enrich` | ~3% | Fetching and enriching news articles |
 | **Research** | `research.search`, `research.paper`, `research.download`, `research.pubmed_search` | ~4% | Academic and medical paper search |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | ~4% | Web search, scraping, crawling |
-| **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
+| **Insights** | `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
 | **Social** | `reddit.search`, `reddit.feed` | ~1% | Search Reddit posts and follow subreddit feeds |
 | **Weather** | `weather.forecast`, `weather.current`, `weather.alerts` | ~3% | Weather forecasts and alerts |
 | **Finance** | `finance.market`, `finance.crypto`, `finance.trending` | ~3% | Stock and cryptocurrency data |
@@ -34,12 +34,11 @@ Tools are organized into 17 domain groups. Load only the groups you need to cons
 | **Patents** | `patents.search`, `patents.details` | ~2% | USPTO patent search |
 | **Government** | `govt.bills`, `govt.regulations` | ~2% | Congressional bills and federal regulations |
 | **Politics** | `politics.fec_candidates`, `politics.fec_committees` | ~2% | FEC campaign finance |
-| **Health** | `health.cdc_leading_causes`, `health.cdc_covid`, `health.who_gho` | ~2% | CDC health statistics + WHO global data |
-| **Satellite** | `satellite.firms_fires` | ~1% | NASA FIRMS fire detection |
+| **Health** | `health.cdc_leading_causes`, `health.who_gho` | ~2% | CDC health statistics + WHO global data |
 | **Climate** | `climate.noaa_observations`, `climate.noaa_stations` | ~2% | NOAA historical weather data |
 | **Legal** | `legal.search_cases`, `legal.case_details` | ~2% | CourtListener case law |
-| **Environment** | `env.epa_facilities`, `env.epa_emissions` | ~2% | EPA facility and emissions data |
-| **Supply Chain** | `supply_chain.trade_flows` | ~1% | UN Comtrade trade statistics |
+| **Environment** | `env.epa_facilities`, `env.epa_emissions`, `satellite.firms_fires` | ~2% | EPA facility and emissions data + NASA FIRMS fire detection |
+
 | **SOP** | `sop.list`, `sop.execute` | ~2% | Multi-step intelligence workflows |
 | **Browser** | `lightpanda.*` (12 tools) | ~8% | JS-rendered browsing, form interaction |
 
@@ -48,18 +47,18 @@ Tools are organized into 17 domain groups. Load only the groups you need to cons
 - **Quick scan**: Load Discovery + News (~9% context)
 - **Full research**: Load Discovery + News + Research + Web + Insights (~20% context)
 - **Intelligence analysis**: Load Weather + Finance + Security + Government + Politics (~12% context)
-- **Environmental monitoring**: Load Satellite + Climate + Environment (~5% context)
+- **Environmental monitoring**: Load Climate + Environment (~4% context)
 - **Browser automation**: Load Browser only (~8% context) after navigating
 
 **Quick reference:**
 
 | Group | Tools |
 |-------|-------|
-| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`, `tool.guide` |
-| **News** | `news.fetch`, `news.testSource`, `news.enrich` |
+| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enable_generic_scraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`, `tool.guide` |
+| **News** | `news.fetch`, `news.test_source`, `news.enrich` |
 | **Research** | `research.search`, `research.paper`, `research.download`, `research.pubmed_search` |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` |
-| **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` |
+| **Insights** | `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.getStats`, `insights.clearIndex` |
 | **Social** | `reddit.search`, `reddit.feed` |
 | **Weather** | `weather.forecast`, `weather.current`, `weather.alerts` |
 | **Finance** | `finance.market`, `finance.crypto`, `finance.trending` |
@@ -67,14 +66,13 @@ Tools are organized into 17 domain groups. Load only the groups you need to cons
 | **Patents** | `patents.search`, `patents.details` |
 | **Government** | `govt.bills`, `govt.regulations` |
 | **Politics** | `politics.fec_candidates`, `politics.fec_committees` |
-| **Health** | `health.cdc_leading_causes`, `health.cdc_covid`, `health.who_gho` |
-| **Satellite** | `satellite.firms_fires` |
+| **Health** | `health.cdc_leading_causes`, `health.who_gho` |
 | **Climate** | `climate.noaa_observations`, `climate.noaa_stations` |
 | **Legal** | `legal.search_cases`, `legal.case_details` |
-| **Environment** | `env.epa_facilities`, `env.epa_emissions` |
-| **Supply Chain** | `supply_chain.trade_flows` |
+| **Environment** | `env.epa_facilities`, `env.epa_emissions`, `satellite.firms_fires` |
+
 | **SOP** | `sop.list`, `sop.execute` |
-| **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` |
+| **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structured_data`, `lightpanda.detect_forms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.wait_for_selector`, `lightpanda.interactive_elements` |
 
 ## Recommended Workflows
 
@@ -84,10 +82,10 @@ Tools are organized into 17 domain groups. Load only the groups you need to cons
 news.fetch(pools=["GLOBAL_TECH_CYBER"], limit=50, depth="deep")
 → Returns fetched count, enriched count, indexed count, stats
 
-insights.trendingEntities(time_window_hours=24)
+insights.trending_entities(time_window_hours=24)
 → Returns entities with increasing mention frequency
 
-insights.findConnections(min_domains=2)
+insights.find_connections(min_domains=2)
 → Returns cross-domain connections. Entity is optional — omit for all connections.
 ```
 
@@ -100,7 +98,7 @@ news.fetch(pools=["GLOBAL_BREAKING"], keywords=["earthquake"], limit=20)
 news.enrich(items=<from above>, extract=["topics","entities","sentiment"])
 → Returns enriched items with NLP data
 
-insights.indexArticles(articles=<enriched items>)
+insights.index_articles(articles=<enriched items>)
 → Indexes for cross-article analysis
 ```
 
@@ -149,10 +147,10 @@ news.fetch(cities=["Delhi","Mumbai"], limit=10)
 lightpanda.goto(url="https://example.com", wait_until="networkidle")
 → Navigate to page, render JavaScript
 
-lightpanda.structuredData()
+lightpanda.structured_data()
 → Extract JSON-LD, OpenGraph, microdata
 
-lightpanda.detectForms()
+lightpanda.detect_forms()
 → Find forms on the page
 
 lightpanda.fill(selector="input[name=email]", value="user@example.com")
@@ -229,13 +227,13 @@ These tools use a persistent browser session via `lightpanda mcp`. The page stay
 | `lightpanda.links` | `selector?` | Extract links from current page. |
 | `lightpanda.evaluate` | `expression` | Execute JavaScript. Returns result. |
 | `lightpanda.semantic_tree` | `include_text?` | Get AI-friendly DOM tree. |
-| `lightpanda.structuredData` | `jsonld?`, `opengraph?`, `microdata?` | Extract JSON-LD, OpenGraph, microdata. |
-| `lightpanda.detectForms` | `selector?` | Find forms on current page. |
+| `lightpanda.structured_data` | `jsonld?`, `opengraph?`, `microdata?` | Extract JSON-LD, OpenGraph, microdata. |
+| `lightpanda.detect_forms` | `selector?` | Find forms on current page. |
 | `lightpanda.click` | `selector`, `wait_for_navigation?` | Click element by CSS selector. |
 | `lightpanda.fill` | `selector`, `value` | Fill form field. |
 | `lightpanda.scroll` | `direction?`, `pixels?` | Scroll page (up/down/left/right). |
-| `lightpanda.waitForSelector` | `selector`, `timeout_ms?` | Wait for element to appear. |
-| `lightpanda.interactiveElements` | `selector?` | Find clickable/fillable elements. |
+| `lightpanda.wait_for_selector` | `selector`, `timeout_ms?` | Wait for element to appear. |
+| `lightpanda.interactive_elements` | `selector?` | Find clickable/fillable elements. |
 
 ### NLP Enrichment
 
@@ -250,12 +248,12 @@ These tools use a persistent browser session via `lightpanda mcp`. The page stay
 
 ### Insight Engine
 
-After indexing articles via `insights.indexArticles` or `news.fetch` with `depth: "deep"`:
+After indexing articles via `insights.index_articles` or `news.fetch` with `depth: "deep"`:
 
 | Tool | Purpose |
 |------|---------|
-| `insights.findConnections(entity?, min_domains?, limit?)` | Find cross-domain connections. Entity optional — omit for all connections. |
-| `insights.trendingEntities(time_window_hours, min_growth, min_current_mentions)` | Detect entity mention trends |
+| `insights.find_connections(entity?, min_domains?, limit?)` | Find cross-domain connections. Entity optional — omit for all connections. |
+| `insights.trending_entities(time_window_hours, min_growth, min_current_mentions)` | Detect entity mention trends |
 | `insights.getStats` | Engine statistics (total_articles, total_entities, total_domains) |
 | `insights.clearIndex` | Clear all indexed articles |
 

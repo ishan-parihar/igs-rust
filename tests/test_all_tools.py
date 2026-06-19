@@ -148,19 +148,19 @@ if r and "result" in r:
     expected = [
         "pools.list", "pools.upsert", "pools.delete",
         "sources.list", "sources.upsert", "sources.delete",
-        "sources.autodiscover", "sources.enableGenericScraper",
+        "sources.autodiscover", "sources.enable_generic_scraper",
         "sources.countries", "sources.cities", "sources.domains",
         "parsers.list",
-        "news.fetch", "news.testSource", "news.enrich",
+        "news.fetch", "news.test_source", "news.enrich",
         "research.search", "research.paper", "research.download",
         "web.search", "web.scrape", "web.crawl", "web.map",
-        "insights.findConnections", "insights.trendingEntities",
-        "insights.indexArticles", "insights.getStats", "insights.clearIndex",
+        "insights.find_connections", "insights.trending_entities",
+        "insights.index_articles", "insights.getStats", "insights.clearIndex",
         "reddit.search", "reddit.feed",
         "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
-        "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
-        "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
-        "lightpanda.scroll", "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+        "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structured_data",
+        "lightpanda.detect_forms", "lightpanda.click", "lightpanda.fill",
+        "lightpanda.scroll", "lightpanda.wait_for_selector", "lightpanda.interactive_elements",
     ]
     missing = [t for t in expected if t not in tool_names]
     extra = [t for t in tool_names if t not in expected]
@@ -269,13 +269,13 @@ if r and "sources" in r and r["sources"]:
     test_src = r["sources"][0]["id"]
     print(f"        first TECH source: {test_src}")
 if test_src:
-    r = call(proc, "news.testSource", {"id": test_src, "cache_mode": "bypass", "format": "json"}, 12)
+    r = call(proc, "news.test_source", {"id": test_src, "cache_mode": "bypass", "format": "json"}, 12)
     if r and "items" in r:
-        check(r.get("count", 0) > 0, f"news.testSource({test_src},{r['count']})")
+        check(r.get("count", 0) > 0, f"news.test_source({test_src},{r['count']})")
     else:
-        fail("news.testSource")
+        fail("news.test_source")
 else:
-    fail("news.testSource", "no sources in GLOBAL_TECH_CYBER")
+    fail("news.test_source", "no sources in GLOBAL_TECH_CYBER")
 
 r = call(
     proc,
@@ -384,7 +384,7 @@ else:
 print("\n── Insights ──")
 r = call(
     proc,
-    "insights.indexArticles",
+    "insights.index_articles",
     {
         "articles": [
             {
@@ -414,22 +414,22 @@ r = call(
     19,
 )
 if r and r.get("indexed") == 2:
-    ok("insights.indexArticles", "")
+    ok("insights.index_articles", "")
     show(r, ["indexed", "stats"])
 else:
-    fail("insights.indexArticles")
+    fail("insights.index_articles")
 
-r = call(proc, "insights.findConnections", {"entity": "OpenAI"}, 20)
+r = call(proc, "insights.find_connections", {"entity": "OpenAI"}, 20)
 if r and r.get("count", 0) > 0:
-    ok("insights.findConnections(OpenAI)", "")
+    ok("insights.find_connections(OpenAI)", "")
 else:
-    fail("insights.findConnections")
+    fail("insights.find_connections")
 
-r = call(proc, "insights.trendingEntities", {"min_current_mentions": 1, "format": "json"}, 21)
+r = call(proc, "insights.trending_entities", {"min_current_mentions": 1, "format": "json"}, 21)
 if r and "trending" in r:
-    ok("insights.trendingEntities", "")
+    ok("insights.trending_entities", "")
 else:
-    fail("insights.trendingEntities")
+    fail("insights.trending_entities")
 
 r = call(proc, "insights.getStats", rid=22)
 if r and r.get("stats", {}).get("total_articles", 0) > 0:

@@ -438,7 +438,7 @@ Example pattern for `pools.list`:
 description: "List all available source pools. Returns pool IDs and metadata. Use to discover what news categories are available. Do NOT use to fetch actual news content — use news.fetch instead."
 ```
 
-Apply similar anti-purpose lines to: `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`
+Apply similar anti-purpose lines to: `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enable_generic_scraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`
 
 - [ ] **Step 2: Add anti-purpose to news tools**
 
@@ -447,7 +447,7 @@ Example pattern for `news.fetch`:
 Do NOT use for: web scraping (use web.scrape), academic papers (use research.*), Reddit posts (use reddit.*).
 ```
 
-Apply to: `news.fetch`, `news.testSource`, `news.enrich`
+Apply to: `news.fetch`, `news.test_source`, `news.enrich`
 
 - [ ] **Step 3: Add anti-purpose to research tools**
 
@@ -469,12 +469,12 @@ Apply to: `web.search`, `web.scrape`, `web.crawl`, `web.map`
 
 - [ ] **Step 5: Add anti-purpose to insights tools**
 
-Example pattern for `insights.findConnections`:
+Example pattern for `insights.find_connections`:
 ```
 Do NOT use for: fetching news (use news.fetch), web search (use web.search), paper research (use research.*).
 ```
 
-Apply to: `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex`
+Apply to: `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.getStats`, `insights.clearIndex`
 
 - [ ] **Step 6: Add anti-purpose to social tools**
 
@@ -667,19 +667,19 @@ def test_tools_list():
     expected_tools = [
         "pools.list", "pools.upsert", "pools.delete",
         "sources.list", "sources.upsert", "sources.delete",
-        "sources.autodiscover", "sources.enableGenericScraper",
+        "sources.autodiscover", "sources.enable_generic_scraper",
         "sources.countries", "sources.cities", "sources.domains",
         "parsers.list",
-        "news.fetch", "news.testSource", "news.enrich",
+        "news.fetch", "news.test_source", "news.enrich",
         "research.search", "research.paper", "research.download",
         "web.search", "web.scrape", "web.crawl", "web.map",
-        "insights.findConnections", "insights.trendingEntities",
-        "insights.indexArticles", "insights.getStats", "insights.clearIndex",
+        "insights.find_connections", "insights.trending_entities",
+        "insights.index_articles", "insights.getStats", "insights.clearIndex",
         "reddit.search", "reddit.feed",
         "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
-        "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
-        "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
-        "lightpanda.scroll", "lightpanda.waitForSelector", "lightpanda.interactiveElements",
+        "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structured_data",
+        "lightpanda.detect_forms", "lightpanda.click", "lightpanda.fill",
+        "lightpanda.scroll", "lightpanda.wait_for_selector", "lightpanda.interactive_elements",
     ]
     
     for tool in expected_tools:

@@ -256,7 +256,7 @@ async fn tool_guide(&self, params: Parameters<ToolGuideInput>) -> Result<CallToo
             ("Fetch news articles", "news.fetch"),
             ("Search academic papers", "research.search"),
             ("Scrape a website", "web.scrape"),
-            ("Find cross-domain connections", "insights.findConnections"),
+            ("Find cross-domain connections", "insights.find_connections"),
             ("Monitor Reddit", "reddit.search"),
             ("Browse JS-rendered pages", "lightpanda.goto"),
         ]),
@@ -264,7 +264,7 @@ async fn tool_guide(&self, params: Parameters<ToolGuideInput>) -> Result<CallToo
         drill_down_chains: vec![
             DrillDownChain {
                 name: "Deep Research Pipeline",
-                steps: vec!["web.search", "web.scrape", "news.enrich", "insights.indexArticles"],
+                steps: vec!["web.search", "web.scrape", "news.enrich", "insights.index_articles"],
             },
         ],
     };
@@ -503,7 +503,7 @@ let deep_research = IntelligenceSop {
         SopStep { tool: "web.search", params: json!({"query": "$QUERY"}), depends_on: None },
         SopStep { tool: "web.scrape", params: json!({"url": "$TOP_RESULT}"), depends_on: Some(0) },
         SopStep { tool: "news.enrich", params: json!({"items": "$SCRAPED}"), depends_on: Some(1) },
-        SopStep { tool: "insights.indexArticles", params: json!({"articles": "$ENRICHED}"), depends_on: Some(2) },
+        SopStep { tool: "insights.index_articles", params: json!({"articles": "$ENRICHED}"), depends_on: Some(2) },
     ],
 };
 ```
@@ -584,10 +584,10 @@ let deep_research = IntelligenceSop {
 ```
 Pattern: <domain>.<action>
 Examples:
-  news.fetch, news.enrich, news.testSource
+  news.fetch, news.enrich, news.test_source
   research.search, research.paper, research.download
   web.search, web.scrape, web.crawl, web.map
-  insights.findConnections, insights.trendingEntities
+  insights.find_connections, insights.trending_entities
   
 New domains:
   weather.forecast, weather.alerts, weather.current
@@ -726,15 +726,15 @@ The three-phase approach ensures each increment is independently valuable and de
     "I need vulnerability info": "security.cve",
     "I need patent search": "patents.search",
     "I need government bills": "govt.bills",
-    "I need cross-source analysis": "insights.findConnections",
+    "I need cross-source analysis": "insights.find_connections",
     "I need to browse JS pages": "lightpanda.goto"
   },
   "categories": {
     "Discovery": ["pools.list", "sources.list", "parsers.list"],
-    "News": ["news.fetch", "news.enrich", "news.testSource"],
+    "News": ["news.fetch", "news.enrich", "news.test_source"],
     "Research": ["research.search", "research.paper", "research.download"],
     "Web": ["web.search", "web.scrape", "web.crawl", "web.map"],
-    "Insights": ["insights.findConnections", "insights.trendingEntities"],
+    "Insights": ["insights.find_connections", "insights.trending_entities"],
     "Social": ["reddit.search", "reddit.feed"],
     "Weather": ["weather.forecast", "weather.alerts", "weather.current"],
     "Finance": ["finance.market", "finance.crypto", "finance.trending"],
@@ -744,11 +744,11 @@ The three-phase approach ensures each increment is independently valuable and de
   "drill_down_chains": [
     {
       "name": "Deep Research",
-      "steps": ["web.search", "web.scrape", "news.enrich", "insights.indexArticles"]
+      "steps": ["web.search", "web.scrape", "news.enrich", "insights.index_articles"]
     },
     {
       "name": "Threat Monitoring",
-      "steps": ["security.cve", "news.fetch", "insights.findConnections"]
+      "steps": ["security.cve", "news.fetch", "insights.find_connections"]
     }
   ]
 }

@@ -1084,7 +1084,7 @@ pub struct IgsSettings {
 # Leave commented or empty to expose all 43 tools.
 # tool_groups:
 #   - discovery      # pools.list, sources.list, geo.list, parsers.list
-#   - news           # news.fetch, news.testSource, news.enrich
+#   - news           # news.fetch, news.test_source, news.enrich
 #   - research       # research.search, research.paper, research.download
 #   - web            # web.search, web.scrape, web.crawl, web.map
 #   - insights       # insight.findConnections, insight.trending, etc.

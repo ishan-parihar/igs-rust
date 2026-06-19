@@ -14,7 +14,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     decision_tree.insert("I need to monitor Reddit".to_string(), "reddit.search".to_string());
     decision_tree.insert("I need to download a paper".to_string(), "research.download".to_string());
     decision_tree.insert("I need to crawl a website".to_string(), "web.crawl".to_string());
-    decision_tree.insert("I need to test a news source".to_string(), "news.testSource".to_string());
+    decision_tree.insert("I need to test a news source".to_string(), "news.test_source".to_string());
     
     // Weather & Climate
     decision_tree.insert("I need weather data".to_string(), "weather.forecast".to_string());
@@ -55,11 +55,11 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     decision_tree.insert("I need court case details".to_string(), "legal.case_details".to_string());
     
     // Insights & Discovery
-    decision_tree.insert("I need to find cross-source connections".to_string(), "insights.findConnections".to_string());
-    decision_tree.insert("I need to detect trending entities".to_string(), "insights.trendingEntities".to_string());
-    decision_tree.insert("I need to index articles for analysis".to_string(), "insights.indexArticles".to_string());
-    decision_tree.insert("I need insight engine statistics".to_string(), "insights.getStats".to_string());
-    decision_tree.insert("I need to clear the insight index".to_string(), "insights.clearIndex".to_string());
+    decision_tree.insert("I need to find cross-source connections".to_string(), "insights.find_connections".to_string());
+    decision_tree.insert("I need to detect trending entities".to_string(), "insights.trending_entities".to_string());
+    decision_tree.insert("I need to index articles for analysis".to_string(), "insights.index_articles".to_string());
+    decision_tree.insert("I need insight engine statistics".to_string(), "insights.get_stats".to_string());
+    decision_tree.insert("I need to clear the insight index".to_string(), "insights.clear_index".to_string());
     
     // Browser
     decision_tree.insert("I need to browse JS-rendered pages".to_string(), "lightpanda.goto".to_string());
@@ -73,7 +73,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     decision_tree.insert("I need to delete a news pool".to_string(), "pools.delete".to_string());
     decision_tree.insert("I need to add a news source".to_string(), "sources.upsert".to_string());
     decision_tree.insert("I need to remove a news source".to_string(), "sources.delete".to_string());
-    decision_tree.insert("I need to scrape a website without RSS".to_string(), "sources.enableGenericScraper".to_string());
+    decision_tree.insert("I need to scrape a website without RSS".to_string(), "sources.enable_generic_scraper".to_string());
     decision_tree.insert("I need to list cities with sources".to_string(), "sources.cities".to_string());
     decision_tree.insert("I need to list domains with sources".to_string(), "sources.domains".to_string());
     
@@ -92,7 +92,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
         ToolGuideItem { name: "sources.upsert".to_string(), description: "Create/update a source".to_string() },
         ToolGuideItem { name: "sources.delete".to_string(), description: "Delete a source".to_string() },
         ToolGuideItem { name: "sources.autodiscover".to_string(), description: "Auto-discover RSS feeds".to_string() },
-        ToolGuideItem { name: "sources.enableGenericScraper".to_string(), description: "Enable HTML scraping".to_string() },
+        ToolGuideItem { name: "sources.enable_generic_scraper".to_string(), description: "Enable HTML scraping".to_string() },
         ToolGuideItem { name: "sources.countries".to_string(), description: "List countries with source counts".to_string() },
         ToolGuideItem { name: "sources.cities".to_string(), description: "List cities with source counts".to_string() },
         ToolGuideItem { name: "sources.domains".to_string(), description: "List domains with source counts".to_string() },
@@ -103,7 +103,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     // News - all 3 tools
     categories.insert("News".to_string(), vec![
         ToolGuideItem { name: "news.fetch".to_string(), description: "Fetch news from sources (depth=deep for full pipeline)".to_string() },
-        ToolGuideItem { name: "news.testSource".to_string(), description: "Test a single source (returns up to 10 items)".to_string() },
+        ToolGuideItem { name: "news.test_source".to_string(), description: "Test a single source (returns up to 10 items)".to_string() },
         ToolGuideItem { name: "news.enrich".to_string(), description: "NLP enrichment (topics, entities, sentiment)".to_string() },
     ]);
     
@@ -125,11 +125,11 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     
     // Insights - all 5 tools
     categories.insert("Insights".to_string(), vec![
-        ToolGuideItem { name: "insights.findConnections".to_string(), description: "Find cross-domain connections".to_string() },
-        ToolGuideItem { name: "insights.trendingEntities".to_string(), description: "Detect trending entities".to_string() },
-        ToolGuideItem { name: "insights.indexArticles".to_string(), description: "Index articles for analysis".to_string() },
-        ToolGuideItem { name: "insights.getStats".to_string(), description: "Engine statistics".to_string() },
-        ToolGuideItem { name: "insights.clearIndex".to_string(), description: "Clear all indexed articles".to_string() },
+        ToolGuideItem { name: "insights.find_connections".to_string(), description: "Find cross-domain connections".to_string() },
+        ToolGuideItem { name: "insights.trending_entities".to_string(), description: "Detect trending entities".to_string() },
+        ToolGuideItem { name: "insights.index_articles".to_string(), description: "Index articles for analysis".to_string() },
+        ToolGuideItem { name: "insights.get_stats".to_string(), description: "Engine statistics".to_string() },
+        ToolGuideItem { name: "insights.clear_index".to_string(), description: "Clear all indexed articles".to_string() },
     ]);
     
     // Social - all 2 tools
@@ -214,30 +214,30 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
         ToolGuideItem { name: "lightpanda.links".to_string(), description: "Extract links".to_string() },
         ToolGuideItem { name: "lightpanda.evaluate".to_string(), description: "Execute JavaScript".to_string() },
         ToolGuideItem { name: "lightpanda.semantic_tree".to_string(), description: "AI-friendly DOM tree".to_string() },
-        ToolGuideItem { name: "lightpanda.structuredData".to_string(), description: "Extract JSON-LD, OpenGraph".to_string() },
-        ToolGuideItem { name: "lightpanda.detectForms".to_string(), description: "Find forms".to_string() },
+        ToolGuideItem { name: "lightpanda.structured_data".to_string(), description: "Extract JSON-LD, OpenGraph".to_string() },
+        ToolGuideItem { name: "lightpanda.detect_forms".to_string(), description: "Find forms".to_string() },
         ToolGuideItem { name: "lightpanda.click".to_string(), description: "Click element".to_string() },
         ToolGuideItem { name: "lightpanda.fill".to_string(), description: "Fill form field".to_string() },
         ToolGuideItem { name: "lightpanda.scroll".to_string(), description: "Scroll page".to_string() },
-        ToolGuideItem { name: "lightpanda.waitForSelector".to_string(), description: "Wait for element".to_string() },
-        ToolGuideItem { name: "lightpanda.interactiveElements".to_string(), description: "Find clickable items".to_string() },
+        ToolGuideItem { name: "lightpanda.wait_for_selector".to_string(), description: "Wait for element".to_string() },
+        ToolGuideItem { name: "lightpanda.interactive_elements".to_string(), description: "Find clickable items".to_string() },
     ]);
     
     let drill_down_chains = vec![
         DrillDownChain {
             name: "Deep Research Pipeline".to_string(),
             description: "Search web, scrape top results, enrich with NLP, index for insights".to_string(),
-            steps: vec!["web.search".to_string(), "web.scrape".to_string(), "news.enrich".to_string(), "insights.indexArticles".to_string()],
+            steps: vec!["web.search".to_string(), "web.scrape".to_string(), "news.enrich".to_string(), "insights.index_articles".to_string()],
         },
         DrillDownChain {
             name: "Threat Monitoring".to_string(),
             description: "Search CVEs, fetch related news, find connections".to_string(),
-            steps: vec!["security.cve".to_string(), "news.fetch".to_string(), "insights.findConnections".to_string()],
+            steps: vec!["security.cve".to_string(), "news.fetch".to_string(), "insights.find_connections".to_string()],
         },
         DrillDownChain {
             name: "Competitive Intelligence".to_string(),
             description: "Search news, research papers, find trending entities".to_string(),
-            steps: vec!["news.fetch".to_string(), "research.search".to_string(), "insights.trendingEntities".to_string()],
+            steps: vec!["news.fetch".to_string(), "research.search".to_string(), "insights.trending_entities".to_string()],
         },
         DrillDownChain {
             name: "Policy Tracking".to_string(),

@@ -254,9 +254,9 @@ courtlistener:
 
 ---
 
-## Tools (71 Total)
+## Tools (68 Total)
 
-### Discovery (5 tools)
+### Discovery (13 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -267,7 +267,7 @@ courtlistener:
 | `sources.upsert` | Create/update a source |
 | `sources.delete` | Delete a source |
 | `sources.autodiscover` | Auto-discover RSS feeds |
-| `sources.enableGenericScraper` | Enable HTML scraping |
+| `sources.enable_generic_scraper` | Enable HTML scraping |
 | `sources.countries` | List countries with source counts |
 | `sources.cities` | List cities with source counts |
 | `sources.domains` | List domains with source counts |
@@ -279,7 +279,7 @@ courtlistener:
 | Tool | Description |
 |------|-------------|
 | `news.fetch` | Fetch news from sources (depth=deep for full pipeline) |
-| `news.testSource` | Test a single source |
+| `news.test_source` | Test a single source |
 | `news.enrich` | NLP enrichment (topics, entities, sentiment) |
 
 ### Research (4 tools)
@@ -304,9 +304,9 @@ courtlistener:
 
 | Tool | Description |
 |------|-------------|
-| `insights.findConnections` | Find cross-domain connections |
-| `insights.trendingEntities` | Detect trending entities |
-| `insights.indexArticles` | Index articles for analysis |
+| `insights.find_connections` | Find cross-domain connections |
+| `insights.trending_entities` | Detect trending entities |
+| `insights.index_articles` | Index articles for analysis |
 | `insights.getStats` | Engine statistics |
 | `insights.clearIndex` | Clear all indexed articles |
 
@@ -361,7 +361,7 @@ courtlistener:
 | `politics.fec_candidates` | Search FEC candidates | Not required (optional) |
 | `politics.fec_committees` | Search FEC committees | Not required (optional) |
 
-### Health (3 tools)
+### Health (2 tools)
 
 | Tool | Description | API Key |
 |------|-------------|---------|
@@ -390,13 +390,6 @@ courtlistener:
 | `legal.search_cases` | Search case law | Required |
 | `legal.case_details` | Get case details | Required |
 
-### Environment (2 tools)
-
-| Tool | Description | API Key |
-|------|-------------|---------|
-| `env.epa_facilities` | EPA-regulated facilities | Not required |
-| `env.epa_emissions` | Toxic release inventory | Not required |
-
 ### SOP (2 tools)
 
 | Tool | Description |
@@ -413,13 +406,13 @@ courtlistener:
 | `lightpanda.links` | Extract links |
 | `lightpanda.evaluate` | Execute JavaScript |
 | `lightpanda.semantic_tree` | AI-friendly DOM tree |
-| `lightpanda.structuredData` | Extract JSON-LD, OpenGraph |
-| `lightpanda.detectForms` | Find forms |
+| `lightpanda.structured_data` | Extract JSON-LD, OpenGraph |
+| `lightpanda.detect_forms` | Find forms |
 | `lightpanda.click` | Click element |
 | `lightpanda.fill` | Fill form field |
 | `lightpanda.scroll` | Scroll page |
-| `lightpanda.waitForSelector` | Wait for element |
-| `lightpanda.interactiveElements` | Find clickable items |
+| `lightpanda.wait_for_selector` | Wait for element |
+| `lightpanda.interactive_elements` | Find clickable items |
 
 ---
 
@@ -457,7 +450,6 @@ courtlistener:
 | OpenWeatherMap | Weather data | 1000 calls/day | Yes |
 | NOAA CDO | Climate data | 10,000 req/day | Yes |
 | CourtListener | Case law | 125 req/day | Yes |
-| UN Comtrade | Trade statistics | 500 calls/day | Yes |
 | Tavily | Web search | 1000 req/month | Yes |
 | Yahoo Finance | Stock quotes | Unlimited | No |
 | CoinGecko | Crypto prices | 30 req/min | No |
@@ -535,7 +527,7 @@ src/
 ├── lightpanda_mcp.rs    Lightpanda MCP client (JSON-RPC 2.0)
 ├── persistence.rs       SQLite persistence
 └── tools/
-    ├── types.rs         All tool I/O types (71 tools)
+    ├── types.rs         All tool I/O types (68 tools)
     ├── tool_guide.rs    Decision tree + categories + drill-down chains
     ├── helpers.rs       NLP, urlencoding, toon_encode
     ├── pools.rs         Pool CRUD

@@ -9,7 +9,7 @@ fn built_in_chains() -> Vec<SopChain> {
                 SopStep { tool: "security.cve".into(), params: serde_json::json!({"query": "$QUERY", "days_back": 7}), depends_on: None },
                 SopStep { tool: "news.fetch".into(), params: serde_json::json!({"pools": ["GLOBAL_TECH_CYBER"], "keywords": "$QUERY", "depth": "deep"}), depends_on: Some(0) },
                 SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY threat analysis"}), depends_on: None },
-                SopStep { tool: "insights.findConnections".into(), params: serde_json::json!({}), depends_on: Some(1) },
+                SopStep { tool: "insights.find_connections".into(), params: serde_json::json!({}), depends_on: Some(1) },
             ],
         },
         SopChain {
@@ -19,7 +19,7 @@ fn built_in_chains() -> Vec<SopChain> {
                 SopStep { tool: "research.search".into(), params: serde_json::json!({"query": "$QUERY", "limit": 10}), depends_on: None },
                 SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY recent developments"}), depends_on: None },
                 SopStep { tool: "news.fetch".into(), params: serde_json::json!({"pools": ["GLOBAL_TECH_CYBER", "GLOBAL_SCIENCE"], "keywords": "$QUERY", "limit": 20}), depends_on: None },
-                SopStep { tool: "insights.trendingEntities".into(), params: serde_json::json!({"time_window_hours": 48}), depends_on: Some(2) },
+                SopStep { tool: "insights.trending_entities".into(), params: serde_json::json!({"time_window_hours": 48}), depends_on: Some(2) },
             ],
         },
         SopChain {
@@ -29,7 +29,7 @@ fn built_in_chains() -> Vec<SopChain> {
                 SopStep { tool: "govt.bills".into(), params: serde_json::json!({"query": "$QUERY"}), depends_on: None },
                 SopStep { tool: "govt.regulations".into(), params: serde_json::json!({"query": "$QUERY"}), depends_on: None },
                 SopStep { tool: "news.fetch".into(), params: serde_json::json!({"pools": ["GLOBAL_LAW_REG"], "keywords": "$QUERY"}), depends_on: None },
-                SopStep { tool: "insights.findConnections".into(), params: serde_json::json!({"min_domains": 2}), depends_on: Some(2) },
+                SopStep { tool: "insights.find_connections".into(), params: serde_json::json!({"min_domains": 2}), depends_on: Some(2) },
             ],
         },
         SopChain {
@@ -39,7 +39,7 @@ fn built_in_chains() -> Vec<SopChain> {
                 SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY", "max_results": 10}), depends_on: None },
                 SopStep { tool: "web.scrape".into(), params: serde_json::json!({"url": "$TARGET_URL"}), depends_on: Some(0) },
                 SopStep { tool: "news.fetch".into(), params: serde_json::json!({"pools": ["GLOBAL_TECH_CYBER"], "keywords": "$QUERY", "limit": 20}), depends_on: None },
-                SopStep { tool: "insights.trendingEntities".into(), params: serde_json::json!({"time_window_hours": 24, "min_current_mentions": 2}), depends_on: Some(2) },
+                SopStep { tool: "insights.trending_entities".into(), params: serde_json::json!({"time_window_hours": 24, "min_current_mentions": 2}), depends_on: Some(2) },
             ],
         },
         SopChain {
@@ -48,8 +48,8 @@ fn built_in_chains() -> Vec<SopChain> {
             steps: vec![
                 SopStep { tool: "news.fetch".into(), params: serde_json::json!({"countries": ["$COUNTRY"], "limit": 30}), depends_on: None },
                 SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY $COUNTRY news analysis"}), depends_on: None },
-                SopStep { tool: "insights.findConnections".into(), params: serde_json::json!({"min_domains": 2}), depends_on: Some(0) },
-                SopStep { tool: "insights.trendingEntities".into(), params: serde_json::json!({"time_window_hours": 24}), depends_on: Some(0) },
+                SopStep { tool: "insights.find_connections".into(), params: serde_json::json!({"min_domains": 2}), depends_on: Some(0) },
+                SopStep { tool: "insights.trending_entities".into(), params: serde_json::json!({"time_window_hours": 24}), depends_on: Some(0) },
             ],
         },
     ]
