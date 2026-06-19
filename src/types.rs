@@ -283,6 +283,13 @@ pub struct OpenWeatherSettings {
     pub api_key: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CourtListenerSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+}
+
 impl Default for LightpandaSettings {
     fn default() -> Self {
         Self {
@@ -394,6 +401,19 @@ impl Default for OutputSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct NoaaSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ComtradeSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Settings {
     pub http: HttpSettings,
     pub cache: CacheSettings,
@@ -414,6 +434,12 @@ pub struct Settings {
     pub tool_groups: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub openweather: Option<OpenWeatherSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub noaa: Option<NoaaSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub courtlistener: Option<CourtListenerSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comtrade: Option<ComtradeSettings>,
 }
 
 // ─── News Types ─────────────────────────────────────────────────

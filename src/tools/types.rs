@@ -1522,3 +1522,218 @@ pub struct FireHotspot {
     pub frp: f64,
     pub daynight: String,
 }
+
+// ─── Environment Types ──────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EnvEpaFacilitiesInput {
+    /// State code (e.g., "CA", "NY", "US" for all)
+    pub state: Option<String>,
+    /// Facility name filter (optional)
+    pub name: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EnvEpaFacilitiesOutput {
+    pub query: String,
+    pub total: usize,
+    pub facilities: Vec<EpaFacility>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EpaFacility {
+    pub name: String,
+    pub address: String,
+    pub city: String,
+    pub state: String,
+    pub zip: String,
+    pub county: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub registry_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EnvEpaEmissionsInput {
+    /// State code (e.g., "CA", "NY")
+    pub state: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EnvEpaEmissionsOutput {
+    pub query: String,
+    pub total: usize,
+    pub facilities: Vec<EpaEmissionsFacility>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EpaEmissionsFacility {
+    pub name: String,
+    pub state: String,
+    pub county: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub registry_id: String,
+}
+
+// ─── Legal Types ────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct LegalSearchInput {
+    /// Search query (e.g., "first amendment", "Miranda v. Arizona")
+    pub query: String,
+    /// Court filter (e.g., "scotus", "ca9", "dcd")
+    pub court: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct LegalSearchOutput {
+    pub query: String,
+    pub total: usize,
+    pub cases: Vec<LegalCase>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct LegalCase {
+    pub id: u32,
+    pub case_name: String,
+    pub court: String,
+    pub date_filed: String,
+    pub citation: u64,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct LegalCaseDetailsInput {
+    /// Case ID (from legal.search_cases)
+    pub case_id: u32,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct LegalCaseDetailsOutput {
+    pub id: u32,
+    pub case_name: String,
+    pub court: String,
+    pub date_filed: String,
+    pub date_terminated: String,
+    pub judges: Vec<String>,
+    pub nature_of_suit: String,
+    pub url: String,
+}
+
+// ─── Climate Types ──────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ClimateNoaaInput {
+    /// Dataset: GHCND (daily), GSOM (monthly), GSOY (yearly)
+    pub dataset: Option<String>,
+    /// Location ID (e.g., "FIPS:US", "CITY:US060001", "ZIP:10001")
+    pub location: Option<String>,
+    /// Station ID (optional filter)
+    pub station: Option<String>,
+    /// Start date (YYYY-MM-DD)
+    pub start_date: Option<String>,
+    /// End date (YYYY-MM-DD)
+    pub end_date: Option<String>,
+    /// Max results (default: 20, max: 1000)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ClimateNoaaOutput {
+    pub query: String,
+    pub total: usize,
+    pub observations: Vec<NoaaObservation>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct NoaaObservation {
+    pub date: String,
+    pub station: String,
+    pub datatype: String,
+    pub value: f64,
+    pub attributes: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ClimateNoaaStationsInput {
+    /// Location ID (e.g., "FIPS:US", "CITY:US060001")
+    pub location: Option<String>,
+    /// Max results (default: 20, max: 1000)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ClimateNoaaStationsOutput {
+    pub query: String,
+    pub total: usize,
+    pub stations: Vec<NoaaStation>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct NoaaStation {
+    pub id: String,
+    pub name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub elevation: f64,
+    pub mindate: String,
+    pub maxdate: String,
+    pub datacoverage: f64,
+}
+
+// ─── Supply Chain Types ─────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SupplyChainTradeInput {
+    /// Reporter country code (e.g., 124=US, 156=China, 276=Germany)
+    pub reporter_code: Option<u32>,
+    /// Partner country code (0=World, 156=China, etc.)
+    pub partner_code: Option<u32>,
+    /// Period (e.g., "2024", "202401")
+    pub period: Option<String>,
+    /// Commodity code (e.g., "TOTAL", "9303" for firearms)
+    pub cmd_code: Option<String>,
+    /// Flow code: M=Import, X=Export
+    pub flow_code: Option<String>,
+    /// Max results (default: 20, max: 500)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SupplyChainTradeOutput {
+    pub query: String,
+    pub total: usize,
+    pub flows: Vec<TradeFlow>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TradeFlow {
+    pub reporter: String,
+    pub partner: String,
+    pub period: String,
+    pub flow: String,
+    pub commodity: String,
+    pub value_usd: f64,
+    pub net_weight_kg: f64,
+}

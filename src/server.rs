@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, finance, govt, insights, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, satellite, security, sop, sources, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, climate, env, finance, govt, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, satellite, security, sop, sources, supply_chain, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -351,6 +351,10 @@ impl_has_format!(
     HealthCdcInput, HealthCdcCovidInput,
     PoliticsFecInput, PoliticsFecCommitteesInput,
     SatelliteFirmsInput,
+    ClimateNoaaInput, ClimateNoaaStationsInput,
+    SupplyChainTradeInput,
+    EnvEpaFacilitiesInput, EnvEpaEmissionsInput,
+    LegalSearchInput, LegalCaseDetailsInput,
 );
 
 // ─── Sync Settings Loader ───────────────────────────────────────
@@ -907,6 +911,61 @@ impl IgsMcpServer {
     async fn satellite_firms_fires(&self, params: Parameters<SatelliteFirmsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = satellite::satellite_firms_fires(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    // ── Environment Tools ─────────────────────────────────────
+
+    #[tool(name = "env.epa_facilities", description = "Search EPA regulated facilities via Envirofacts API. Returns facility name, address, city, state, zip, county, coordinates, and registry ID. Filter by state code (e.g. CA, NY) or facility name. Default output: TOON.")]
+    async fn env_epa_facilities(&self, params: Parameters<EnvEpaFacilitiesInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = env::env_epa_facilities(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "env.epa_emissions", description = "Search EPA Toxic Release Inventory (TRI) facility emissions data via Envirofacts API. Returns facility name, state, county, coordinates, and TRI facility ID. Filter by state code. Default output: TOON.")]
+    async fn env_epa_emissions(&self, params: Parameters<EnvEpaEmissionsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = env::env_epa_emissions(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    // ── Legal Tools ───────────────────────────────────────────
+
+    #[tool(name = "legal.search_cases", description = "Search US court cases via CourtListener API. Returns case name, court, date filed, citation count, and URL. Supports court filter (e.g. scotus, ca9, dcd). Requires courtlistener.apiKey in settings.yml. Default output: TOON.")]
+    async fn legal_search_cases(&self, params: Parameters<LegalSearchInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = legal::legal_search_cases(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "legal.case_details", description = "Get detailed case information by case ID from CourtListener. Returns case name, court, filing/termination dates, judges, nature of suit, and URL. Requires courtlistener.apiKey in settings.yml. Do NOT use to search — use legal.search_cases first.")]
+    async fn legal_case_details(&self, params: Parameters<LegalCaseDetailsInput>) -> Result<Json<LegalCaseDetailsOutput>, String> {
+        legal::legal_case_details(params.0).await.map(Json)
+    }
+
+    // ── Supply Chain Tools ─────────────────────────────────────
+
+    #[tool(name = "supply_chain.trade_flows", description = "Query international trade flow data via UN Comtrade API. Returns bilateral trade volumes by commodity between countries. Supports reporter/partner country codes, period (year or month), commodity code (HS classification), flow direction (M=Import, X=Export). Default: US imports from World. Requires comtrade.apiKey in settings.yml. Default output: TOON.")]
+    async fn supply_chain_trade_flows(&self, params: Parameters<SupplyChainTradeInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = supply_chain::supply_chain_trade_flows(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    // ── Climate Tools ─────────────────────────────────────────
+
+    #[tool(name = "climate.noaa_observations", description = "Query NOAA Climate Data Online for historical weather observations. Returns daily temperature (TMAX/TMIN) and precipitation (PRCP) records. Supports GHCND (daily), GSOM (monthly), GSOY (yearly) datasets. Filter by location (FIPS:US, CITY:US060001, ZIP:10001), date range, and station. Requires noaa.apiKey in settings.yml. Default output: TOON.")]
+    async fn climate_noaa_observations(&self, params: Parameters<ClimateNoaaInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = climate::climate_noaa_observations(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "climate.noaa_stations", description = "List NOAA weather observation stations for a location. Returns station ID, name, coordinates, elevation, data coverage, and active date range. Use to discover station IDs for climate.noaa_observations filtering. Requires noaa.apiKey in settings.yml. Default output: TOON.")]
+    async fn climate_noaa_stations(&self, params: Parameters<ClimateNoaaStationsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = climate::climate_noaa_stations(params.0).await?;
         Ok(format_output(&output, &format))
     }
 

@@ -93,10 +93,38 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "legal",
+        description: "Search US court cases via CourtListener API. Find case law, dockets, and legal opinions across federal and state courts.",
+        tools: &[
+            "legal.search_cases", "legal.case_details",
+        ],
+    },
+    ToolGroup {
         name: "satellite",
         description: "Satellite-based fire detection using NASA FIRMS API. Query active fire hotspots worldwide via VIIRS and MODIS sensors.",
         tools: &[
             "satellite.firms_fires",
+        ],
+    },
+    ToolGroup {
+        name: "environment",
+        description: "EPA environmental facility and emissions data via Envirofacts API. Query regulated facilities, TRI emissions, and environmental compliance data.",
+        tools: &[
+            "env.epa_facilities", "env.epa_emissions",
+        ],
+    },
+    ToolGroup {
+        name: "climate",
+        description: "NOAA Climate Data Online for historical weather observations and station data. Query daily/monthly/yearly climate records by location.",
+        tools: &[
+            "climate.noaa_observations", "climate.noaa_stations",
+        ],
+    },
+    ToolGroup {
+        name: "supply_chain",
+        description: "International trade flow data via UN Comtrade. Query bilateral trade, imports/exports by commodity code between countries.",
+        tools: &[
+            "supply_chain.trade_flows",
         ],
     },
     ToolGroup {
@@ -191,6 +219,10 @@ mod tests {
             "patents.search", "patents.details",
             "govt.bills", "govt.regulations",
             "satellite.firms_fires",
+            "env.epa_facilities", "env.epa_emissions",
+            "supply_chain.trade_flows",
+            "climate.noaa_observations", "climate.noaa_stations",
+            "legal.search_cases", "legal.case_details",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
             "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
             "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",
