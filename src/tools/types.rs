@@ -1390,33 +1390,6 @@ pub struct HealthCause {
     pub age_adjusted_rate: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct HealthCdcCovidInput {
-    /// State name (optional, defaults to all states)
-    pub state: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
-    #[serde(flatten)]
-    pub output: OutputOptions,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct HealthCdcCovidOutput {
-    pub query: String,
-    pub total: usize,
-    pub records: Vec<HealthCovidRecord>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct HealthCovidRecord {
-    pub state: String,
-    pub date: String,
-    pub cases: u64,
-    pub deaths: u64,
-    pub new_cases: u64,
-    pub new_deaths: u64,
-}
-
 // ─── Politics Types ─────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -1698,70 +1671,6 @@ pub struct NoaaStation {
     pub mindate: String,
     pub maxdate: String,
     pub datacoverage: f64,
-}
-
-// ─── OpenSecrets Types ──────────────────────────────────────
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct PoliticsOpenSecretsInput {
-    /// Candidate ID (e.g., "N00007360" for Biden)
-    pub cid: String,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
-    #[serde(flatten)]
-    pub output: OutputOptions,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct PoliticsOpenSecretsOutput {
-    pub query: String,
-    pub total: usize,
-    pub donors: Vec<OpensecretsDonor>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct OpensecretsDonor {
-    pub name: String,
-    pub total: f64,
-    pub count: u32,
-}
-
-// ─── Supply Chain Types ─────────────────────────────────────
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct SupplyChainTradeInput {
-    /// Reporter country code (e.g., 124=US, 156=China, 276=Germany)
-    pub reporter_code: Option<u32>,
-    /// Partner country code (0=World, 156=China, etc.)
-    pub partner_code: Option<u32>,
-    /// Period (e.g., "2024", "202401")
-    pub period: Option<String>,
-    /// Commodity code (e.g., "TOTAL", "9303" for firearms)
-    pub cmd_code: Option<String>,
-    /// Flow code: M=Import, X=Export
-    pub flow_code: Option<String>,
-    /// Max results (default: 20, max: 500)
-    pub limit: Option<u32>,
-    #[serde(flatten)]
-    pub output: OutputOptions,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct SupplyChainTradeOutput {
-    pub query: String,
-    pub total: usize,
-    pub flows: Vec<TradeFlow>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct TradeFlow {
-    pub reporter: String,
-    pub partner: String,
-    pub period: String,
-    pub flow: String,
-    pub commodity: String,
-    pub value_usd: f64,
-    pub net_weight_kg: f64,
 }
 
 // ─── WHO Types ──────────────────────────────────────────────

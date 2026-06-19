@@ -414,13 +414,6 @@ pub struct ComtradeSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct OpenSecretsSettings {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_key: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Settings {
     pub http: HttpSettings,
     pub cache: CacheSettings,
@@ -447,8 +440,6 @@ pub struct Settings {
     pub courtlistener: Option<CourtListenerSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comtrade: Option<ComtradeSettings>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub opensecrets: Option<OpenSecretsSettings>,
 }
 
 // ─── News Types ─────────────────────────────────────────────────

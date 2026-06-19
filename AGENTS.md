@@ -33,7 +33,7 @@ Tools are organized into 17 domain groups. Load only the groups you need to cons
 | **Security** | `security.cve`, `security.advisories` | ~2% | Vulnerability and advisory search |
 | **Patents** | `patents.search`, `patents.details` | ~2% | USPTO patent search |
 | **Government** | `govt.bills`, `govt.regulations` | ~2% | Congressional bills and federal regulations |
-| **Politics** | `politics.fec_candidates`, `politics.fec_committees`, `politics.opensecrets` | ~2% | FEC campaign finance + OpenSecrets donor data |
+| **Politics** | `politics.fec_candidates`, `politics.fec_committees` | ~2% | FEC campaign finance |
 | **Health** | `health.cdc_leading_causes`, `health.cdc_covid`, `health.who_gho` | ~2% | CDC health statistics + WHO global data |
 | **Satellite** | `satellite.firms_fires` | ~1% | NASA FIRMS fire detection |
 | **Climate** | `climate.noaa_observations`, `climate.noaa_stations` | ~2% | NOAA historical weather data |
@@ -66,7 +66,7 @@ Tools are organized into 17 domain groups. Load only the groups you need to cons
 | **Security** | `security.cve`, `security.advisories` |
 | **Patents** | `patents.search`, `patents.details` |
 | **Government** | `govt.bills`, `govt.regulations` |
-| **Politics** | `politics.fec_candidates`, `politics.fec_committees`, `politics.opensecrets` |
+| **Politics** | `politics.fec_candidates`, `politics.fec_committees` |
 | **Health** | `health.cdc_leading_causes`, `health.cdc_covid`, `health.who_gho` |
 | **Satellite** | `satellite.firms_fires` |
 | **Climate** | `climate.noaa_observations`, `climate.noaa_stations` |
