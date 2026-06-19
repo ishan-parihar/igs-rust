@@ -872,6 +872,20 @@ impl IgsMcpServer {
 
     // ── Politics Tools ──────────────────────────────────────────
 
+    #[tool(name = "politics.fec_candidates", description = "Search FEC for campaign finance candidate data. Returns candidate ID, name, party, office, state, receipts, disbursements, cash on hand. Use for political intelligence and campaign finance monitoring.")]
+    async fn politics_fec_candidates(&self, params: Parameters<PoliticsFecInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = politics::politics_fec_candidates(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "politics.fec_committees", description = "Search FEC for campaign finance committee data. Returns committee ID, name, type, party, state, receipts, disbursements. Use for PAC and party committee monitoring.")]
+    async fn politics_fec_committees(&self, params: Parameters<PoliticsFecCommitteesInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = politics::politics_fec_committees(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
     #[tool(name = "politics.opensecrets", description = "Search OpenSecrets for campaign finance donor data. Returns individual contributors to a candidate. Requires OpenSecrets API key (free for non-commercial use).")]
     async fn politics_opensecrets(&self, params: Parameters<PoliticsOpenSecretsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
@@ -963,6 +977,20 @@ impl IgsMcpServer {
     }
 
     // ── Health Tools ─────────────────────────────────────────
+
+    #[tool(name = "health.cdc_leading_causes", description = "Query CDC leading causes of death data. Returns cause of death, state, year, deaths, age-adjusted rate. Use for US health statistics and mortality analysis.")]
+    async fn health_cdc_leading_causes(&self, params: Parameters<HealthCdcInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = health::health_cdc_leading_causes(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "health.cdc_covid", description = "Query CDC COVID-19 data. Returns state, date, total cases, total deaths, new cases, new deaths. Use for pandemic tracking and public health monitoring.")]
+    async fn health_cdc_covid(&self, params: Parameters<HealthCdcCovidInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = health::health_cdc_covid(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
 
     #[tool(name = "health.who_gho", description = "Query WHO Global Health Observatory data. Returns health indicators for 194 countries. Use indicator codes like WHOSIS_000001 (life expectancy), WHS3_49 (births attended by skilled health personnel).")]
     async fn health_who_gho(&self, params: Parameters<HealthWhoInput>) -> Result<CallToolResult, String> {
