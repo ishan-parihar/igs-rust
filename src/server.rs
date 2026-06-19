@@ -419,7 +419,11 @@ impl IgsMcpServer {
     #[tool(name = "sources.list", description = "List configured news sources (410+ across 47 countries). Filter by pools (pool IDs) or active_only=true. Returns Source[] with id, name, type, url, parser, pools, countries, cities, domains. Default output: TOON. Do NOT use to fetch news — use news.fetch.")]
     async fn sources_list(&self, params: Parameters<SourceListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let output = sources::sources_list(params.0).await?;
+        let cursor = params.0.pagination.cursor.clone();
+        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let all_output = sources::sources_list(params.0).await?;
+        let (page, next_cursor) = paginate(&all_output.sources, cursor, page_size);
+        let output = PaginatedOutput { items: page, next_cursor, total: all_output.sources.len() };
         Ok(format_output(&output, &format))
     }
 
@@ -446,29 +450,46 @@ impl IgsMcpServer {
     #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[] with name, ISO code, and source_count. Use ISO codes (IN, US, GB, etc.) as filters in news.fetch countries parameter. Default output: TOON. Do NOT use for city-level data — use sources.cities.")]
     async fn sources_countries(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let output = sources::sources_countries().await?;
+        let cursor = params.0.pagination.cursor.clone();
+        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let all_output = sources::sources_countries().await?;
+        let (page, next_cursor) = paginate(&all_output.countries, cursor, page_size);
+        let output = PaginatedOutput { items: page, next_cursor, total: all_output.countries.len() };
         Ok(format_output(&output, &format))
     }
 
     #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[] with name and source_count. Use city names as filters in news.fetch cities parameter. Sorted by source count descending. Default output: TOON. Do NOT use for country-level data — use sources.countries.")]
     async fn sources_cities(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let output = sources::sources_cities().await?;
+        let cursor = params.0.pagination.cursor.clone();
+        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let all_output = sources::sources_cities().await?;
+        let (page, next_cursor) = paginate(&all_output.cities, cursor, page_size);
+        let output = PaginatedOutput { items: page, next_cursor, total: all_output.cities.len() };
         Ok(format_output(&output, &format))
     }
 
     #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[] with name and source_count. Domains are topical tags (geopolitics, business, tech, cyber, defense, health, etc.). Use domain names as filters in news.fetch domains parameter. Default output: TOON. Do NOT use to search — use web.search or news.fetch.")]
     async fn sources_domains(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let output = sources::sources_domains().await?;
+        let cursor = params.0.pagination.cursor.clone();
+        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let all_output = sources::sources_domains().await?;
+        let (page, next_cursor) = paginate(&all_output.domains, cursor, page_size);
+        let output = PaginatedOutput { items: page, next_cursor, total: all_output.domains.len() };
         Ok(format_output(&output, &format))
     }
 
     // ── Parser Tools ────────────────────────────────────────────
 
     #[tool(name = "parsers.list", description = "List available source parser keys (rss, generic_html, semantic_scholar, etc.). Auto-detects if parser not specified in sources.upsert.")]
-    async fn parsers_list(&self) -> Result<Json<ParserListOutput>, String> {
-        parsers_tools::parsers_list().await.map(Json)
+    async fn parsers_list(&self, params: Parameters<ParserListInput>) -> Result<CallToolResult, String> {
+        let cursor = params.0.pagination.cursor.clone();
+        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let all_output = parsers_tools::parsers_list().await?;
+        let (page, next_cursor) = paginate(&all_output.parsers, cursor, page_size);
+        let output = PaginatedOutput { items: page, next_cursor, total: all_output.parsers.len() };
+        Ok(format_output(&output, "toon"))
     }
 
     // ── News Tools ──────────────────────────────────────────────
