@@ -8,27 +8,27 @@ MCP server + CLI for intelligence gathering. 71 tools, 411 sources, 47 countries
 | Metric | Value |
 |--------|-------|
 | Tools | 71 (59 core + 12 Lightpanda browser automation) |
+| Intelligence Domains | 17 (News, Research, Web, Weather, Finance, Security, Patents, Government, Politics, Health, Satellite, Climate, Legal, Environment, Supply Chain, SOP, Browser) |
 | Sources | 411 across 47 countries |
-| Pools | 18 (geopolitics, tech, India, defense, health, etc.) |
-| Binary | Single `igs` binary (~19 MB musl static) |
+| Pools | 14 (geopolitics, tech, India, defense, health, etc.) |
+| Binary | Single `igs` binary (~26 MB musl static) |
 | Output | TOON (default, ~40% fewer tokens) or JSON |
 
 ---
 
 ## Installation
 
-### Option 1: Download Release
+### Option 1: Download Release (Recommended)
 
 ```bash
-# Download latest release
-curl -L -o igs.tar.gz https://github.com/ishan-parihar/igs-rust-mcp/releases/latest/download/igs-v0.4.0-x86_64-linux-musl.tar.gz
+# Download latest release (v0.5.0)
+curl -L -o igs.tar.gz https://github.com/ishan-parihar/igs-rust-mcp/releases/download/v0.5.0/igs-v0.5.0-x86_64-linux-musl.tar.gz
 
 # Extract
 tar -xzf igs.tar.gz
 
 # Move to PATH
 sudo mv igs /usr/local/bin/
-sudo ln -sf /usr/local/bin/igs /usr/local/bin/igs-mcp  # backward compat
 
 # Verify
 igs --version
@@ -44,10 +44,18 @@ curl -sSL https://raw.githubusercontent.com/ishan-parihar/igs-rust-mcp/master/sc
 ### Option 3: Build from Source
 
 ```bash
+# Prerequisites
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add x86_64-unknown-linux-musl
+
+# Clone and build
 git clone https://github.com/ishan-parihar/igs-rust-mcp.git
 cd igs-rust-mcp
-cargo build --release
-./target/release/igs status
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Install
+sudo cp target/x86_64-unknown-linux-musl/release/igs /usr/local/bin/
+igs --version
 ```
 
 ---
@@ -82,6 +90,20 @@ Configure in **Cursor** (`.cursor/mcp.json`):
     "igs": {
       "command": "igs",
       "args": ["mcp"]
+    }
+  }
+}
+```
+
+Configure in **OpenCode** (`~/.config/opencode/opencode.json`):
+
+```json
+{
+  "mcp": {
+    "igs": {
+      "type": "local",
+      "command": ["/usr/local/bin/igs", "mcp"],
+      "enabled": true
     }
   }
 }
@@ -143,7 +165,7 @@ IGS auto-creates `~/.config/igs-mcp/` on first run with default config files:
 ```
 ~/.config/igs-mcp/
 ├── settings.yml      # Main configuration
-├── pools.yml         # 18 pool definitions
+├── pools.yml         # 14 pool definitions
 ├── sources.yml       # 411 source definitions
 ├── countries.yml     # 47 country metadata
 ├── insights.db       # SQLite database (auto-created)
@@ -158,7 +180,7 @@ Override with: `export IGS_CONFIG_DIR=/path/to/config`
 ```yaml
 # HTTP client
 http:
-  userAgent: IGS-MCP/0.1
+  userAgent: IGS-MCP/0.5
   timeoutMs: 15000
   retries: 2
   concurrency: 6
@@ -203,6 +225,27 @@ pipeline:
 # Output format
 output:
   default_format: toon  # "toon" or "json"
+
+# API Keys (optional - tools work without them but with rate limits)
+openweather:
+  enabled: false
+  apiKey: ${OPENWEATHER_API_KEY}
+
+noaa:
+  enabled: false
+  apiKey: ${NOAA_API_KEY}
+
+courtlistener:
+  enabled: false
+  apiKey: ${COURTLISTENER_API_KEY}
+
+opensecrets:
+  enabled: false
+  apiKey: ${OPENSECRETS_API_KEY}
+
+comtrade:
+  enabled: false
+  apiKey: ${COMTRADE_API_KEY}
 ```
 
 ### Environment Variables
@@ -213,25 +256,171 @@ output:
 | `RUST_LOG` | `info` | Log level (`debug`, `trace`) |
 | `TAVILY_API_KEY` | — | Tavily web search API key |
 | `FIRECRAWL_API_KEY` | — | Firecrawl API key |
+| `OPENWEATHER_API_KEY` | — | OpenWeatherMap API key (free tier: 1000/day) |
+| `NOAA_API_KEY` | — | NOAA Climate Data Online API key (free) |
+| `COURTLISTENER_API_KEY` | — | CourtListener API token (free) |
+| `OPENSECRETS_API_KEY` | — | OpenSecrets API key (free for non-commercial) |
+| `COMTRADE_API_KEY` | — | UN Comtrade API key (free: 500/day) |
 
 ---
 
-## Tools
+## Tools (71 Total)
 
-### Core Tools (29)
+### Discovery (5 tools)
 
-| Domain | Tools | Description |
-|--------|-------|-------------|
-| **Pools** | `pools.list`, `pools.upsert`, `pools.delete` | Manage source groupings |
-| **Sources** | `sources.list/upsert/delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains` | CRUD + auto-discovery + geo |
-| **Parsers** | `parsers.list` | List available parser keys |
-| **News** | `news.fetch`, `news.testSource`, `news.enrich` | Fetch, test, NLP enrichment |
-| **Reddit** | `reddit.search`, `reddit.feed` | Search Reddit posts, follow subreddit feeds |
-| **Research** | `research.search`, `research.paper`, `research.download` | arXiv + Semantic Scholar |
-| **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | Search, scrape, crawl, sitemap |
-| **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | Cross-article analysis |
+| Tool | Description |
+|------|-------------|
+| `pools.list` | List source pools |
+| `pools.upsert` | Create/update a pool |
+| `pools.delete` | Delete a pool |
+| `sources.list` | List news sources |
+| `sources.upsert` | Create/update a source |
+| `sources.delete` | Delete a source |
+| `sources.autodiscover` | Auto-discover RSS feeds |
+| `sources.enableGenericScraper` | Enable HTML scraping |
+| `sources.countries` | List countries with source counts |
+| `sources.cities` | List cities with source counts |
+| `sources.domains` | List domains with source counts |
+| `parsers.list` | List available parser types |
+| `tool.guide` | Decision tree for tool selection |
 
-### Lightpanda Browser Tools (12)
+### News (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `news.fetch` | Fetch news from sources (depth=deep for full pipeline) |
+| `news.testSource` | Test a single source |
+| `news.enrich` | NLP enrichment (topics, entities, sentiment) |
+
+### Research (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `research.search` | Search arXiv + Semantic Scholar |
+| `research.paper` | Get paper details with citations |
+| `research.download` | Download paper PDF |
+| `research.pubmed_search` | Search PubMed medical research |
+
+### Web (4 tools)
+
+| Tool | Description |
+|------|-------------|
+| `web.search` | Real-time web search (Tavily) |
+| `web.scrape` | Scrape URL to markdown |
+| `web.crawl` | BFS crawl website |
+| `web.map` | Discover URLs from sitemap |
+
+### Insights (5 tools)
+
+| Tool | Description |
+|------|-------------|
+| `insights.findConnections` | Find cross-domain connections |
+| `insights.trendingEntities` | Detect trending entities |
+| `insights.indexArticles` | Index articles for analysis |
+| `insights.getStats` | Engine statistics |
+| `insights.clearIndex` | Clear all indexed articles |
+
+### Social (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `reddit.search` | Search Reddit posts |
+| `reddit.feed` | Follow subreddit feeds |
+
+### Weather (3 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `weather.forecast` | 5-day forecast | Required |
+| `weather.current` | Current conditions | Required |
+| `weather.alerts` | Severe weather alerts | Required |
+
+### Finance (3 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `finance.market` | Stock market quotes | Not required |
+| `finance.crypto` | Cryptocurrency prices | Not required |
+| `finance.trending` | Trending cryptocurrencies | Not required |
+
+### Security (2 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `security.cve` | Search CVE vulnerabilities | Not required |
+| `security.advisories` | Search GitHub advisories | Not required |
+
+### Patents (2 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `patents.search` | Search USPTO patents | Not required |
+| `patents.details` | Get patent details | Not required |
+
+### Government (2 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `govt.bills` | Search congressional bills | Not required (DEMO_KEY) |
+| `govt.regulations` | Search federal regulations | Not required |
+
+### Politics (3 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `politics.fec_candidates` | Search FEC candidates | Not required (optional) |
+| `politics.fec_committees` | Search FEC committees | Not required (optional) |
+| `politics.opensecrets` | Search OpenSecrets donor data | Required |
+
+### Health (3 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `health.cdc_leading_causes` | Leading causes of death (US) | Not required |
+| `health.cdc_covid` | COVID-19 statistics (US) | Not required |
+| `health.who_gho` | Global health indicators (194 countries) | Not required |
+
+### Satellite (1 tool)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `satellite.firms_fires` | NASA FIRMS fire hotspots | Not required (DEMO_KEY) |
+
+### Climate (2 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `climate.noaa_observations` | Historical weather observations | Required |
+| `climate.noaa_stations` | Find weather stations | Required |
+
+### Legal (2 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `legal.search_cases` | Search case law | Required |
+| `legal.case_details` | Get case details | Required |
+
+### Environment (2 tools)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `env.epa_facilities` | EPA-regulated facilities | Not required |
+| `env.epa_emissions` | Toxic release inventory | Not required |
+
+### Supply Chain (1 tool)
+
+| Tool | Description | API Key |
+|------|-------------|---------|
+| `supply_chain.trade_flows` | International trade statistics | Required |
+
+### SOP (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `sop.list` | List available workflows |
+| `sop.execute` | Execute multi-step workflow |
+
+### Browser (12 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -248,60 +437,102 @@ output:
 | `lightpanda.waitForSelector` | Wait for element |
 | `lightpanda.interactiveElements` | Find clickable items |
 
-### CLI Browser Commands
+---
 
-```bash
-igs browser goto --url https://example.com
-igs browser markdown
-igs browser links
-igs browser evaluate --expression "document.title"
-igs browser semantic-tree --include-text
-igs browser structured-data
-igs browser detect-forms
-igs browser click --selector "button.submit"
-igs browser fill --selector "input[name=email]" --value "user@example.com"
-igs browser scroll --direction down --pixels 500
-igs browser wait-for-selector --selector ".content" --timeout-ms 5000
-igs browser interactive-elements
-```
+## Dependencies
+
+### System Requirements
+
+- **OS**: Linux (x86_64), macOS, or WSL2
+- **Memory**: 50 MB minimum
+- **Disk**: 100 MB for binary + config
+- **Network**: Required for API calls
+
+### Rust Dependencies (for building from source)
+
+| Crate | Purpose |
+|-------|---------|
+| `rmcp` | MCP protocol implementation |
+| `reqwest` | HTTP client |
+| `tokio` | Async runtime |
+| `serde` / `serde_json` | Serialization |
+| `serde_yaml` | YAML config parsing |
+| `clap` | CLI argument parsing |
+| `chrono` | Date/time handling |
+| `rusqlite` | SQLite persistence |
+| `url` | URL parsing and encoding |
+| `feed-rs` | RSS/Atom feed parsing |
+| `scraper` | HTML parsing |
+| `toon_format` | Token-efficient output |
+| `tracing` | Logging |
+
+### External APIs (Optional)
+
+| API | Purpose | Free Tier | Key Required |
+|-----|---------|-----------|--------------|
+| OpenWeatherMap | Weather data | 1000 calls/day | Yes |
+| NOAA CDO | Climate data | 10,000 req/day | Yes |
+| CourtListener | Case law | 125 req/day | Yes |
+| OpenSecrets | Campaign finance | Unlimited | Yes |
+| UN Comtrade | Trade statistics | 500 calls/day | Yes |
+| Tavily | Web search | 1000 req/month | Yes |
+| Yahoo Finance | Stock quotes | Unlimited | No |
+| CoinGecko | Crypto prices | 30 req/min | No |
+| NVD | CVE vulnerabilities | Rate-limited | No |
+| GitHub Advisory | Security advisories | Unlimited | No |
+| PatentsView | Patent search | Unlimited | No |
+| Congress.gov | Bills/regulations | 40 req/hour | No (DEMO_KEY) |
+| Federal Register | Regulations | Unlimited | No |
+| CDC SODA | Health statistics | 1000 req/hour | No |
+| WHO GHO | Global health | Unlimited | No |
+| NASA FIRMS | Fire detection | Unlimited | No (DEMO_KEY) |
+| EPA Envirofacts | Environmental data | Unlimited | No |
 
 ---
 
-## Lightpanda Integration
+## Implementation Guide
 
-IGS uses [Lightpanda](https://github.com/lightpanda-io/browser) in two ways:
+### Adding a New Intelligence Domain
 
-### Level 1: CLI Subprocess (web.scrape, web.crawl)
+1. **Create module**: `src/tools/<domain>.rs`
+2. **Add types**: `src/tools/types.rs`
+3. **Register module**: `src/tools/mod.rs`
+4. **Add to registry**: `src/tools/registry.rs`
+5. **Add handlers**: `src/server.rs`
+6. **Update tool_guide**: `src/tools/tool_guide.rs`
+7. **Add CLI commands**: `src/cli.rs` (optional)
 
-Stateless — fetches a single page via `lightpanda fetch --dump markdown`. Used by `web.scrape` with `provider: "lightpanda"` and `web.crawl`.
+### Standard Tool Pattern
 
-```bash
-# Scrape with JS rendering
-igs web scrape --url https://spa-site.com --provider lightpanda
+```rust
+use crate::config;
+use crate::http::{self as http_mod, HttpClient};
+use crate::tools::helpers::urlencoding;
+use super::types::*;
 
-# Crawl with BFS
-igs web crawl --url https://example.com --max-depth 2 --max-pages 20
+pub async fn <domain>_<tool>(input: <Domain>Input) -> Result<Domain>Output, String> {
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+    
+    let query = urlencoding(&input.query);
+    let url = format!("https://api.example.com/endpoint?q={}", query);
+    
+    let outcome = http.fetch(&url, None, "bypass").await
+        .map_err(|e| format!("API error: {}", e))?;
+    
+    let resp = match outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("API returned cached response".into()),
+    };
+    
+    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+        .map_err(|e| format!("JSON parse error: {}", e))?;
+    
+    // Parse and return
+    Ok(DomainOutput { /* ... */ })
+}
 ```
-
-### Level 2: MCP Sub-Server (lightpanda.* tools)
-
-Stateful — spawns `lightpanda mcp` as a persistent subprocess. The page stays loaded between calls. Supports JavaScript execution, form interaction, navigation.
-
-```bash
-# Navigate and extract
-igs browser goto --url https://example.com
-igs browser markdown
-igs browser evaluate --expression "document.querySelectorAll('h1').length"
-
-# Form interaction
-igs browser goto --url https://example.com/login
-igs browser detect-forms
-igs browser fill --selector "input[name=username]" --value "admin"
-igs browser click --selector "button[type=submit]" --wait-for-navigation true
-igs browser markdown
-```
-
-The Lightpanda binary auto-downloads to `~/.config/igs-mcp/bin/` and checks for updates daily.
 
 ---
 
@@ -315,23 +546,36 @@ src/
 ├── config.rs            YAML config loading
 ├── types.rs             Shared types (Settings, NewsItem, etc.)
 ├── http.rs              HttpClient with retry, backoff, per-host concurrency
-├── cache.rs             Dual-tier caching
-├── parsers.rs           7 parser types + filtering + dedup
+├── cache.rs             Dual-tier caching with LRU eviction
+├── parsers.rs           11 parser types + filtering + dedup
 ├── lightpanda.rs        Lightpanda binary manager
 ├── lightpanda_mcp.rs    Lightpanda MCP client (JSON-RPC 2.0)
 ├── persistence.rs       SQLite persistence
 └── tools/
-    ├── types.rs         All tool I/O types
+    ├── types.rs         All tool I/O types (71 tools)
+    ├── tool_guide.rs    Decision tree + categories + drill-down chains
     ├── helpers.rs       NLP, urlencoding, toon_encode
     ├── pools.rs         Pool CRUD
     ├── sources.rs       Source CRUD + autodiscover + geo
     ├── parsers.rs       Parser listing
     ├── news.rs          News fetch + enrichment
     ├── reddit.rs        Reddit search
-    ├── research.rs      Academic papers
+    ├── research.rs      Academic papers + PubMed
     ├── web.rs           Web search/scrape/crawl/map
     ├── insights.rs      Cross-article analysis
-    ├── intelligence.rs  Pipeline
+    ├── weather.rs       OpenWeatherMap integration
+    ├── finance.rs       Yahoo Finance + CoinGecko
+    ├── security.rs      NVD + GitHub Advisory
+    ├── patents.rs       PatentsView API
+    ├── govt.rs          Congress.gov + Federal Register
+    ├── politics.rs      FEC + OpenSecrets
+    ├── health.rs        CDC + WHO GHO
+    ├── satellite.rs     NASA FIRMS
+    ├── climate.rs       NOAA CDO
+    ├── legal.rs         CourtListener
+    ├── env.rs           EPA Envirofacts
+    ├── supply_chain.rs  UN Comtrade
+    ├── sop.rs           Multi-step workflows
     └── lp_mcp.rs        Lightpanda MCP tool wrappers
 ```
 

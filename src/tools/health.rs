@@ -126,17 +126,21 @@ pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, St
     let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
     let limit = input.limit.unwrap_or(20).clamp(1, 100);
     
+    let mut filters = Vec::new();
+    if let Some(ref country) = input.country {
+        filters.push(format!("SpatialDim eq '{}'", country));
+    }
+    if let Some(year) = input.year {
+        filters.push(format!("TimeDim eq {}", year));
+    }
+    
     let mut url = format!(
         "https://ghoapi.azureedge.net/api/{}?$top={}",
         indicator, limit
     );
     
-    if let Some(ref country) = input.country {
-        url = format!("{}&$filter=SpatialDim eq '{}'", url, country);
-    }
-    
-    if let Some(ref year) = input.year {
-        url = format!("{}&$filter=TimeDim eq {}", url, year);
+    if !filters.is_empty() {
+        url = format!("{}&$filter={}", url, filters.join(" and "));
     }
     
     let outcome = http.fetch(&url, None, "bypass").await
