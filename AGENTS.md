@@ -18,35 +18,62 @@ Guide for AI agents using IGS as an intelligence gathering tool.
 
 ### Tool Discovery (Progressive Loading)
 
-Tools are organized into 7 domain groups. Load only the groups you need to conserve context.
+Tools are organized into 17 domain groups. Load only the groups you need to conserve context.
 
 | Group | Tools | Context Est. | When to Load |
 |-------|-------|-------------|--------------|
-| **Discovery** | `pools.*`, `sources.*`, `parsers.list` | ~5% | Initial setup, exploring available sources |
+| **Discovery** | `pools.*`, `sources.*`, `parsers.list`, `tool.guide` | ~6% | Initial setup, exploring available sources |
 | **News** | `news.fetch`, `news.testSource`, `news.enrich` | ~3% | Fetching and enriching news articles |
-| **Research** | `research.search`, `research.paper`, `research.download` | ~3% | Academic paper search and retrieval |
+| **Research** | `research.search`, `research.paper`, `research.download`, `research.pubmed_search` | ~4% | Academic and medical paper search |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | ~4% | Web search, scraping, crawling |
 | **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
 | **Social** | `reddit.search`, `reddit.feed` | ~1% | Search Reddit posts and follow subreddit feeds |
+| **Weather** | `weather.forecast`, `weather.current`, `weather.alerts` | ~3% | Weather forecasts and alerts |
+| **Finance** | `finance.market`, `finance.crypto`, `finance.trending` | ~3% | Stock and cryptocurrency data |
+| **Security** | `security.cve`, `security.advisories` | ~2% | Vulnerability and advisory search |
+| **Patents** | `patents.search`, `patents.details` | ~2% | USPTO patent search |
+| **Government** | `govt.bills`, `govt.regulations` | ~2% | Congressional bills and federal regulations |
+| **Politics** | `politics.fec_candidates`, `politics.fec_committees` | ~2% | FEC campaign finance data |
+| **Health** | `health.cdc_leading_causes`, `health.cdc_covid` | ~2% | CDC health statistics |
+| **Satellite** | `satellite.firms_fires` | ~1% | NASA FIRMS fire detection |
+| **Climate** | `climate.noaa_observations`, `climate.noaa_stations` | ~2% | NOAA historical weather data |
+| **Legal** | `legal.search_cases`, `legal.case_details` | ~2% | CourtListener case law |
+| **Environment** | `env.epa_facilities`, `env.epa_emissions` | ~2% | EPA facility and emissions data |
+| **Supply Chain** | `supply_chain.trade_flows` | ~1% | UN Comtrade trade statistics |
+| **SOP** | `sop.list`, `sop.execute` | ~2% | Multi-step intelligence workflows |
 | **Browser** | `lightpanda.*` (12 tools) | ~8% | JS-rendered browsing, form interaction |
 
 **Recommended loading patterns:**
 
-- **Quick scan**: Load Discovery + News (~8% context)
-- **Full research**: Load Discovery + News + Research + Web + Insights (~19% context)
-- **Social monitoring**: Load Discovery + News + Social (~9% context)
+- **Quick scan**: Load Discovery + News (~9% context)
+- **Full research**: Load Discovery + News + Research + Web + Insights (~20% context)
+- **Intelligence analysis**: Load Weather + Finance + Security + Government + Politics (~12% context)
+- **Environmental monitoring**: Load Satellite + Climate + Environment (~5% context)
 - **Browser automation**: Load Browser only (~8% context) after navigating
 
 **Quick reference:**
 
 | Group | Tools |
 |-------|-------|
-| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list` |
+| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enableGenericScraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`, `tool.guide` |
 | **News** | `news.fetch`, `news.testSource`, `news.enrich` |
-| **Research** | `research.search`, `research.paper`, `research.download` |
+| **Research** | `research.search`, `research.paper`, `research.download`, `research.pubmed_search` |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` |
 | **Insights** | `insights.findConnections`, `insights.trendingEntities`, `insights.indexArticles`, `insights.getStats`, `insights.clearIndex` |
 | **Social** | `reddit.search`, `reddit.feed` |
+| **Weather** | `weather.forecast`, `weather.current`, `weather.alerts` |
+| **Finance** | `finance.market`, `finance.crypto`, `finance.trending` |
+| **Security** | `security.cve`, `security.advisories` |
+| **Patents** | `patents.search`, `patents.details` |
+| **Government** | `govt.bills`, `govt.regulations` |
+| **Politics** | `politics.fec_candidates`, `politics.fec_committees` |
+| **Health** | `health.cdc_leading_causes`, `health.cdc_covid` |
+| **Satellite** | `satellite.firms_fires` |
+| **Climate** | `climate.noaa_observations`, `climate.noaa_stations` |
+| **Legal** | `legal.search_cases`, `legal.case_details` |
+| **Environment** | `env.epa_facilities`, `env.epa_emissions` |
+| **Supply Chain** | `supply_chain.trade_flows` |
+| **SOP** | `sop.list`, `sop.execute` |
 | **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structuredData`, `lightpanda.detectForms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.waitForSelector`, `lightpanda.interactiveElements` |
 
 ## Recommended Workflows

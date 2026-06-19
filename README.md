@@ -3,11 +3,11 @@
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
 
-MCP server + CLI for intelligence gathering. 50 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
+MCP server + CLI for intelligence gathering. 68 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
 
 | Metric | Value |
 |--------|-------|
-| Tools | 50 (29 core + 21 Lightpanda browser automation) |
+| Tools | 68 (56 core + 12 Lightpanda browser automation) |
 | Sources | 411 across 47 countries |
 | Pools | 18 (geopolitics, tech, India, defense, health, etc.) |
 | Binary | Single `igs` binary (~19 MB musl static) |
