@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, climate, env, finance, govt, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, satellite, security, sop, sources, supply_chain, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, politics, reddit, research, satellite, security, sop, sources, supply_chain, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -348,8 +348,8 @@ impl_has_format!(
     GovtBillsInput, GovtRegulationsInput,
     PatentSearchInput, PatentDetailsInput,
     SopListInput, SopExecuteInput,
-    HealthCdcInput, HealthCdcCovidInput,
-    PoliticsFecInput, PoliticsFecCommitteesInput,
+    HealthCdcInput, HealthCdcCovidInput, HealthWhoInput,
+    PoliticsFecInput, PoliticsFecCommitteesInput, PoliticsOpenSecretsInput,
     SatelliteFirmsInput,
     ClimateNoaaInput, ClimateNoaaStationsInput,
     SupplyChainTradeInput,
@@ -870,6 +870,15 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
+    // ── Politics Tools ──────────────────────────────────────────
+
+    #[tool(name = "politics.opensecrets", description = "Search OpenSecrets for campaign finance donor data. Returns individual contributors to a candidate. Requires OpenSecrets API key (free for non-commercial use).")]
+    async fn politics_opensecrets(&self, params: Parameters<PoliticsOpenSecretsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = politics::politics_opensecrets(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
     // ── Patent Tools ────────────────────────────────────────────
 
     #[tool(name = "patents.search", description = "Search USPTO patents via PatentsView API. Returns patent number, title, date, abstract, and Google Patents URL. Supports years_back (default 5). Default output: TOON.")]
@@ -950,6 +959,15 @@ impl IgsMcpServer {
     async fn supply_chain_trade_flows(&self, params: Parameters<SupplyChainTradeInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = supply_chain::supply_chain_trade_flows(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    // ── Health Tools ─────────────────────────────────────────
+
+    #[tool(name = "health.who_gho", description = "Query WHO Global Health Observatory data. Returns health indicators for 194 countries. Use indicator codes like WHOSIS_000001 (life expectancy), WHS3_49 (births attended by skilled health personnel).")]
+    async fn health_who_gho(&self, params: Parameters<HealthWhoInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = health::health_who_gho(params.0).await?;
         Ok(format_output(&output, &format))
     }
 

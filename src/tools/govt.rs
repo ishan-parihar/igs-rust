@@ -1,9 +1,13 @@
-use super::helpers::urlencoding;
+use crate::config;
+use crate::http::{self as http_mod, HttpClient};
+use crate::tools::helpers::urlencoding;
 use super::types::*;
-use anyhow::Result;
 
 pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String> {
-    let client = reqwest::Client::new();
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+    
     let query = urlencoding(&input.query);
     let congress = input.congress.unwrap_or(118);
 
@@ -12,23 +16,18 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
         query, congress
     );
 
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "IGS-MCP/0.4")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP error: {}", e))?;
+    let outcome = http.fetch(&url, None, "bypass").await
+        .map_err(|e| format!("Congress.gov API error: {}", e))?;
 
-    if !resp.status().is_success() {
-        return Err(format!("Congress.gov API returned {}", resp.status()));
-    }
+    let resp = match outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("Congress.gov returned cached response".into()),
+    };
 
-    let data: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("JSON error: {}", e))?;
+    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+        .map_err(|e| format!("JSON parse error: {}", e))?;
+    
     let mut bills = Vec::new();
-
     if let Some(bills_arr) = data["bills"].as_array() {
         for b in bills_arr {
             bills.push(BillEntry {
@@ -59,7 +58,10 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
 }
 
 pub async fn govt_regulations(input: GovtRegulationsInput) -> Result<GovtRegulationsOutput, String> {
-    let client = reqwest::Client::new();
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+    
     let query = urlencoding(&input.query);
 
     let url = format!(
@@ -67,23 +69,18 @@ pub async fn govt_regulations(input: GovtRegulationsInput) -> Result<GovtRegulat
         query
     );
 
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "IGS-MCP/0.4")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP error: {}", e))?;
+    let outcome = http.fetch(&url, None, "bypass").await
+        .map_err(|e| format!("Federal Register API error: {}", e))?;
 
-    if !resp.status().is_success() {
-        return Err(format!("Federal Register API returned {}", resp.status()));
-    }
+    let resp = match outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("Federal Register returned cached response".into()),
+    };
 
-    let data: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("JSON error: {}", e))?;
+    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+        .map_err(|e| format!("JSON parse error: {}", e))?;
+    
     let mut regulations = Vec::new();
-
     if let Some(results) = data["results"].as_array() {
         for r in results {
             regulations.push(RegulationEntry {

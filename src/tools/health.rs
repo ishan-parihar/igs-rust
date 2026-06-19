@@ -1,3 +1,5 @@
+use crate::config;
+use crate::http::{self as http_mod, HttpClient};
 use super::helpers::urlencoding;
 use super::types::*;
 
@@ -113,5 +115,58 @@ pub async fn health_cdc_covid(input: HealthCdcCovidInput) -> Result<HealthCdcCov
         ),
         total: records.len(),
         records,
+    })
+}
+
+pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, String> {
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+    
+    let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
+    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    
+    let mut url = format!(
+        "https://ghoapi.azureedge.net/api/{}?$top={}",
+        indicator, limit
+    );
+    
+    if let Some(ref country) = input.country {
+        url = format!("{}&$filter=SpatialDim eq '{}'", url, country);
+    }
+    
+    if let Some(ref year) = input.year {
+        url = format!("{}&$filter=TimeDim eq {}", url, year);
+    }
+    
+    let outcome = http.fetch(&url, None, "bypass").await
+        .map_err(|e| format!("WHO GHO API error: {}", e))?;
+    
+    let resp = match outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("WHO GHO returned cached response".into()),
+    };
+    
+    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+        .map_err(|e| format!("JSON parse error: ${e}"))?;
+    
+    let mut observations = Vec::new();
+    if let Some(results) = data["value"].as_array() {
+        for r in results {
+            observations.push(WhoObservation {
+                indicator: r["IndicatorCode"].as_str().unwrap_or("").to_string(),
+                country: r["SpatialDim"].as_str().unwrap_or("").to_string(),
+                year: r["TimeDim"].as_u64().unwrap_or(0) as u32,
+                value: r["NumericValue"].as_f64().unwrap_or(0.0),
+                low: r["Low"].as_f64().unwrap_or(0.0),
+                high: r["High"].as_f64().unwrap_or(0.0),
+            });
+        }
+    }
+    
+    Ok(HealthWhoOutput {
+        query: format!("{} ({})", indicator, input.country.as_deref().unwrap_or("Global")),
+        total: observations.len(),
+        observations,
     })
 }

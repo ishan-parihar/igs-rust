@@ -1700,6 +1700,32 @@ pub struct NoaaStation {
     pub datacoverage: f64,
 }
 
+// ─── OpenSecrets Types ──────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PoliticsOpenSecretsInput {
+    /// Candidate ID (e.g., "N00007360" for Biden)
+    pub cid: String,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PoliticsOpenSecretsOutput {
+    pub query: String,
+    pub total: usize,
+    pub donors: Vec<OpensecretsDonor>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct OpensecretsDonor {
+    pub name: String,
+    pub total: f64,
+    pub count: u32,
+}
+
 // ─── Supply Chain Types ─────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -1736,4 +1762,37 @@ pub struct TradeFlow {
     pub commodity: String,
     pub value_usd: f64,
     pub net_weight_kg: f64,
+}
+
+// ─── WHO Types ──────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthWhoInput {
+    /// WHO indicator code (e.g., "WHOSIS_000001" for life expectancy)
+    pub indicator: Option<String>,
+    /// Country code (e.g., "IND", "USA", "GBR")
+    pub country: Option<String>,
+    /// Year filter
+    pub year: Option<u32>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthWhoOutput {
+    pub query: String,
+    pub total: usize,
+    pub observations: Vec<WhoObservation>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WhoObservation {
+    pub indicator: String,
+    pub country: String,
+    pub year: u32,
+    pub value: f64,
+    pub low: f64,
+    pub high: f64,
 }

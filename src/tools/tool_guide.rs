@@ -32,6 +32,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     decision_tree.insert("I need federal regulations".to_string(), "govt.regulations".to_string());
     decision_tree.insert("I need campaign finance data".to_string(), "politics.fec_candidates".to_string());
     decision_tree.insert("I need political committees".to_string(), "politics.fec_committees".to_string());
+    decision_tree.insert("I need campaign finance donor data".to_string(), "politics.opensecrets".to_string());
     
     // Health & Environment
     decision_tree.insert("I need health statistics".to_string(), "health.cdc_leading_causes".to_string());
@@ -110,6 +111,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     categories.insert("Politics".to_string(), vec![
         ToolGuideItem { name: "politics.fec_candidates".to_string(), description: "Search FEC candidates".to_string() },
         ToolGuideItem { name: "politics.fec_committees".to_string(), description: "Search FEC committees".to_string() },
+        ToolGuideItem { name: "politics.opensecrets".to_string(), description: "Search OpenSecrets donor data".to_string() },
     ]);
     categories.insert("Health".to_string(), vec![
         ToolGuideItem { name: "health.cdc_leading_causes".to_string(), description: "Leading causes of death".to_string() },

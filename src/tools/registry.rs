@@ -128,6 +128,20 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "health",
+        description: "WHO Global Health Observatory data and CDC health statistics. Query global health indicators, disease data, and vital statistics.",
+        tools: &[
+            "health.who_gho",
+        ],
+    },
+    ToolGroup {
+        name: "politics",
+        description: "Campaign finance and political data. Search FEC candidates, committees, and OpenSecrets donor contributions.",
+        tools: &[
+            "politics.opensecrets",
+        ],
+    },
+    ToolGroup {
         name: "browser",
         description: "Persistent browser session for JavaScript-rendered pages. Navigate with lightpanda.goto first, then interact with other tools.",
         tools: &[
@@ -221,6 +235,8 @@ mod tests {
             "satellite.firms_fires",
             "env.epa_facilities", "env.epa_emissions",
             "supply_chain.trade_flows",
+            "health.who_gho",
+            "politics.opensecrets",
             "climate.noaa_observations", "climate.noaa_stations",
             "legal.search_cases", "legal.case_details",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
