@@ -131,14 +131,14 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         name: "health",
         description: "WHO Global Health Observatory data and CDC health statistics. Query global health indicators, disease data, and vital statistics.",
         tools: &[
-            "health.who_gho",
+            "health.cdc_leading_causes", "health.cdc_covid", "health.who_gho",
         ],
     },
     ToolGroup {
         name: "politics",
         description: "Campaign finance and political data. Search FEC candidates, committees, and OpenSecrets donor contributions.",
         tools: &[
-            "politics.opensecrets",
+            "politics.fec_candidates", "politics.fec_committees", "politics.opensecrets",
         ],
     },
     ToolGroup {
@@ -235,8 +235,8 @@ mod tests {
             "satellite.firms_fires",
             "env.epa_facilities", "env.epa_emissions",
             "supply_chain.trade_flows",
-            "health.who_gho",
-            "politics.opensecrets",
+            "health.cdc_leading_causes", "health.cdc_covid", "health.who_gho",
+            "politics.fec_candidates", "politics.fec_committees", "politics.opensecrets",
             "climate.noaa_observations", "climate.noaa_stations",
             "legal.search_cases", "legal.case_details",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
