@@ -39,34 +39,34 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
         if let Some(ref tavily) = settings.tavily {
             if tavily.enabled {
                 if let Some(ref api_key) = tavily.api_key {
-                    let query_enc = urlencoding(&input.query);
-                    let mut url = format!(
-                        "https://api.tavily.com/search?api_key={}&query={}&max_results={}&topic={}",
-                        api_key, query_enc,
-                        input.max_results.unwrap_or(10),
-                        input.topic.as_deref().unwrap_or("general")
-                    );
-
-                    // Add optional Tavily API parameters
+                    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+                    let http = HttpClient::new(&settings.http, &cache_dir);
+                    
+                    let mut body = serde_json::json!({
+                        "api_key": api_key,
+                        "query": input.query,
+                        "max_results": input.max_results.unwrap_or(10),
+                        "topic": input.topic.as_deref().unwrap_or("general"),
+                    });
+                    
                     if let Some(ref domains) = input.include_domains {
                         if !domains.is_empty() {
-                            url.push_str(&format!("&include_domains={}", domains.join(",")));
+                            body["include_domains"] = serde_json::json!(domains);
                         }
                     }
                     if let Some(ref domains) = input.exclude_domains {
                         if !domains.is_empty() {
-                            url.push_str(&format!("&exclude_domains={}", domains.join(",")));
+                            body["exclude_domains"] = serde_json::json!(domains);
                         }
                     }
                     if let Some(days) = input.days {
-                        url.push_str(&format!("&days={}", days));
+                        body["days"] = serde_json::json!(days);
                     }
                     if let Some(answer) = input.include_answer {
-                        url.push_str(&format!("&include_answer={}", answer));
+                        body["include_answer"] = serde_json::json!(answer);
                     }
-                    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-                    let http = HttpClient::new(&settings.http, &cache_dir);
-                    match http.fetch(&url, None, "bypass").await {
+                    
+                    match http.post_json("https://api.tavily.com/search", &body, None).await {
                         Ok(outcome) => {
                             if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
                                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
