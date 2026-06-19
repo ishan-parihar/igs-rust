@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, finance, govt, insights, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, security, sop, sources, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, finance, govt, insights, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, satellite, security, sop, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -339,7 +339,7 @@ impl_has_format!(
     SourceListInput, GeoListInput,
     NewsFetchInput, NewsTestInput, NewsEnrichInput,
     RedditSearchInput, RedditFeedInput,
-    ResearchSearchInput, ResearchDownloadInput,
+    ResearchSearchInput, ResearchDownloadInput, ResearchPubMedInput,
     WebSearchInput, WebScrapeInput, WebCrawlInput, WebMapInput,
     InsightFindConnectionsInput, InsightTrendingInput,
     WeatherForecastInput, WeatherCurrentInput, WeatherAlertsInput,
@@ -348,6 +348,9 @@ impl_has_format!(
     GovtBillsInput, GovtRegulationsInput,
     PatentSearchInput, PatentDetailsInput,
     SopListInput, SopExecuteInput,
+    HealthCdcInput, HealthCdcCovidInput,
+    PoliticsFecInput, PoliticsFecCommitteesInput,
+    SatelliteFirmsInput,
 );
 
 // ─── Sync Settings Loader ───────────────────────────────────────
@@ -741,6 +744,13 @@ impl IgsMcpServer {
         research::research_download(params.0).await.map(Json)
     }
 
+    #[tool(name = "research.pubmed_search", description = "Search PubMed for medical research papers. Returns PMID, title, authors, journal, publication date, and PubMed URL. Use for biomedical and life sciences research.")]
+    async fn research_pubmed_search(&self, params: Parameters<ResearchPubMedInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = research::research_pubmed_search(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
     // ── Finance Tools ────────────────────────────────────────────
 
     #[tool(name = "finance.market", description = "Get stock market quotes for given symbols. Uses Yahoo Finance API (free, no key). Returns symbol, name, price, change, change_pct, volume. Default output: TOON.")]
@@ -889,6 +899,15 @@ impl IgsMcpServer {
             );
         }
         Ok(Json(output))
+    }
+
+    // ── Satellite Tools ────────────────────────────────────────
+
+    #[tool(name = "satellite.firms_fires", description = "Query NASA FIRMS active fire data for a geographic bounding box. Uses VIIRS (default: VIIRS_SNPP_NRT) or MODIS satellite sensors. Returns fire hotspots with lat/lon, brightness, confidence, fire radiative power (FRP), and acquisition metadata. Supports VIIRS_SNPP_NRT, VIIRS_NOAA20_NRT, MODIS_NRT sources. Default output: TOON.")]
+    async fn satellite_firms_fires(&self, params: Parameters<SatelliteFirmsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = satellite::satellite_firms_fires(params.0).await?;
+        Ok(format_output(&output, &format))
     }
 
     // ── Web Tools ───────────────────────────────────────────────

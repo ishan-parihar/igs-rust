@@ -1330,3 +1330,195 @@ pub struct SopStepResult {
     pub status: String,
     pub output: String,
 }
+
+// ─── PubMed Types ───────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ResearchPubMedInput {
+    /// Search query (e.g., "CRISPR gene editing", "COVID-19 vaccine")
+    pub query: String,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ResearchPubMedOutput {
+    pub query: String,
+    pub total: usize,
+    pub papers: Vec<ResearchPubMedPaper>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ResearchPubMedPaper {
+    pub pmid: String,
+    pub title: String,
+    pub authors: Vec<String>,
+    pub journal: String,
+    pub pub_date: String,
+    pub url: String,
+}
+
+// ─── Health Types ───────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthCdcInput {
+    /// State name (optional, defaults to US total)
+    pub state: Option<String>,
+    /// Year (default: 2021)
+    pub year: Option<u32>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthCdcOutput {
+    pub query: String,
+    pub total: usize,
+    pub causes: Vec<HealthCause>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthCause {
+    pub cause: String,
+    pub state: String,
+    pub year: String,
+    pub deaths: u64,
+    pub age_adjusted_rate: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthCdcCovidInput {
+    /// State name (optional, defaults to all states)
+    pub state: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthCdcCovidOutput {
+    pub query: String,
+    pub total: usize,
+    pub records: Vec<HealthCovidRecord>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct HealthCovidRecord {
+    pub state: String,
+    pub date: String,
+    pub cases: u64,
+    pub deaths: u64,
+    pub new_cases: u64,
+    pub new_deaths: u64,
+}
+
+// ─── Politics Types ─────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PoliticsFecInput {
+    /// Candidate name to search (e.g., "Biden", "Trump")
+    pub name: String,
+    /// Office filter: P (President), S (Senate), H (House)
+    pub office: Option<String>,
+    /// Party filter: DEM, REP, etc.
+    pub party: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PoliticsFecOutput {
+    pub query: String,
+    pub total: usize,
+    pub candidates: Vec<FecCandidate>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FecCandidate {
+    pub id: String,
+    pub name: String,
+    pub party: String,
+    pub office: String,
+    pub state: String,
+    pub total_receipts: f64,
+    pub total_disbursements: f64,
+    pub cash_on_hand: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PoliticsFecCommitteesInput {
+    /// Committee name to search
+    pub name: String,
+    /// Committee type filter: N (National), O (Party), V (PAC), W (PAC-WC)
+    pub committee_type: Option<String>,
+    /// Max results (default: 20, max: 100)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PoliticsFecCommitteesOutput {
+    pub query: String,
+    pub total: usize,
+    pub committees: Vec<FecCommittee>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FecCommittee {
+    pub id: String,
+    pub name: String,
+    pub committee_type: String,
+    pub party: String,
+    pub state: String,
+    pub total_receipts: f64,
+    pub total_disbursements: f64,
+}
+
+// ─── Satellite Types ────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SatelliteFirmsInput {
+    /// West longitude of bounding box (e.g., -120.0)
+    pub west: f64,
+    /// South latitude of bounding box (e.g., 30.0)
+    pub south: f64,
+    /// East longitude of bounding box (e.g., -100.0)
+    pub east: f64,
+    /// North latitude of bounding box (e.g., 50.0)
+    pub north: f64,
+    /// Data source: VIIRS_SNPP_NRT (default), VIIRS_NOAA20_NRT, MODIS_NRT
+    pub source: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SatelliteFirmsOutput {
+    pub query: String,
+    pub source: String,
+    pub total: usize,
+    pub hotspots: Vec<FireHotspot>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct FireHotspot {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub bright_ti4: f64,
+    pub scan: f64,
+    pub track: f64,
+    pub acq_date: String,
+    pub acq_time: String,
+    pub satellite: String,
+    pub confidence: String,
+    pub frp: f64,
+    pub daynight: String,
+}

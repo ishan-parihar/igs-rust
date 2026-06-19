@@ -30,9 +30,9 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
     },
     ToolGroup {
         name: "research",
-        description: "Search arXiv and Semantic Scholar for academic papers. Download PDFs for offline analysis.",
+        description: "Search arXiv, Semantic Scholar, and PubMed for academic papers. Download PDFs for offline analysis.",
         tools: &[
-            "research.search", "research.paper", "research.download",
+            "research.search", "research.paper", "research.download", "research.pubmed_search",
         ],
     },
     ToolGroup {
@@ -90,6 +90,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         description: "Search US Congressional bills and Federal Register regulations. Use for legislative tracking, regulatory monitoring, and policy intelligence.",
         tools: &[
             "govt.bills", "govt.regulations",
+        ],
+    },
+    ToolGroup {
+        name: "satellite",
+        description: "Satellite-based fire detection using NASA FIRMS API. Query active fire hotspots worldwide via VIIRS and MODIS sensors.",
+        tools: &[
+            "satellite.firms_fires",
         ],
     },
     ToolGroup {
@@ -174,7 +181,7 @@ mod tests {
             "parsers.list", "tool.guide",
             "news.fetch", "news.testSource", "news.enrich",
             "reddit.search", "reddit.feed",
-            "research.search", "research.paper", "research.download",
+            "research.search", "research.paper", "research.download", "research.pubmed_search",
             "web.search", "web.scrape", "web.crawl", "web.map",
             "insights.findConnections", "insights.trendingEntities",
             "insights.indexArticles", "insights.getStats", "insights.clearIndex",
@@ -183,6 +190,7 @@ mod tests {
             "security.cve", "security.advisories",
             "patents.search", "patents.details",
             "govt.bills", "govt.regulations",
+            "satellite.firms_fires",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
             "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
             "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",

@@ -360,6 +360,88 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
     })
 }
 
+/// Search PubMed for biomedical and life sciences research papers
+pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<ResearchPubMedOutput, String> {
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+
+    let query = urlencoding(&input.query);
+    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+
+    let search_url = format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmax={}&retmode=json",
+        query, limit
+    );
+
+    let search_outcome = http.fetch(&search_url, None, "bypass").await
+        .map_err(|e| format!("PubMed search error: {}", e))?;
+
+    let search_resp = match search_outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("PubMed returned cached response".into()),
+    };
+
+    let search_data: serde_json::Value = serde_json::from_str(&search_resp.body_text)
+        .map_err(|e| format!("JSON parse error: ${e}"))?;
+
+    let pmids: Vec<String> = search_data["esearchresult"]["idlist"]
+        .as_array()
+        .map(|ids| ids.iter().filter_map(|id| id.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    if pmids.is_empty() {
+        return Ok(ResearchPubMedOutput {
+            query: input.query,
+            total: 0,
+            papers: vec![],
+        });
+    }
+
+    let ids = pmids.join(",");
+    let detail_url = format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={}&retmode=json",
+        ids
+    );
+
+    let detail_outcome = http.fetch(&detail_url, None, "bypass").await
+        .map_err(|e| format!("PubMed detail error: {}", e))?;
+
+    let detail_resp = match detail_outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("PubMed returned cached response".into()),
+    };
+
+    let detail_data: serde_json::Value = serde_json::from_str(&detail_resp.body_text)
+        .map_err(|e| format!("JSON parse error: ${e}"))?;
+
+    let mut papers = Vec::new();
+    if let Some(result) = detail_data["result"].as_object() {
+        for pmid in &pmids {
+            if let Some(paper) = result.get(pmid) {
+                let authors = paper["authors"].as_array()
+                    .map(|arr| arr.iter().filter_map(|a| a["name"].as_str().map(String::from)).collect())
+                    .unwrap_or_default();
+
+                papers.push(ResearchPubMedPaper {
+                    pmid: pmid.clone(),
+                    title: paper["title"].as_str().unwrap_or("").to_string(),
+                    authors,
+                    journal: paper["fulljournalname"].as_str().unwrap_or("").to_string(),
+                    pub_date: paper["pubdate"].as_str().unwrap_or("").to_string(),
+                    url: format!("https://pubmed.ncbi.nlm.nih.gov/{}", pmid),
+                });
+            }
+        }
+    }
+
+    Ok(ResearchPubMedOutput {
+        query: input.query,
+        total: papers.len(),
+        papers,
+    })
+}
+
 /// Download a research paper PDF
 pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchDownloadOutput, String> {
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
