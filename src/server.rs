@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::lightpanda::LightpandaManager;
 use crate::lightpanda_mcp::LightpandaMcpClient;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, finance, insights, lp_mcp, news, parsers as parsers_tools, pools, reddit, research, security, sources, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, finance, govt, insights, lp_mcp, news, parsers as parsers_tools, patents, pools, reddit, research, security, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -260,6 +260,8 @@ impl_has_format!(
     WeatherForecastInput, WeatherCurrentInput, WeatherAlertsInput,
     FinanceMarketInput, FinanceCryptoInput, FinanceTrendingInput,
     CveSearchInput, SecurityAdvisoriesInput,
+    GovtBillsInput, GovtRegulationsInput,
+    PatentSearchInput, PatentDetailsInput,
 );
 
 // ─── Sync Settings Loader ───────────────────────────────────────
@@ -323,6 +325,7 @@ pub struct IgsMcpServer {
     lightpanda_mcp: Arc<Mutex<Option<LightpandaMcpClient>>>,
     /// Tool groups for progressive discovery. Empty = all groups available.
     tool_groups: Vec<String>,
+    #[allow(dead_code)] // reserved for future tool use
     http_client: Arc<HttpClient>,
     settings: Arc<Settings>,
 }
@@ -729,6 +732,77 @@ impl IgsMcpServer {
             );
         }
         Ok(format_output(&output, &format))
+    }
+
+    // ── Government Tools ────────────────────────────────────────
+
+    #[tool(name = "govt.bills", description = "Search US Congressional bills via Congress.gov API. Returns bill number, title, sponsor, introduced date, latest action, and URL. Supports congress number filter (default: 118). Default output: TOON.")]
+    async fn govt_bills(&self, params: Parameters<GovtBillsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.query.clone();
+        let output = govt::govt_bills(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "govt.bills",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "govt.regulations", description = "Search Federal Register regulations via federalregister.gov API. Returns document number, title, abstract, publication date, agency, and URL. Default output: TOON.")]
+    async fn govt_regulations(&self, params: Parameters<GovtRegulationsInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.query.clone();
+        let output = govt::govt_regulations(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "govt.regulations",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
+    }
+
+    // ── Patent Tools ────────────────────────────────────────────
+
+    #[tool(name = "patents.search", description = "Search USPTO patents via PatentsView API. Returns patent number, title, date, abstract, and Google Patents URL. Supports years_back (default 5). Default output: TOON.")]
+    async fn patents_search(&self, params: Parameters<PatentSearchInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let _subject = params.0.query.clone();
+        let output = patents::patents_search(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "patents.search",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "patents.details", description = "Get detailed patent information by patent ID (e.g. US11234567). Returns title, date, abstract, claim count, and Google Patents URL. Do NOT use to search — use patents.search first.")]
+    async fn patents_details(&self, params: Parameters<PatentDetailsInput>) -> Result<Json<PatentDetailsOutput>, String> {
+        let _subject = params.0.patent_id.clone();
+        let output = patents::patents_details(params.0).await?;
+        #[cfg(not(test))]
+        {
+            crate::tools::dump::maybe_dump(
+                &self.settings,
+                "patents.details",
+                &_subject,
+                &toon_encode(&output),
+            );
+        }
+        Ok(Json(output))
     }
 
     // ── Web Tools ───────────────────────────────────────────────

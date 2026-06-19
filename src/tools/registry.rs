@@ -79,6 +79,20 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "patents",
+        description: "Search USPTO patents and retrieve patent details. Use for intellectual property research, prior art searches, and technology landscape analysis.",
+        tools: &[
+            "patents.search", "patents.details",
+        ],
+    },
+    ToolGroup {
+        name: "government",
+        description: "Search US Congressional bills and Federal Register regulations. Use for legislative tracking, regulatory monitoring, and policy intelligence.",
+        tools: &[
+            "govt.bills", "govt.regulations",
+        ],
+    },
+    ToolGroup {
         name: "browser",
         description: "Persistent browser session for JavaScript-rendered pages. Navigate with lightpanda.goto first, then interact with other tools.",
         tools: &[
@@ -160,6 +174,8 @@ mod tests {
             "weather.forecast", "weather.current", "weather.alerts",
             "finance.market", "finance.crypto", "finance.trending",
             "security.cve", "security.advisories",
+            "patents.search", "patents.details",
+            "govt.bills", "govt.regulations",
             "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
             "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structuredData",
             "lightpanda.detectForms", "lightpanda.click", "lightpanda.fill",

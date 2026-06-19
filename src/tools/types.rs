@@ -1158,3 +1158,108 @@ pub struct TrendingCoin {
     pub market_cap_rank: u32,
     pub score: f64,
 }
+
+// ─── Patent Types ─────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PatentSearchInput {
+    /// Search query (e.g., "machine learning", "CRISPR gene editing")
+    pub query: String,
+    /// Patent office: USPTO (default), EPO, WIPO
+    pub office: Option<String>,
+    /// Years back to search (default: 5)
+    pub years_back: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PatentSearchOutput {
+    pub query: String,
+    pub office: String,
+    pub total: usize,
+    pub patents: Vec<PatentEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PatentEntry {
+    pub id: String,
+    pub title: String,
+    pub date: String,
+    pub abstract_text: String,
+    pub office: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PatentDetailsInput {
+    /// Patent ID (e.g., "US11234567")
+    pub patent_id: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct PatentDetailsOutput {
+    pub id: String,
+    pub title: String,
+    pub date: String,
+    pub abstract_text: String,
+    pub claims: u32,
+    pub url: String,
+}
+
+// ─── Government Types ─────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GovtBillsInput {
+    /// Search query (e.g., "climate change", "healthcare")
+    pub query: String,
+    /// Congress number (default: 118)
+    pub congress: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GovtBillsOutput {
+    pub query: String,
+    pub congress: u32,
+    pub total: usize,
+    pub bills: Vec<BillEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct BillEntry {
+    pub number: u32,
+    pub title: String,
+    pub sponsor: String,
+    pub introduced_date: String,
+    pub latest_action: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GovtRegulationsInput {
+    /// Search query (e.g., "environmental protection", "financial regulation")
+    pub query: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GovtRegulationsOutput {
+    pub query: String,
+    pub total: usize,
+    pub regulations: Vec<RegulationEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct RegulationEntry {
+    pub document_number: String,
+    pub title: String,
+    pub abstract_text: String,
+    pub publication_date: String,
+    pub agency: String,
+    pub url: String,
+}

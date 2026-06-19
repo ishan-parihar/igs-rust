@@ -16,4 +16,6 @@ pub mod weather;
 
 pub mod dump;
 pub mod finance;
+pub mod govt;
+pub mod patents;
 pub mod registry;
