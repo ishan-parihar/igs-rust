@@ -5,6 +5,32 @@ use std::collections::HashMap;
 
 use super::types_base::{DepthOptions, DiscoveryFilters, OutputOptions};
 
+// ─── Pagination Types ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PaginationInput {
+    /// Opaque cursor for next page (from previous response's next_cursor)
+    pub cursor: Option<String>,
+    /// Items per page (default: 50, max: 100)
+    pub page_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PaginatedOutput<T> {
+    pub items: Vec<T>,
+    pub next_cursor: Option<String>,
+    pub total: usize,
+}
+
+pub fn paginate<T: Clone>(items: &[T], cursor: Option<String>, page_size: u32) -> (Vec<T>, Option<String>) {
+    let page_size = page_size.min(100) as usize;
+    let start = cursor.and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
+    let end = (start + page_size).min(items.len());
+    let page = items[start..end].to_vec();
+    let next_cursor = if end < items.len() { Some(end.to_string()) } else { None };
+    (page, next_cursor)
+}
+
 // ─── Tool Guide Types ──────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -77,6 +103,8 @@ pub struct SourceListInput {
     /// Active sources only (default: all)
     pub active_only: Option<bool>,
     #[serde(flatten)]
+    pub pagination: PaginationInput,
+    #[serde(flatten)]
     pub output: OutputOptions,
 }
 
@@ -130,7 +158,7 @@ pub struct SourceDeleteOutput {
 
 // ─── Parser Tool Types ────────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ParserInfo {
     pub key: String,
     pub note: String,
@@ -139,6 +167,12 @@ pub struct ParserInfo {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ParserListOutput {
     pub parsers: Vec<ParserInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ParserListInput {
+    #[serde(flatten)]
+    pub pagination: PaginationInput,
 }
 
 // ─── Autodiscover Types ───────────────────────────────────────
@@ -180,10 +214,12 @@ pub struct EnableScraperOutput {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GeoListInput {
     #[serde(flatten)]
+    pub pagination: PaginationInput,
+    #[serde(flatten)]
     pub output: OutputOptions,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CountryInfo {
     pub name: String,
     pub code: String,
@@ -195,7 +231,7 @@ pub struct CountriesOutput {
     pub countries: Vec<CountryInfo>,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CityInfo {
     pub name: String,
     pub source_count: usize,
@@ -206,7 +242,7 @@ pub struct CitiesOutput {
     pub cities: Vec<CityInfo>,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DomainInfoCount {
     pub name: String,
     pub source_count: usize,

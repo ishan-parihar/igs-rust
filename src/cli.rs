@@ -464,7 +464,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Sources { action } => match action {
             SourceAction::List { pool, active_only } => {
                 let pools = pool.map(|p| vec![p]);
-                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), output: OutputOptions { format: None } }).await)?;
+                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), pagination: PaginationInput { cursor: None, page_size: None }, output: OutputOptions { format: None } }).await)?;
                 output(fmt, &result);
             }
             SourceAction::Discover { url, pool, name } => {
