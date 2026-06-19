@@ -1,5 +1,4 @@
 use super::types::*;
-use super::types_base::OutputOptions;
 
 fn built_in_chains() -> Vec<SopChain> {
     vec![
@@ -119,6 +118,7 @@ pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::types_base::OutputOptions;
 
     #[test]
     fn test_sop_list_returns_chains() {

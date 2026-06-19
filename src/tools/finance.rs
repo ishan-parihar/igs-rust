@@ -1,20 +1,22 @@
+use crate::config;
+use crate::http::{self as http_mod, HttpClient};
 use super::types::*;
-use anyhow::Result;
 
 pub async fn finance_market(input: FinanceMarketInput) -> Result<FinanceMarketOutput, String> {
-    let client = reqwest::Client::new();
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
     let mut quotes = Vec::new();
     
     for symbol in &input.symbols {
         let url = format!("https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d", symbol);
-        let resp = client.get(&url)
-            .header("User-Agent", "IGS-MCP/0.4")
-            .send()
-            .await
-            .map_err(|e| format!("HTTP error: {}", e))?;
+        let outcome = http.fetch(&url, None, "bypass").await
+            .map_err(|e| format!("Yahoo Finance error: {}", e))?;
         
-        if resp.status().is_success() {
-            let data: serde_json::Value = resp.json().await.map_err(|e| format!("JSON error: {}", e))?;
+        if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
+            let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("JSON parse error: {}", e))?;
+            
             if let Some(result) = data["chart"]["result"].as_array().and_then(|r| r.first()) {
                 let meta = &result["meta"];
                 let price = meta["regularMarketPrice"].as_f64().unwrap_or(0.0);
@@ -41,24 +43,26 @@ pub async fn finance_market(input: FinanceMarketInput) -> Result<FinanceMarketOu
 }
 
 pub async fn finance_crypto(input: FinanceCryptoInput) -> Result<FinanceCryptoOutput, String> {
-    let client = reqwest::Client::new();
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+    
     let ids = if input.ids.is_empty() { input.symbols.clone() } else { input.ids };
     let ids_str = ids.join(",");
     let url = format!("https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true", ids_str);
     
-    let resp = client.get(&url)
-        .header("User-Agent", "IGS-MCP/0.4")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP error: {}", e))?;
+    let outcome = http.fetch(&url, None, "bypass").await
+        .map_err(|e| format!("CoinGecko API error: {}", e))?;
     
-    if !resp.status().is_success() {
-        return Err(format!("CoinGecko API returned {}", resp.status()));
-    }
+    let resp = match outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("CoinGecko returned cached response".into()),
+    };
     
-    let data: serde_json::Value = resp.json().await.map_err(|e| format!("JSON error: {}", e))?;
+    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+        .map_err(|e| format!("JSON parse error: {}", e))?;
+    
     let mut prices = Vec::new();
-    
     for id in &input.symbols {
         if let Some(coin) = data.get(id) {
             prices.push(CryptoPrice {
@@ -77,22 +81,23 @@ pub async fn finance_crypto(input: FinanceCryptoInput) -> Result<FinanceCryptoOu
 }
 
 pub async fn finance_trending(_input: FinanceTrendingInput) -> Result<FinanceTrendingOutput, String> {
-    let client = reqwest::Client::new();
+    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
+    
     let url = "https://api.coingecko.com/api/v3/search/trending";
+    let outcome = http.fetch(url, None, "bypass").await
+        .map_err(|e| format!("CoinGecko API error: {}", e))?;
     
-    let resp = client.get(url)
-        .header("User-Agent", "IGS-MCP/0.4")
-        .send()
-        .await
-        .map_err(|e| format!("HTTP error: {}", e))?;
+    let resp = match outcome {
+        http_mod::FetchOutcome::Response(r, _, _) => r,
+        _ => return Err("CoinGecko returned cached response".into()),
+    };
     
-    if !resp.status().is_success() {
-        return Err(format!("CoinGecko API returned {}", resp.status()));
-    }
+    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
+        .map_err(|e| format!("JSON parse error: {}", e))?;
     
-    let data: serde_json::Value = resp.json().await.map_err(|e| format!("JSON error: {}", e))?;
     let mut trending = Vec::new();
-    
     if let Some(coins) = data["coins"].as_array() {
         for coin in coins {
             let item = &coin["item"];
