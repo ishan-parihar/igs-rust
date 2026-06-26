@@ -1701,3 +1701,111 @@ pub struct WhoObservation {
     pub low: f64,
     pub high: f64,
 }
+
+// ─── YouTube Types ──────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeSearchInput {
+    /// Search query
+    pub query: String,
+    /// Max results (default: 10, max: 50)
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeVideo {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub channel: String,
+    pub duration: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeSearchOutput {
+    pub videos: Vec<YoutubeVideo>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeMetadataInput {
+    /// Video URL
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeMetadataOutput {
+    pub title: String,
+    pub description: String,
+    pub channel: String,
+    pub duration: Option<String>,
+    pub views: Option<u64>,
+    pub likes: Option<u64>,
+    pub upload_date: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeSubtitlesInput {
+    /// Video URL
+    pub url: String,
+    /// Subtitle language (default: en)
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct YoutubeSubtitlesOutput {
+    pub subtitles: String,
+    pub language: String,
+}
+
+// ─── Twitter Types ─────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TwitterSearchInput {
+    /// Search query
+    pub query: String,
+    /// Max results (default: 10)
+    pub limit: Option<u32>,
+    /// Search mode: Top, Latest, Photos, Videos, Users (default: Latest)
+    pub search_mode: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TwitterSearchOutput {
+    pub tweets: Vec<TwitterTweet>,
+    pub count: usize,
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TwitterTweet {
+    pub id: String,
+    pub text: String,
+    pub author: String,
+    pub username: String,
+    pub created_at: String,
+    pub url: String,
+    pub likes: Option<i32>,
+    pub retweets: Option<i32>,
+    pub replies: Option<i32>,
+    pub views: Option<i32>,
+    pub is_retweet: bool,
+    pub is_reply: bool,
+    pub hashtags: Vec<String>,
+    pub urls: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TwitterReadInput {
+    /// Tweet URL or ID
+    pub url: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TwitterReadOutput {
+    pub tweet: TwitterTweet,
+}

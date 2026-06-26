@@ -2,7 +2,7 @@ use crate::config;
 use crate::http::HttpClient;
 use crate::obscura::ObscuraManager;
 use crate::persistence;
-use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, politics, reddit, research, satellite, security, sop, sources, tool_guide, types::*, web, weather};
+use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, politics, reddit, research, satellite, security, sop, sources, tool_guide, twitter, types::*, web, weather, youtube};
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
@@ -355,6 +355,7 @@ impl_has_format!(
     ClimateNoaaInput, ClimateNoaaStationsInput,
     EnvEpaFacilitiesInput, EnvEpaEmissionsInput,
     LegalSearchInput, LegalCaseDetailsInput,
+    TwitterSearchInput, TwitterReadInput,
 );
 
 // ─── Sync Settings Loader ───────────────────────────────────────
@@ -1163,6 +1164,40 @@ impl IgsMcpServer {
     async fn sop_execute(&self, params: Parameters<SopExecuteInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sop::sop_execute(params.0)?;
+        Ok(format_output(&output, &format))
+    }
+
+    // ── YouTube Tools ─────────────────────────────────────────
+
+    #[tool(name = "youtube.search", description = "Search YouTube videos by query. Returns video ID, title, URL, channel, and duration.")]
+    async fn youtube_search(&self, params: Parameters<YoutubeSearchInput>) -> Result<CallToolResult, String> {
+        let output = youtube::youtube_search(params.0).await?;
+        Ok(format_output(&output, "json"))
+    }
+
+    #[tool(name = "youtube.metadata", description = "Get YouTube video metadata. Returns title, description, channel, duration, views, likes, upload date.")]
+    async fn youtube_metadata(&self, params: Parameters<YoutubeMetadataInput>) -> Result<Json<YoutubeMetadataOutput>, String> {
+        youtube::youtube_metadata(params.0).await.map(Json)
+    }
+
+    #[tool(name = "youtube.subtitles", description = "Extract YouTube video subtitles. Returns subtitle text and language used.")]
+    async fn youtube_subtitles(&self, params: Parameters<YoutubeSubtitlesInput>) -> Result<Json<YoutubeSubtitlesOutput>, String> {
+        youtube::youtube_subtitles(params.0).await.map(Json)
+    }
+
+    // ── Twitter Tools ─────────────────────────────────────────
+
+    #[tool(name = "twitter.search", description = "Search tweets by query. Uses agent-twitter-client for cookie-based access. Returns Tweet[] with id, text, author, url.")]
+    async fn twitter_search(&self, params: Parameters<TwitterSearchInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = twitter::twitter_search(params.0).await?;
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(name = "twitter.read", description = "Read a tweet by URL or ID. Returns full tweet details including author, text, likes, retweets.")]
+    async fn twitter_read(&self, params: Parameters<TwitterReadInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0);
+        let output = twitter::twitter_read(params.0).await?;
         Ok(format_output(&output, &format))
     }
 }
