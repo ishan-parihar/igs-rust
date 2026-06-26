@@ -158,9 +158,7 @@ pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String
     let provider = input.provider.as_deref().unwrap_or("default");
 
     match provider {
-        "lightpanda" => web_scrape_lightpanda(&input, &settings).await,
-        "tavily" => web_scrape_tavily(&input, &settings).await,
-        "firecrawl" => web_scrape_firecrawl(&input, &settings).await,
+        "obscura" => web_scrape_obscura(&input, &settings).await,
         _ => web_scrape_default(&input, &settings).await,
     }
 }
@@ -188,153 +186,29 @@ async fn web_scrape_default(input: &WebScrapeInput, settings: &crate::types::Set
     extract_scrape_output(&input.url, &body, "default", input.formats.as_deref())
 }
 
-/// Scrape using Lightpanda headless browser (JS rendering)
-async fn web_scrape_lightpanda(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
-    if !settings.lightpanda.enabled {
-        return Err("Lightpanda is not enabled. Set lightpanda.enabled=true in settings.yml to use provider='lightpanda'".into());
+/// Scrape using Obscura headless browser (JS rendering)
+async fn web_scrape_obscura(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
+    if !settings.obscura.enabled {
+        return Err("Obscura is not enabled. Set obscura.enabled=true in settings.yml to use provider='obscura'".into());
     }
 
-    let lp = crate::lightpanda::LightpandaManager::new(&settings.lightpanda);
-    let obey_robots = settings.lightpanda.obey_robots;
+    let obscura = crate::obscura::ObscuraManager::new(&settings.obscura);
+    let obey_robots = settings.obscura.obey_robots;
     let dump_format = "markdown";
     let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
-    let include_frames = input.include_frames.unwrap_or(false);
 
-    let body = lp.fetch_with_all_options(
+    let body = obscura.fetch_with_all_options(
         &input.url,
         dump_format,
         obey_robots,
         wait_until,
-        include_frames,
+        input.include_frames.unwrap_or(false),
         input.wait_selector.as_deref(),
-        input.strip_mode.as_deref(),
-        input.structured_data.unwrap_or(false),
-    ).await.map_err(|e| format!("Lightpanda scrape failed: {}", e))?;
+    ).await.map_err(|e| format!("Obscura scrape failed: {}", e))?;
 
-    extract_scrape_output(&input.url, &body, "lightpanda", input.formats.as_deref())
+    extract_scrape_output(&input.url, &body, "obscura", input.formats.as_deref())
 }
 
-async fn web_scrape_tavily(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
-    let tavily = settings.tavily.as_ref().ok_or("Tavily not configured")?;
-    if !tavily.enabled {
-        return Err("Tavily is not enabled. Set tavily.enabled=true in settings.yml".into());
-    }
-    let api_key = tavily.api_key.as_ref().ok_or("Tavily API key not configured")?;
-
-    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
-    let body = serde_json::json!({
-        "api_key": api_key,
-        "urls": [input.url],
-        "include_images": false,
-    });
-
-    let headers = HashMap::from([("Content-Type".into(), "application/json".into())]);
-
-    match http.post_json("https://api.tavily.com/extract", &body, Some(&headers)).await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if resp.status >= 400 {
-                return Err(format!("Tavily extract failed (HTTP {}): {}", resp.status, resp.body_text));
-            }
-            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
-                .map_err(|e| format!("Tavily parse error: {}", e))?;
-
-            let results = json["results"].as_array().cloned().unwrap_or_default();
-            if let Some(first) = results.first() {
-                let raw_content = first["raw_content"].as_str().unwrap_or("");
-                let markdown = if raw_content.is_empty() {
-                    first["content"].as_str().unwrap_or("").to_string()
-                } else {
-                    raw_content.to_string()
-                };
-
-                return Ok(WebScrapeOutput {
-                    success: true,
-                    url: input.url.clone(),
-                    title: first["title"].as_str().map(|s| s.to_string()),
-                    markdown: Some(markdown),
-                    metadata: None,
-                    meta: ScrapeMeta {
-                        url: input.url.clone(),
-                        status: 200,
-                        content_type: None,
-                        elapsed_ms: 0,
-                        js_rendered: false,
-                    },
-                });
-            }
-
-            Err("Tavily extract returned no results".into())
-        }
-        Ok(http_mod::FetchOutcome::Cached(_)) => Err("Unexpected cache hit for Tavily extract".into()),
-        Err(e) => Err(format!("Tavily extract failed: {}", e)),
-    }
-}
-
-async fn web_scrape_firecrawl(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
-    let firecrawl = settings.firecrawl.as_ref().ok_or("Firecrawl not configured")?;
-    if !firecrawl.enabled {
-        return Err("Firecrawl is not enabled. Set firecrawl.enabled=true in settings.yml".into());
-    }
-    let api_key = firecrawl.api_key.as_ref().ok_or("Firecrawl API key not configured")?;
-
-    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
-    let default_formats = vec!["markdown".to_string()];
-    let formats = input.formats.as_ref().unwrap_or(&default_formats);
-    let body = serde_json::json!({
-        "url": input.url,
-        "formats": formats,
-        "onlyMainContent": true,
-    });
-
-    let headers = HashMap::from([
-        ("Authorization".into(), format!("Bearer {}", api_key)),
-        ("Content-Type".into(), "application/json".into()),
-    ]);
-
-    match http.post_json("https://api.firecrawl.dev/v1/scrape", &body, Some(&headers)).await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if resp.status >= 400 {
-                return Err(format!("Firecrawl scrape failed (HTTP {}): {}", resp.status, resp.body_text));
-            }
-            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
-                .map_err(|e| format!("Firecrawl parse error: {}", e))?;
-
-            let data = &json["data"];
-            let markdown = data["markdown"].as_str().map(|s| s.to_string());
-            let title = data["metadata"]["title"].as_str().map(|s| s.to_string());
-            let description = data["metadata"]["description"].as_str().map(|s| s.to_string());
-            let og_title = data["metadata"]["ogTitle"].as_str().map(|s| s.to_string());
-            let og_description = data["metadata"]["ogDescription"].as_str().map(|s| s.to_string());
-
-            Ok(WebScrapeOutput {
-                success: true,
-                url: input.url.clone(),
-                title,
-                markdown,
-                metadata: Some(ScrapeStructuredData {
-                    description,
-                    og_title,
-                    og_description,
-                    links_count: 0,
-                    headings: Vec::new(),
-                }),
-                meta: ScrapeMeta {
-                    url: input.url.clone(),
-                    status: 200,
-                    content_type: None,
-                    elapsed_ms: 0,
-                    js_rendered: false,
-                },
-            })
-        }
-        Ok(http_mod::FetchOutcome::Cached(_)) => Err("Unexpected cache hit for Firecrawl scrape".into()),
-        Err(e) => Err(format!("Firecrawl scrape failed: {}", e)),
-    }
-}
 
 fn extract_scrape_output(url: &str, body: &str, _provider: &str, _formats: Option<&[String]>) -> Result<WebScrapeOutput, String> {
     let doc = scraper::Html::parse_document(body);
@@ -412,39 +286,38 @@ fn extract_scrape_output(url: &str, body: &str, _provider: &str, _formats: Optio
 
 pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
-    let provider = input.provider.as_deref().unwrap_or("lightpanda");
+    let provider = input.provider.as_deref().unwrap_or("obscura");
 
     match provider {
-        "firecrawl" => web_crawl_firecrawl(&input, &settings).await,
-        _ => web_crawl_lightpanda(&input, &settings).await,
+        "obscura" => web_crawl_obscura(&input, &settings).await,
+        _ => web_crawl_obscura(&input, &settings).await,
     }
 }
 
-async fn web_crawl_lightpanda(input: &WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
-    let lp_settings = settings.lightpanda.clone();
-    if !lp_settings.enabled {
-        return Err("Lightpanda is not enabled. Set lightpanda.enabled=true in settings.yml to use web.crawl".into());
+async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
+    let obscura_settings = settings.obscura.clone();
+    if !obscura_settings.enabled {
+        return Err("Obscura is not enabled. Set obscura.enabled=true in settings.yml to use web.crawl".into());
     }
 
-    let lp = crate::lightpanda::LightpandaManager::new(&lp_settings);
+    let obscura = crate::obscura::ObscuraManager::new(&obscura_settings);
 
     let max_depth = input.max_depth.unwrap_or(2);
     let max_pages = input.max_pages.unwrap_or(20);
-    let obey_robots = input.obey_robots.unwrap_or(lp_settings.obey_robots);
+    let obey_robots = input.obey_robots.unwrap_or(obscura_settings.obey_robots);
     let dump_format = input.dump_format.as_deref().unwrap_or("markdown");
     let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
     let include_frames = input.include_frames.unwrap_or(false);
     let wait_selector = input.wait_selector.as_deref();
-    let strip_mode = input.strip_mode.as_deref();
 
-    let _binary = lp.ensure_ready().await
-        .map_err(|e| format!("Lightpanda not ready: {}", e))?;
+    let _binary = obscura.ensure_ready().await
+        .map_err(|e| format!("Obscura not ready: {}", e))?;
 
-    let content = lp.fetch_with_all_options(
+    let content = obscura.fetch_with_all_options(
         &input.url, dump_format, obey_robots, wait_until, include_frames,
-        wait_selector, strip_mode, false,
+        wait_selector,
     ).await
-        .map_err(|e| format!("Lightpanda fetch failed: {}", e))?;
+        .map_err(|e| format!("Obscura fetch failed: {}", e))?;
 
     let title = {
         let doc = scraper::Html::parse_document(&content);
@@ -487,7 +360,7 @@ async fn web_crawl_lightpanda(input: &WebCrawlInput, settings: &crate::types::Se
                 break;
             }
 
-            match lp.fetch_with_all_options(&url_str, dump_format, obey_robots, wait_until, include_frames, wait_selector, strip_mode, false).await {
+            match obscura.fetch_with_all_options(&url_str, dump_format, obey_robots, wait_until, include_frames, wait_selector).await {
                 Ok(content) => {
                     let title = {
                         let doc = scraper::Html::parse_document(&content);
@@ -536,7 +409,7 @@ async fn web_crawl_lightpanda(input: &WebCrawlInput, settings: &crate::types::Se
         pages,
         count,
         meta: WebCrawlMeta {
-            provider: "lightpanda".to_string(),
+            provider: "obscura".to_string(),
             max_depth,
             max_pages,
             obey_robots,
@@ -547,114 +420,6 @@ async fn web_crawl_lightpanda(input: &WebCrawlInput, settings: &crate::types::Se
     })
 }
 
-async fn web_crawl_firecrawl(input: &WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
-    let firecrawl = settings.firecrawl.as_ref().ok_or("Firecrawl not configured")?;
-    if !firecrawl.enabled {
-        return Err("Firecrawl is not enabled. Set firecrawl.enabled=true in settings.yml".into());
-    }
-    let api_key = firecrawl.api_key.as_ref().ok_or("Firecrawl API key not configured")?;
-
-    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
-    let max_depth = input.max_depth.unwrap_or(2);
-    let max_pages = input.max_pages.unwrap_or(20);
-
-    let body = serde_json::json!({
-        "url": input.url,
-        "limit": max_pages,
-        "maxDepth": max_depth,
-        "scrapeOptions": {
-            "formats": ["markdown"],
-            "onlyMainContent": true,
-        },
-    });
-
-    let headers = HashMap::from([
-        ("Authorization".into(), format!("Bearer {}", api_key)),
-        ("Content-Type".into(), "application/json".into()),
-    ]);
-
-    let job_id = match http.post_json("https://api.firecrawl.dev/v1/crawl", &body, Some(&headers)).await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if resp.status >= 400 {
-                return Err(format!("Firecrawl crawl start failed (HTTP {}): {}", resp.status, resp.body_text));
-            }
-            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
-                .map_err(|e| format!("Firecrawl parse error: {}", e))?;
-            json["id"].as_str()
-                .ok_or_else(|| format!("Firecrawl crawl returned no job ID: {}", resp.body_text))?
-                .to_string()
-        }
-        Ok(http_mod::FetchOutcome::Cached(_)) => return Err("Unexpected cache hit for Firecrawl crawl".into()),
-        Err(e) => return Err(format!("Firecrawl crawl start failed: {}", e)),
-    };
-
-    let poll_url = format!("https://api.firecrawl.dev/v1/crawl/{}", job_id);
-    let mut attempts = 0u32;
-    let max_attempts = 120;
-
-    loop {
-        if attempts >= max_attempts {
-            return Err(format!("Firecrawl crawl timed out after {} polls", max_attempts));
-        }
-        attempts += 1;
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-        match http.fetch(&poll_url, Some(&headers), "bypass").await {
-            Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-                if resp.status >= 400 {
-                    return Err(format!("Firecrawl poll failed (HTTP {}): {}", resp.status, resp.body_text));
-                }
-                let json: serde_json::Value = serde_json::from_str(&resp.body_text)
-                    .map_err(|e| format!("Firecrawl poll parse error: {}", e))?;
-
-                let status = json["status"].as_str().unwrap_or("");
-                match status {
-                    "completed" => {
-                        let data = json["data"].as_array().cloned().unwrap_or_default();
-                        let pages: Vec<CrawledPage> = data.iter().enumerate().map(|(i, item)| {
-                            CrawledPage {
-                                url: item["metadata"]["sourceURL"].as_str()
-                                    .or(item["url"].as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                title: item["metadata"]["title"].as_str().map(|s| s.to_string()),
-                                content: item["markdown"].as_str().unwrap_or("").to_string(),
-                                depth: i as i32,
-                                status: "ok".to_string(),
-                            }
-                        }).collect();
-
-                        let count = pages.len();
-                        return Ok(WebCrawlOutput {
-                            success: true,
-                            start_url: input.url.clone(),
-                            pages,
-                            count,
-                            meta: WebCrawlMeta {
-                                provider: "firecrawl".to_string(),
-                                max_depth,
-                                max_pages,
-                                obey_robots: true,
-                                dump_format: "markdown".to_string(),
-                                wait_until: "networkidle".to_string(),
-                                include_frames: false,
-                            },
-                        });
-                    }
-                    "failed" => {
-                        let error = json["error"].as_str().unwrap_or("unknown error");
-                        return Err(format!("Firecrawl crawl failed: {}", error));
-                    }
-                    _ => continue,
-                }
-            }
-            Ok(http_mod::FetchOutcome::Cached(_)) => return Err("Unexpected cache hit for Firecrawl poll".into()),
-            Err(e) => return Err(format!("Firecrawl poll failed: {}", e)),
-        }
-    }
-}
 
 /// Discover URLs on a website by analyzing sitemap and links.
 pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {

@@ -62,7 +62,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     decision_tree.insert("I need to clear the insight index".to_string(), "insights.clear_index".to_string());
     
     // Browser
-    decision_tree.insert("I need to browse JS-rendered pages".to_string(), "lightpanda.goto".to_string());
+    decision_tree.insert("I need to browse JS-rendered pages".to_string(), "browser.goto".to_string());
     
     // Discovery & Source Management
     decision_tree.insert("I need to discover RSS feeds from a website".to_string(), "sources.autodiscover".to_string());
@@ -209,18 +209,18 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     
     // Browser - all 12 tools
     categories.insert("Browser".to_string(), vec![
-        ToolGuideItem { name: "lightpanda.goto".to_string(), description: "Navigate to URL (JS rendering)".to_string() },
-        ToolGuideItem { name: "lightpanda.markdown".to_string(), description: "Get page as markdown".to_string() },
-        ToolGuideItem { name: "lightpanda.links".to_string(), description: "Extract links".to_string() },
-        ToolGuideItem { name: "lightpanda.evaluate".to_string(), description: "Execute JavaScript".to_string() },
-        ToolGuideItem { name: "lightpanda.semantic_tree".to_string(), description: "AI-friendly DOM tree".to_string() },
-        ToolGuideItem { name: "lightpanda.structured_data".to_string(), description: "Extract JSON-LD, OpenGraph".to_string() },
-        ToolGuideItem { name: "lightpanda.detect_forms".to_string(), description: "Find forms".to_string() },
-        ToolGuideItem { name: "lightpanda.click".to_string(), description: "Click element".to_string() },
-        ToolGuideItem { name: "lightpanda.fill".to_string(), description: "Fill form field".to_string() },
-        ToolGuideItem { name: "lightpanda.scroll".to_string(), description: "Scroll page".to_string() },
-        ToolGuideItem { name: "lightpanda.wait_for_selector".to_string(), description: "Wait for element".to_string() },
-        ToolGuideItem { name: "lightpanda.interactive_elements".to_string(), description: "Find clickable items".to_string() },
+        ToolGuideItem { name: "browser.goto".to_string(), description: "Navigate to URL (JS rendering)".to_string() },
+        ToolGuideItem { name: "browser.markdown".to_string(), description: "Get page as markdown".to_string() },
+        ToolGuideItem { name: "browser.links".to_string(), description: "Extract links".to_string() },
+        ToolGuideItem { name: "browser.evaluate".to_string(), description: "Execute JavaScript".to_string() },
+        ToolGuideItem { name: "browser.semantic_tree".to_string(), description: "AI-friendly DOM tree".to_string() },
+        ToolGuideItem { name: "browser.structured_data".to_string(), description: "Extract JSON-LD, OpenGraph".to_string() },
+        ToolGuideItem { name: "browser.detect_forms".to_string(), description: "Find forms".to_string() },
+        ToolGuideItem { name: "browser.click".to_string(), description: "Click element".to_string() },
+        ToolGuideItem { name: "browser.fill".to_string(), description: "Fill form field".to_string() },
+        ToolGuideItem { name: "browser.scroll".to_string(), description: "Scroll page".to_string() },
+        ToolGuideItem { name: "browser.wait_for_selector".to_string(), description: "Wait for element".to_string() },
+        ToolGuideItem { name: "browser.interactive_elements".to_string(), description: "Find clickable items".to_string() },
     ]);
     
     let drill_down_chains = vec![

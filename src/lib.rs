@@ -3,8 +3,8 @@ pub mod clustering;
 pub mod config;
 pub mod fusion;
 pub mod http;
-pub mod lightpanda;
-pub mod lightpanda_mcp;
+
+pub mod obscura;
 pub mod parsers;
 pub mod persistence;
 pub mod tools;

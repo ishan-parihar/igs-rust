@@ -229,49 +229,40 @@ fn default_lp_timeout() -> u64 {
     30000
 }
 
+fn default_lp_max_concurrent() -> u32 {
+    10
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct LightpandaSettings {
+pub struct ObscuraSettings {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default = "default_true")]
     pub auto_update: bool,
-    #[serde(default)]
-    pub prefer_nightly: bool,
     #[serde(default = "default_true")]
     pub obey_robots: bool,
     #[serde(default = "default_lp_timeout")]
     pub timeout_ms: u64,
-    /// HTTP proxy URL (e.g., "http://proxy:8080" or "http://user:pass@proxy:8080")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxy: Option<String>,
-    /// Bearer token for proxy authentication
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub proxy_bearer_token: Option<String>,
-    /// Full custom User-Agent string (overrides default)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_agent: Option<String>,
-    /// Suffix appended to Lightpanda's User-Agent header (used if user_agent not set)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_agent_suffix: Option<String>,
-    /// Max concurrent HTTP requests during page load
     #[serde(default = "default_lp_max_concurrent")]
     pub max_concurrent: u32,
-    /// Max response size in bytes (0 = no limit)
-    #[serde(default)]
-    pub max_response_size: u64,
-    /// Disable TLS host verification (for sites with bad certs)
-    #[serde(default)]
-    pub insecure_tls: bool,
-    /// Enable stealth mode via injected anti-fingerprinting JavaScript
     #[serde(default)]
     pub stealth: bool,
-    /// Optional path to a custom JS file to inject (--inject-script-file)
-    #[serde(default)]
-    pub stealth_script_path: Option<String>,
 }
 
-fn default_lp_max_concurrent() -> u32 {
-    10
+impl Default for ObscuraSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_update: true,
+            obey_robots: true,
+            timeout_ms: 30000,
+            proxy: None,
+            max_concurrent: 10,
+            stealth: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -290,26 +281,6 @@ pub struct CourtListenerSettings {
     pub api_key: Option<String>,
 }
 
-impl Default for LightpandaSettings {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            auto_update: true,
-            prefer_nightly: false,
-            obey_robots: true,
-            timeout_ms: 30000,
-            proxy: None,
-            proxy_bearer_token: None,
-            user_agent: None,
-            user_agent_suffix: None,
-            max_concurrent: 10,
-            max_response_size: 0,
-            insecure_tls: false,
-            stealth: false,
-            stealth_script_path: None,
-        }
-    }
-}
 fn default_max_topics() -> usize { 8 }
 fn default_max_entities() -> usize { 20 }
 fn default_min_entity_length() -> usize { 2 }
@@ -423,7 +394,7 @@ pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub firecrawl: Option<FirecrawlSettings>,
     #[serde(default)]
-    pub lightpanda: LightpandaSettings,
+    pub obscura: ObscuraSettings,
     #[serde(default)]
     pub nlp: NlpSettings,
     #[serde(default)]

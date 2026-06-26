@@ -48,24 +48,17 @@ firecrawl:
     - screenshot
     - links
 
-# ─── Lightpanda Headless Browser ──────────────────────────────
-# Binary auto-downloads to ~/.config/igs-mcp/bin/lightpanda
-# Updated once per day when auto_update is true
-lightpanda:
-  enabled: true              # Enable Lightpanda for web.crawl and web.scrape(provider=lightpanda)
+# ─── Obscura Headless Browser ──────────────────────────────────
+# Binary auto-downloads to ~/.config/igs-mcp/bin/obscura
+# Rust-native, stealth built-in, drop-in Lightpanda replacement
+obscura:
+  enabled: true              # Enable Obscura for web.crawl, web.scrape, and browser automation
   auto_update: true          # Check for updates once per day
-  prefer_nightly: false      # Use nightly builds instead of stable releases
   obey_robots: true          # Respect robots.txt when crawling
-  timeout_ms: 30000          # --wait-ms: how long to wait for page to settle
-  # proxy: "http://proxy:8080"           # HTTP proxy URL
-  # proxy_bearer_token: "token"          # Bearer token for proxy auth
-  # user_agent_suffix: "IGS-crawler"     # Suffix appended to Lightpanda's User-Agent
-  # user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36..."  # Full custom UA (overrides suffix)
-  max_concurrent: 10         # --http-max-concurrent: max parallel HTTP requests during page load
-  max_response_size: 0       # --http-max-response-size: 0 = no limit
-  insecure_tls: false        # --insecure-disable-tls-host-verification
-  stealth: true              # Inject anti-fingerprinting JS (patches navigator, WebGL, canvas, audio, WebRTC)
-  # stealth_script_path: /path/to/custom.js  # Optional: custom JS file instead of built-in stealth script
+  timeout_ms: 30000          # Navigation timeout in ms
+  max_concurrent: 10         # Max parallel HTTP requests during page load
+  # proxy: "http://proxy:8080"           # HTTP/SOCKS5 proxy URL
+  stealth: true              # Enable anti-detection (TLS fingerprint, fingerprint randomization, tracker blocking)
 
 # ─── NLP Enrichment ──────────────────────────────────────────
 # All NLP is offline (no external API calls)

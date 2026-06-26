@@ -18,7 +18,7 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
             "sources.list", "sources.upsert", "sources.delete",
             "sources.autodiscover", "sources.enable_generic_scraper",
             "sources.countries", "sources.cities", "sources.domains",
-            "parsers.list", "tool.guide",
+            "parsers.list",
         ],
     },
     ToolGroup {
@@ -37,7 +37,7 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
     },
     ToolGroup {
         name: "web",
-        description: "Search the web, scrape pages, crawl sites, and map website structures. Use lightpanda tools for JavaScript-rendered pages.",
+        description: "Search the web, scrape pages, crawl sites, and map website structures. Use browser tools for JavaScript-rendered pages.",
         tools: &[
             "web.search", "web.scrape", "web.crawl", "web.map",
         ],
@@ -129,13 +129,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
     },
     ToolGroup {
         name: "browser",
-        description: "Persistent browser session for JavaScript-rendered pages. Navigate with lightpanda.goto first, then interact with other tools.",
+        description: "Persistent browser session for JavaScript-rendered pages. Navigate with browser.goto first, then interact with other tools.",
         tools: &[
-            "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
-            "lightpanda.evaluate", "lightpanda.semantic_tree",
-            "lightpanda.structured_data", "lightpanda.detect_forms",
-            "lightpanda.click", "lightpanda.fill", "lightpanda.scroll",
-            "lightpanda.wait_for_selector", "lightpanda.interactive_elements",
+            "browser.goto", "browser.markdown", "browser.links",
+            "browser.evaluate", "browser.semantic_tree",
+            "browser.structured_data", "browser.detect_forms",
+            "browser.click", "browser.fill", "browser.scroll",
+            "browser.wait_for_selector", "browser.interactive_elements",
         ],
     },
     ToolGroup {
@@ -206,7 +206,7 @@ mod tests {
             "sources.list", "sources.upsert", "sources.delete",
             "sources.autodiscover", "sources.enable_generic_scraper",
             "sources.countries", "sources.cities", "sources.domains",
-            "parsers.list", "tool.guide",
+            "parsers.list",
             "news.fetch", "news.test_source", "news.enrich",
             "reddit.search", "reddit.feed",
             "research.search", "research.paper", "research.download", "research.pubmed_search",
@@ -223,10 +223,10 @@ mod tests {
             "politics.fec_candidates", "politics.fec_committees",
             "climate.noaa_observations", "climate.noaa_stations",
             "legal.search_cases", "legal.case_details",
-            "lightpanda.goto", "lightpanda.markdown", "lightpanda.links",
-            "lightpanda.evaluate", "lightpanda.semantic_tree", "lightpanda.structured_data",
-            "lightpanda.detect_forms", "lightpanda.click", "lightpanda.fill",
-            "lightpanda.scroll", "lightpanda.wait_for_selector", "lightpanda.interactive_elements",
+            "browser.goto", "browser.markdown", "browser.links",
+            "browser.evaluate", "browser.semantic_tree", "browser.structured_data",
+            "browser.detect_forms", "browser.click", "browser.fill",
+            "browser.scroll", "browser.wait_for_selector", "browser.interactive_elements",
             "sop.list", "sop.execute",
         ];
         

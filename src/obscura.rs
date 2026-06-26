@@ -1,67 +1,51 @@
 use crate::config;
-use crate::types::LightpandaSettings;
+use crate::types::ObscuraSettings;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::info;
 
-/// Manages the Lightpanda headless browser binary lifecycle:
+/// Manages the Obscura headless browser binary lifecycle:
 /// - Checks for updates once per day
-/// - Downloads latest stable (or nightly) binary if not present or outdated
+/// - Downloads latest stable binary if not present or outdated
 /// - Caches version metadata to avoid redundant API calls
 /// - Provides path to the binary for subprocess invocation
-pub struct LightpandaManager {
+pub struct ObscuraManager {
     binary_dir: PathBuf,
     binary_path: PathBuf,
     version_file: PathBuf,
     last_check_file: PathBuf,
-    settings: LightpandaSettings,
+    settings: ObscuraSettings,
 }
 
-const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/lightpanda-io/browser/releases";
-const GITHUB_DOWNLOAD_BASE: &str = "https://github.com/lightpanda-io/browser/releases/download";
+const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/h4ckf0r0day/obscura/releases";
+const GITHUB_DOWNLOAD_BASE: &str = "https://github.com/h4ckf0r0day/obscura/releases/download";
 const CHECK_INTERVAL_SECS: u64 = 86400;
 
-const ANTI_FINGERPRINT_JS: &str = r#"
-Object.defineProperty(navigator, 'webdriver', { get: () => false });
-Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-const _origGetParam = WebGLRenderingContext.prototype.getParameter;
-WebGLRenderingContext.prototype.getParameter = function(p) {
-  if (p === 37445) return 'Intel Inc.';
-  if (p === 37446) return 'Intel Iris OpenGL Engine';
-  return _origGetParam.call(this, p);
-};
-window.navigator.permissions.query = (p) =>
-  p.name === 'notifications'
-    ? Promise.resolve({ state: Notification.permission })
-    : window.navigator.permissions.query(p);
-"#;
-
-impl LightpandaManager {
+impl ObscuraManager {
     /// Create a new manager using the user config directory
-    pub fn new(settings: &LightpandaSettings) -> Self {
+    pub fn new(settings: &ObscuraSettings) -> Self {
         let bin_dir = config::user_config_dir().join("bin");
         Self {
-            binary_path: bin_dir.join("lightpanda"),
-            version_file: bin_dir.join(".lightpanda_version"),
-            last_check_file: bin_dir.join(".lightpanda_last_check"),
+            binary_path: bin_dir.join("obscura"),
+            version_file: bin_dir.join(".obscura_version"),
+            last_check_file: bin_dir.join(".obscura_last_check"),
             binary_dir: bin_dir,
             settings: settings.clone(),
         }
     }
 
-    /// Ensure the Lightpanda binary is available and up-to-date.
+    /// Ensure the Obscura binary is available and up-to-date.
     /// Checks at most once per day. Returns the path to the binary.
     pub async fn ensure_ready(&self) -> Result<PathBuf> {
         if !self.settings.enabled {
-            anyhow::bail!("Lightpanda is not enabled. Set lightpanda.enabled=true in settings.yml");
+            anyhow::bail!("Obscura is not enabled. Set obscura.enabled=true in settings.yml");
         }
 
         // Create bin dir if needed
         if !self.binary_dir.exists() {
             std::fs::create_dir_all(&self.binary_dir)
-                .context("Failed to create Lightpanda bin directory")?;
+                .context("Failed to create Obscura bin directory")?;
         }
 
         // Check if binary exists and if we need to check for updates
@@ -70,15 +54,10 @@ impl LightpandaManager {
         }
 
         // Fetch latest version from GitHub
-        let (latest_version, is_nightly) = if self.settings.prefer_nightly {
-            ("nightly".to_string(), true)
-        } else {
-            let version = self.fetch_latest_version().await?;
-            (version, false)
-        };
+        let latest_version = self.fetch_latest_version().await?;
 
-        // Check if we already have this version (skip for nightly — always re-download on daily check)
-        if self.binary_path.exists() && !is_nightly {
+        // Check if we already have this version
+        if self.binary_path.exists() {
             if let Ok(current) = self.read_version_file() {
                 if current == latest_version {
                     self.write_last_check()?;
@@ -89,18 +68,14 @@ impl LightpandaManager {
 
         // Download
         let arch = Self::detect_arch()?;
-        let url = if is_nightly {
-            format!("{}/nightly/lightpanda-{}", GITHUB_DOWNLOAD_BASE, arch)
-        } else {
-            format!("{}/{}/lightpanda-{}", GITHUB_DOWNLOAD_BASE, latest_version, arch)
-        };
+        let url = format!("{}/{}/obscura-{}", GITHUB_DOWNLOAD_BASE, latest_version, arch);
 
-        info!("Downloading Lightpanda {} from {}", latest_version, url);
+        info!("Downloading Obscura {} from {}", latest_version, url);
         self.download_binary(&url).await?;
 
         // Write version metadata
         std::fs::write(&self.version_file, &latest_version)
-            .context("Failed to write Lightpanda version file")?;
+            .context("Failed to write Obscura version file")?;
         self.write_last_check()?;
 
         // Make executable
@@ -108,10 +83,10 @@ impl LightpandaManager {
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&self.binary_path, std::fs::Permissions::from_mode(0o755))
-                .context("Failed to make Lightpanda binary executable")?;
+                .context("Failed to make Obscura binary executable")?;
         }
 
-        info!("Lightpanda {} installed to {:?}", latest_version, self.binary_path);
+        info!("Obscura {} installed to {:?}", latest_version, self.binary_path);
         Ok(self.binary_path.clone())
     }
 
@@ -155,12 +130,12 @@ impl LightpandaManager {
 
     fn read_version_file(&self) -> Result<String> {
         std::fs::read_to_string(&self.version_file)
-            .context("Failed to read Lightpanda version file")
+            .context("Failed to read Obscura version file")
             .map(|s| s.trim().to_string())
     }
 
     /// Fetch the latest stable release version from GitHub API.
-    /// Uses /releases (plural) and filters out "nightly" and prerelease tags.
+    /// Uses /releases (plural) and filters out prerelease tags.
     async fn fetch_latest_version(&self) -> Result<String> {
         let client = reqwest::Client::builder()
             .user_agent("igs-mcp/0.1")
@@ -171,7 +146,7 @@ impl LightpandaManager {
             .header("Accept", "application/vnd.github.v3+json")
             .send()
             .await
-            .context("Failed to fetch Lightpanda release info")?;
+            .context("Failed to fetch Obscura release info")?;
 
         if !resp.status().is_success() {
             anyhow::bail!("GitHub API returned status {}", resp.status());
@@ -180,20 +155,20 @@ impl LightpandaManager {
         let json: serde_json::Value = resp.json().await?;
         let releases = json.as_array().context("Expected JSON array from releases API")?;
 
-        // Find the first stable release (not nightly, not prerelease)
+        // Find the first stable release (not prerelease, not draft)
         for release in releases {
             let tag = release["tag_name"].as_str().unwrap_or("");
             let is_prerelease = release["prerelease"].as_bool().unwrap_or(false);
             let is_draft = release["draft"].as_bool().unwrap_or(false);
 
-            if is_draft || is_prerelease || tag == "nightly" || tag.is_empty() {
+            if is_draft || is_prerelease || tag.is_empty() {
                 continue;
             }
 
             return Ok(tag.to_string());
         }
 
-        anyhow::bail!("No stable release found for Lightpanda")
+        anyhow::bail!("No stable release found for Obscura")
     }
 
     /// Download the binary from the given URL
@@ -206,7 +181,7 @@ impl LightpandaManager {
             .get(url)
             .send()
             .await
-            .context("Failed to download Lightpanda binary")?;
+            .context("Failed to download Obscura binary")?;
 
         if !resp.status().is_success() {
             anyhow::bail!("Download returned status {}", resp.status());
@@ -214,111 +189,108 @@ impl LightpandaManager {
 
         let bytes = resp.bytes().await?;
         std::fs::write(&self.binary_path, &bytes)
-            .context("Failed to write Lightpanda binary")?;
+            .context("Failed to write Obscura binary")?;
 
         Ok(())
     }
 
-    /// Fetch a URL using Lightpanda's fetch command.
-    /// `dump_format` can be "markdown", "html", "semantic_tree", or "semantic_tree_text".
+    /// Fetch a URL using Obscura's fetch command.
+    /// `dump_format` can be "markdown", "html", "text", or "semantic_tree".
     pub async fn fetch(&self, url: &str, dump_format: &str, obey_robots: bool) -> Result<String> {
         self.fetch_with_options(url, dump_format, obey_robots, "networkidle", false).await
     }
 
-    /// Fetch a URL with full control over Lightpanda options.
-    pub async fn fetch_with_options(&self, url: &str, dump_format: &str, obey_robots: bool, wait_until: &str, include_frames: bool) -> Result<String> {
-        self.fetch_with_all_options(url, dump_format, obey_robots, wait_until, include_frames, None, None, false).await
-    }
-
-    /// Fetch with all available options including wait_selector, strip_mode, and structured_data.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn fetch_with_all_options(
+    /// Fetch a URL with control over Obscura options.
+    pub async fn fetch_with_options(
         &self,
         url: &str,
         dump_format: &str,
         obey_robots: bool,
         wait_until: &str,
         include_frames: bool,
+    ) -> Result<String> {
+        self.fetch_with_all_options(url, dump_format, obey_robots, wait_until, include_frames, None)
+            .await
+    }
+
+    /// Fetch with all available options including wait_selector.
+    pub async fn fetch_with_all_options(
+        &self,
+        url: &str,
+        dump_format: &str,
+        obey_robots: bool,
+        wait_until: &str,
+        _include_frames: bool,
         wait_selector: Option<&str>,
-        strip_mode: Option<&str>,
-        _structured_data: bool,
     ) -> Result<String> {
         let binary = self.ensure_ready().await?;
 
         let mut cmd = tokio::process::Command::new(&binary);
         cmd.arg("fetch")
+            .arg(url)
             .arg("--dump")
             .arg(dump_format)
             .arg("--wait-until")
             .arg(wait_until)
-            .arg("--wait-ms")
-            .arg(self.settings.timeout_ms.to_string());
+            .arg("--timeout")
+            .arg((self.settings.timeout_ms / 1000).to_string());
+
+        if self.settings.stealth {
+            cmd.arg("--stealth");
+        }
 
         if obey_robots {
             cmd.arg("--obey-robots");
         }
 
-        if include_frames {
-            cmd.arg("--with-frames");
+        if let Some(ref proxy) = self.settings.proxy {
+            cmd.arg("--proxy").arg(proxy);
         }
 
         if let Some(selector) = wait_selector {
-            cmd.arg("--wait-selector").arg(selector);
+            cmd.arg("--selector").arg(selector);
         }
-
-        if let Some(mode) = strip_mode {
-            cmd.arg("--strip-mode").arg(mode);
-        }
-
-        // Proxy settings
-        if let Some(ref proxy) = self.settings.proxy {
-            cmd.arg("--http-proxy").arg(proxy);
-        }
-        if let Some(ref token) = self.settings.proxy_bearer_token {
-            cmd.arg("--proxy-bearer-token").arg(token);
-        }
-
-        if let Some(ref ua) = self.settings.user_agent {
-            cmd.arg("--user-agent").arg(ua);
-        } else if let Some(ref suffix) = self.settings.user_agent_suffix {
-            cmd.arg("--user-agent-suffix").arg(suffix);
-        }
-
-        if self.settings.stealth {
-            if let Some(ref path) = self.settings.stealth_script_path {
-                cmd.arg("--inject-script-file").arg(path);
-            } else {
-                cmd.arg("--inject-script").arg(ANTI_FINGERPRINT_JS);
-            }
-        }
-
-        // Concurrency
-        cmd.arg("--http-max-concurrent").arg(self.settings.max_concurrent.to_string());
-
-        // Response size limit
-        if self.settings.max_response_size > 0 {
-            cmd.arg("--http-max-response-size").arg(self.settings.max_response_size.to_string());
-        }
-
-        // TLS verification
-        if self.settings.insecure_tls {
-            cmd.arg("--insecure-disable-tls-host-verification");
-        }
-
-        cmd.arg(url);
 
         let output = cmd
             .output()
             .await
-            .context("Failed to execute Lightpanda fetch")?;
+            .context("Failed to execute Obscura fetch")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Lightpanda fetch failed: {}", stderr);
+            anyhow::bail!("Obscura fetch failed: {}", stderr);
         }
 
-        String::from_utf8(output.stdout)
-            .context("Lightpanda output was not valid UTF-8")
+        String::from_utf8(output.stdout).context("Obscura output was not valid UTF-8")
+    }
+
+    /// Scrape multiple URLs in parallel using Obscura's scrape command.
+    pub async fn scrape_parallel(&self, urls: &[String], concurrency: u32) -> Result<String> {
+        let binary = self.ensure_ready().await?;
+
+        let mut cmd = tokio::process::Command::new(&binary);
+        cmd.arg("scrape")
+            .args(urls)
+            .arg("--concurrency")
+            .arg(concurrency.to_string())
+            .arg("--format")
+            .arg("json");
+
+        if self.settings.stealth {
+            cmd.arg("--stealth");
+        }
+
+        let output = cmd
+            .output()
+            .await
+            .context("Failed to execute Obscura scrape")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Obscura scrape failed: {}", stderr);
+        }
+
+        String::from_utf8(output.stdout).context("Obscura output was not valid UTF-8")
     }
 
     /// Detect the current platform architecture for binary download
@@ -329,7 +301,7 @@ impl LightpandaManager {
             ("x86_64", "macos") => Ok("x86_64-macos"),
             ("aarch64", "macos") => Ok("aarch64-macos"),
             _ => anyhow::bail!(
-                "Unsupported platform for Lightpanda: {} {}",
+                "Unsupported platform for Obscura: {} {}",
                 std::env::consts::ARCH,
                 std::env::consts::OS
             ),

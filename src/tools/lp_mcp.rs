@@ -1,182 +1,252 @@
-use crate::lightpanda_mcp::{self, LightpandaMcpClient};
 use crate::tools::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Execute a Lightpanda MCP tool call and return the text content.
-async fn call_lp_tool(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
-    tool_name: &str,
-    arguments: serde_json::Value,
-) -> Result<LpToolOutput, String> {
-    let mut guard = client.lock().await;
-    if guard.is_none() {
-        *guard = Some(LightpandaMcpClient::new(binary_path.to_path_buf()));
-    }
-    let lp = guard.as_ref().expect("lightpanda client initialized above");
+use std::sync::OnceLock;
 
-    match lp.call_tool(tool_name, arguments).await {
-        Ok(result) => {
-            let text = lightpanda_mcp::extract_text(&result);
-            Ok(LpToolOutput {
-                success: !result.is_error,
-                content: text,
-                meta: BrowserMeta {
-                    url: String::new(),
-                    title: None,
-                    operation: tool_name.to_string(),
-                    elapsed_ms: 0,
-                },
-            })
+static CURRENT_URL: OnceLock<Mutex<String>> = OnceLock::new();
+
+fn current_url() -> String {
+    CURRENT_URL
+        .get_or_init(|| Mutex::new("about:blank".to_string()))
+        .try_lock()
+        .map(|g| g.clone())
+        .unwrap_or_else(|_| "about:blank".to_string())
+}
+
+async fn set_current_url(url: &str) {
+    if let Some(m) = CURRENT_URL.get() {
+        if let Ok(mut guard) = m.try_lock() {
+            *guard = url.to_string();
         }
-        Err(e) => Ok(LpToolOutput {
+    }
+}
+
+async fn run_obscura_cli(args: &[&str], stdin_js: Option<&str>) -> Result<LpToolOutput, String> {
+    let mut cmd = tokio::process::Command::new("obscura");
+    cmd.arg("fetch");
+    for arg in args {
+        cmd.arg(arg);
+    }
+    if let Some(js) = stdin_js {
+        cmd.arg("--eval").arg(js);
+    }
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute obscura: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        return Ok(LpToolOutput {
             success: false,
-            content: format!("Lightpanda MCP error: {}", e),
+            content: if stderr.is_empty() { stdout } else { stderr },
             meta: BrowserMeta {
                 url: String::new(),
                 title: None,
-                operation: tool_name.to_string(),
+                operation: "obscura_cli".to_string(),
                 elapsed_ms: 0,
             },
-        }),
+        });
     }
+
+    Ok(LpToolOutput {
+        success: true,
+        content: stdout,
+        meta: BrowserMeta {
+            url: String::new(),
+            title: None,
+            operation: "obscura_cli".to_string(),
+            elapsed_ms: 0,
+        },
+    })
 }
 
-// ─── Tool Implementations ──────────────────────────────────────
-
 pub async fn lp_goto(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpGotoInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({ "url": input.url });
-    if let Some(wu) = input.wait_until {
-        args["waitUntil"] = serde_json::json!(wu);
-    }
-    call_lp_tool(client, binary_path, "goto", args).await
+    let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
+    let args = vec![input.url.as_str(), "--wait-until", wait_until, "--stealth"];
+
+    let mut output = run_obscura_cli(&args, None).await?;
+    output.meta.url = input.url.clone();
+    output.meta.operation = "goto".to_string();
+    set_current_url(&input.url).await;
+    Ok(output)
 }
 
 pub async fn lp_markdown(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpMarkdownInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(sm) = input.strip_mode {
-        args["stripMode"] = serde_json::json!(sm);
+    let url = current_url();
+    let mut args = vec![url.as_str(), "--dump", "markdown", "--stealth"];
+    if let Some(ref sm) = input.strip_mode {
+        args.push("--strip-mode");
+        args.push(sm);
     }
-    call_lp_tool(client, binary_path, "markdown", args).await
+    let mut output = run_obscura_cli(&args, None).await?;
+    output.meta.url = url;
+    output.meta.operation = "markdown".to_string();
+    Ok(output)
 }
 
 pub async fn lp_links(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
-    input: LpLinksInput,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
+    _input: LpLinksInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(sel) = input.selector {
-        args["selector"] = serde_json::json!(sel);
-    }
-    call_lp_tool(client, binary_path, "links", args).await
+    let url = current_url();
+    let args = vec![url.as_str(), "--dump", "links", "--stealth"];
+    let mut output = run_obscura_cli(&args, None).await?;
+    output.meta.url = url;
+    output.meta.operation = "links".to_string();
+    Ok(output)
 }
 
 pub async fn lp_evaluate(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpEvaluateInput,
 ) -> Result<LpToolOutput, String> {
-    call_lp_tool(client, binary_path, "evaluate", serde_json::json!({
-        "expression": input.expression
-    })).await
+    let url = current_url();
+    let args = vec![url.as_str(), "--stealth"];
+    let mut output = run_obscura_cli(&args, Some(&input.expression)).await?;
+    output.meta.url = url;
+    output.meta.operation = "evaluate".to_string();
+    Ok(output)
 }
 
 pub async fn lp_semantic_tree(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
-    input: LpSemanticTreeInput,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
+    _input: LpSemanticTreeInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(it) = input.include_text {
-        args["includeText"] = serde_json::json!(it);
-    }
-    call_lp_tool(client, binary_path, "semantic_tree", args).await
+    Ok(LpToolOutput {
+        success: false,
+        content: "Obscura CLI does not support semantic_tree. Use evaluate with custom JS or call obscura directly with --dump semantic_tree.".to_string(),
+        meta: BrowserMeta {
+            url: String::new(),
+            title: None,
+            operation: "semantic_tree".to_string(),
+            elapsed_ms: 0,
+        },
+    })
 }
 
 pub async fn lp_structured_data(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
-    input: LpStructuredDataInput,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
+    _input: LpStructuredDataInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(v) = input.jsonld { args["jsonld"] = serde_json::json!(v); }
-    if let Some(v) = input.opengraph { args["opengraph"] = serde_json::json!(v); }
-    if let Some(v) = input.microdata { args["microdata"] = serde_json::json!(v); }
-    call_lp_tool(client, binary_path, "structuredData", args).await
+    Ok(LpToolOutput {
+        success: false,
+        content: "Obscura CLI does not support structured_data extraction. Use evaluate with custom JS to extract JSON-LD, OpenGraph, or microdata.".to_string(),
+        meta: BrowserMeta {
+            url: String::new(),
+            title: None,
+            operation: "structured_data".to_string(),
+            elapsed_ms: 0,
+        },
+    })
 }
 
 pub async fn lp_detect_forms(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
-    input: LpDetectFormsInput,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
+    _input: LpDetectFormsInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(sel) = input.selector {
-        args["selector"] = serde_json::json!(sel);
-    }
-    call_lp_tool(client, binary_path, "detectForms", args).await
+    Ok(LpToolOutput {
+        success: false,
+        content: "Obscura CLI does not support detect_forms. Use evaluate with custom JS to enumerate form elements.".to_string(),
+        meta: BrowserMeta {
+            url: String::new(),
+            title: None,
+            operation: "detect_forms".to_string(),
+            elapsed_ms: 0,
+        },
+    })
 }
 
 pub async fn lp_click(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpClickInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({ "selector": input.selector });
-    if let Some(wfn) = input.wait_for_navigation {
-        args["waitForNavigation"] = serde_json::json!(wfn);
-    }
-    call_lp_tool(client, binary_path, "click", args).await
+    let url = current_url();
+    let js = format!(
+        "document.querySelector('{}')?.click(); 'clicked'",
+        input.selector.replace('\'', "\\'")
+    );
+    let args = vec![url.as_str(), "--stealth"];
+    let mut output = run_obscura_cli(&args, Some(&js)).await?;
+    output.meta.url = url;
+    output.meta.operation = "click".to_string();
+    Ok(output)
 }
 
 pub async fn lp_fill(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpFillInput,
 ) -> Result<LpToolOutput, String> {
-    call_lp_tool(client, binary_path, "fill", serde_json::json!({
-        "selector": input.selector,
-        "value": input.value,
-    })).await
+    let url = current_url();
+    let js = format!(
+        "const el = document.querySelector('{}'); if(el) {{ el.value = '{}'; el.dispatchEvent(new Event('input', {{bubbles:true}})); }} 'filled'",
+        input.selector.replace('\'', "\\'"),
+        input.value.replace('\'', "\\'")
+    );
+    let args = vec![url.as_str(), "--stealth"];
+    let mut output = run_obscura_cli(&args, Some(&js)).await?;
+    output.meta.url = url;
+    output.meta.operation = "fill".to_string();
+    Ok(output)
 }
 
 pub async fn lp_scroll(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpScrollInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(d) = input.direction { args["direction"] = serde_json::json!(d); }
-    if let Some(p) = input.pixels { args["pixels"] = serde_json::json!(p); }
-    call_lp_tool(client, binary_path, "scroll", args).await
+    let url = current_url();
+    let direction = input.direction.as_deref().unwrap_or("down");
+    let pixels = input.pixels.unwrap_or(500);
+
+    let js = match direction {
+        "up" => format!("window.scrollBy(0, -{}); 'scrolled'", pixels),
+        "down" => format!("window.scrollBy(0, {}); 'scrolled'", pixels),
+        "left" => format!("window.scrollBy(-{}, 0); 'scrolled'", pixels),
+        "right" => format!("window.scrollBy({}, 0); 'scrolled'", pixels),
+        _ => format!("window.scrollBy(0, {}); 'scrolled'", pixels),
+    };
+
+    let args = vec![url.as_str(), "--stealth"];
+    let mut output = run_obscura_cli(&args, Some(&js)).await?;
+    output.meta.url = url;
+    output.meta.operation = "scroll".to_string();
+    Ok(output)
 }
 
 pub async fn lp_wait_for_selector(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpWaitForSelectorInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({ "selector": input.selector });
-    if let Some(t) = input.timeout_ms { args["timeout"] = serde_json::json!(t); }
-    call_lp_tool(client, binary_path, "waitForSelector", args).await
+    let url = current_url();
+    let args = vec![url.as_str(), "--stealth", "--wait-selector", &input.selector];
+    let mut output = run_obscura_cli(&args, None).await?;
+    output.meta.url = url;
+    output.meta.operation = "wait_for_selector".to_string();
+    Ok(output)
 }
 
 pub async fn lp_interactive_elements(
-    client: &Arc<Mutex<Option<LightpandaMcpClient>>>,
-    binary_path: &std::path::Path,
-    input: LpInteractiveElementsInput,
+    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
+    _input: LpInteractiveElementsInput,
 ) -> Result<LpToolOutput, String> {
-    let mut args = serde_json::json!({});
-    if let Some(sel) = input.selector { args["selector"] = serde_json::json!(sel); }
-    call_lp_tool(client, binary_path, "interactiveElements", args).await
+    Ok(LpToolOutput {
+        success: false,
+        content: "Obscura CLI does not support interactive_elements detection. Use evaluate with custom JS to find buttons, links, and inputs.".to_string(),
+        meta: BrowserMeta {
+            url: String::new(),
+            title: None,
+            operation: "interactive_elements".to_string(),
+            elapsed_ms: 0,
+        },
+    })
 }

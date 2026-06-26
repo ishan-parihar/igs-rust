@@ -5,16 +5,6 @@ use std::collections::HashMap;
 
 use super::types_base::{DepthOptions, DiscoveryFilters, OutputOptions};
 
-// ─── Pagination Types ──────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct PaginationInput {
-    /// Opaque cursor for next page (from previous response's next_cursor)
-    pub cursor: Option<String>,
-    /// Items per page (default: 50, max: 100)
-    pub page_size: Option<u32>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PaginatedOutput<T> {
     pub items: Vec<T>,
@@ -77,13 +67,13 @@ pub struct PoolListOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PoolUpsertInput {
-    /// Pool ID (e.g., "GLOBAL_TECH_CYBER", "MY_CUSTOM_POOL")
+    /// Pool ID
     pub id: String,
-    /// Human-readable name for the pool
+    /// Pool name
     pub name: String,
-    /// Optional description of the pool's purpose or scope
+    /// Pool description
     pub description: Option<String>,
-    /// Whether the pool is active and queries should include it (default: true)
+    /// Active (default: true)
     pub is_active: Option<bool>,
 }
 
@@ -94,7 +84,7 @@ pub struct PoolUpsertOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PoolDeleteInput {
-    /// Pool ID to delete (e.g., "MY_CUSTOM_POOL")
+    /// Pool ID to delete
     pub id: String,
 }
 
@@ -109,10 +99,12 @@ pub struct PoolDeleteOutput {
 pub struct SourceListInput {
     /// Pool IDs to filter by
     pub pools: Option<Vec<String>>,
-    /// Active sources only (default: all)
+    /// Active only (default: all)
     pub active_only: Option<bool>,
-    #[serde(flatten)]
-    pub pagination: PaginationInput,
+    /// Cursor for next page
+    pub cursor: Option<String>,
+    /// Items per page (default: 50, max: 100)
+    pub page_size: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -124,28 +116,28 @@ pub struct SourceListOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SourceUpsertInput {
-    /// Source ID (auto-generated from name if omitted)
+    /// Source ID (auto from name)
     pub id: Option<String>,
     /// Source name
     pub name: String,
-    /// Source type (rss/generic_html/hackernews/youtube)
+    /// Source type
     #[serde(rename = "type")]
     pub source_type: String,
-    /// Feed or webpage URL
+    /// Feed URL
     pub url: String,
-    /// Custom HTTP headers
+    /// Custom headers
     pub headers: Option<HashMap<String, String>>,
-    /// Parser key (see parsers.list)
+    /// Parser key
     pub parser: Option<String>,
-    /// Pool IDs for this source
+    /// Pool IDs for source
     pub pools: Option<Vec<String>>,
-    /// ISO country codes
+    /// Country codes
     pub countries: Option<Vec<String>>,
     /// City names
     pub cities: Option<Vec<String>>,
-    /// Domain tags (tech/cyber/defense/health)
+    /// Domain tags
     pub domains: Option<Vec<String>>,
-    /// Active and fetched (default: true)
+    /// Active (default: true)
     pub is_active: Option<bool>,
 }
 
@@ -156,7 +148,7 @@ pub struct SourceUpsertOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SourceDeleteInput {
-    /// ID of the source to permanently delete (e.g., "reuters", "bbc_world")
+    /// Source ID to delete
     pub id: String,
 }
 
@@ -180,19 +172,21 @@ pub struct ParserListOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ParserListInput {
-    #[serde(flatten)]
-    pub pagination: PaginationInput,
+    /// Cursor for next page
+    pub cursor: Option<String>,
+    /// Items per page (default: 50, max: 100)
+    pub page_size: Option<u32>,
 }
 
 // ─── Autodiscover Types ───────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AutodiscoverInput {
-    /// Homepage URL to discover feeds from
+    /// Homepage URL
     pub url: String,
-    /// Pool IDs to assign discovered source to
+    /// Pool IDs for source
     pub pools: Option<Vec<String>>,
-    /// Name override for discovered source
+    /// Name override
     pub name: Option<String>,
 }
 
@@ -205,11 +199,11 @@ pub struct AutodiscoverOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EnableScraperInput {
-    /// Source ID to enable scraping for
+    /// Source ID
     pub id: String,
-    /// Listing page URL (defaults to source URL)
+    /// Listing page URL
     pub list_url: Option<String>,
-    /// CSS selectors: item/title/link/date/desc
+    /// CSS selectors
     pub selectors: Option<HashMap<String, String>>,
 }
 
@@ -222,8 +216,10 @@ pub struct EnableScraperOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GeoListInput {
-    #[serde(flatten)]
-    pub pagination: PaginationInput,
+    /// Cursor for next page
+    pub cursor: Option<String>,
+    /// Items per page (default: 50, max: 100)
+    pub page_size: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -268,13 +264,13 @@ pub struct DomainsOutput {
 pub struct NewsFetchInput {
     #[serde(flatten)]
     pub filters: DiscoveryFilters,
-    /// Broad shallow scan across all pools
+    /// Discovery mode
     pub discovery_mode: Option<bool>,
-    /// Urgency level filter
+    /// Urgency filter
     pub urgency: Option<String>,
-    /// Skip NLP enrichment step
+    /// Skip enrichment
     pub skip_enrich: Option<bool>,
-    /// Skip insight indexing step
+    /// Skip indexing
     pub skip_index: Option<bool>,
     #[serde(flatten)]
     pub depth_opts: DepthOptions,
@@ -313,9 +309,9 @@ pub struct NewsFetchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsTestInput {
-    /// Source ID to test
+    /// Source ID
     pub id: String,
-    /// Cache mode: prefer/bypass/only
+    /// Cache mode
     pub cache_mode: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -337,7 +333,7 @@ pub struct EnrichItemInput {
     pub title: String,
     /// Article URL
     pub link: String,
-    /// Publication date (ISO 8601)
+    /// Pub date
     pub pub_date: String,
     /// Source name
     pub source_name: String,
@@ -353,48 +349,46 @@ pub struct EnrichItemInput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsEnrichInput {
-    /// Items to enrich (from news.fetch)
+    /// Items to enrich
     pub items: Vec<EnrichItemInput>,
-    /// NLP features: topics/entities/sentiment/summary/diversity
+    /// NLP features
     pub extract: Option<Vec<String>>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
 
-/// A single enriched news item with NLP annotations
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EnrichedItem {
-    /// Original news item fields flattened into this struct
+    /// Original item data
     #[serde(flatten)]
     pub item: serde_json::Value,
-    /// Extracted topics from the content
+    /// Topics
     #[serde(default)]
     pub topics: Vec<String>,
-    /// Named entities detected in the content
+    /// Entities
     #[serde(default)]
     pub entities: Vec<EntityInfo>,
-    /// Sentiment analysis result
+    /// Sentiment
     #[serde(default)]
     pub sentiment: Option<SentimentResult>,
-    /// Brief summary of the article
+    /// Summary
     #[serde(default)]
     pub summary: Option<String>,
 }
 
-/// Metadata about the enrichment process
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EnrichmentMeta {
-    /// Number of items enriched
+    /// Enriched count
     pub enriched_count: usize,
-    /// NLP features applied (e.g., ["topics", "entities", "sentiment", "summary"])
+    /// NLP features applied
     pub features: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NewsEnrichOutput {
-    /// Enriched news items with NLP data
+    /// Enriched items
     pub items: Vec<EnrichedItem>,
-    /// Metadata about the enrichment process
+    /// Enrichment metadata
     pub meta: EnrichmentMeta,
 }
 
@@ -404,11 +398,11 @@ pub struct NewsEnrichOutput {
 pub struct RedditSearchInput {
     /// Search query
     pub query: String,
-    /// Subreddits to search (omit for all)
+    /// Subreddits (omit for all)
     pub subreddits: Option<Vec<String>>,
-    /// Sort: relevance/hot/top/new/comments
+    /// Sort order
     pub sort: Option<String>,
-    /// Time filter: hour/day/week/month/year/all
+    /// Time filter
     pub time: Option<String>,
     /// Max results (default: 25)
     pub limit: Option<i32>,
@@ -435,9 +429,9 @@ pub struct RedditSearchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct RedditFeedInput {
-    /// Subreddits without r/ prefix
+    /// Subreddits (no r/)
     pub subreddits: Vec<String>,
-    /// Per-subreddit limit (default: 25, max: 100)
+    /// Per-sub limit (25-100)
     pub limit: Option<i32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -456,13 +450,13 @@ pub struct RedditFeedOutput {
 pub struct ResearchSearchInput {
     /// Search query
     pub query: String,
-    /// Engines: arxiv/semanticscholar (default: both)
+    /// Engines (default: both)
     pub sources: Option<Vec<String>>,
-    /// arXiv categories (e.g. ["cs.AI", "cs.CL"])
+    /// arXiv categories
     pub categories: Option<Vec<String>>,
-    /// Earliest year (inclusive)
+    /// Earliest year
     pub year_from: Option<i32>,
-    /// Latest year (inclusive)
+    /// Latest year
     pub year_to: Option<i32>,
     /// Max results (default: 25)
     pub limit: Option<i32>,
@@ -486,13 +480,13 @@ pub struct ResearchSearchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchPaperInput {
-    /// Paper ID (arxiv:XXXX.XXXXX or semanticscholar:XXXX)
+    /// Paper ID
     pub paper_id: String,
-    /// Include citing papers
+    /// Include citations
     pub include_citations: Option<bool>,
-    /// Include referenced papers
+    /// Include references
     pub include_references: Option<bool>,
-    /// Extract PDF text
+    /// Extract PDF
     pub extract_pdf: Option<bool>,
 }
 
@@ -528,30 +522,29 @@ pub struct ResearchPaperOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchDownloadInput {
-    /// Paper ID (arxiv:XXXX.XXXXX or semanticscholar:XXXX)
+    /// Paper ID
     pub paper_id: String,
-    /// Output file path (default: {paper_id}.pdf)
+    /// Output file path
     pub output_path: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
-    /// Generate markdown sidecar alongside PDF
+    /// Generate markdown
     pub convert_to_markdown: Option<bool>,
 }
 
-/// Metadata about a downloaded research paper
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PaperMetadata {
     /// Paper title
     pub title: String,
     /// Paper ID (e.g., "arxiv:2301.00001")
     pub id: String,
-    /// Publication year
+    /// Year
     pub year: Option<u32>,
-    /// Number of pages
+    /// Pages
     pub pages: Option<u32>,
-    /// File size in bytes
+    /// File size
     pub file_size: u64,
-    /// Local file path where PDF was saved
+    /// File path
     pub file_path: String,
 }
 
@@ -567,21 +560,21 @@ pub struct ResearchDownloadOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchInput {
-    /// Search query string
+    /// Search query
     pub query: String,
-    /// Provider: tavily (default) or firecrawl
+    /// Provider (default: tavily)
     pub provider: Option<String>,
-    /// Max results (default: 10, max: 20)
+    /// Max results (10-20)
     pub max_results: Option<i32>,
-    /// Topic: general (default) or news
+    /// Topic (general|news)
     pub topic: Option<String>,
     /// Include domains
     pub include_domains: Option<Vec<String>>,
     /// Exclude domains
     pub exclude_domains: Option<Vec<String>>,
-    /// Lookback period in days (news topic only)
+    /// Days back (news only)
     pub days: Option<i32>,
-    /// Include AI answer summary
+    /// Include answer
     pub include_answer: Option<bool>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -614,21 +607,21 @@ pub struct WebSearchOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebScrapeInput {
-    /// URL to scrape (http/https)
+    /// URL to scrape
     pub url: String,
-    /// Provider: default (HTTP) or lightpanda (JS rendering)
+    /// Provider
     pub provider: Option<String>,
-    /// Formats: markdown/html/text/screenshot (Lightpanda)
+    /// Output formats
     pub formats: Option<Vec<String>>,
     /// Wait for CSS selector (Lightpanda)
     pub wait_selector: Option<String>,
-    /// Strip mode: js/css/ui/full (Lightpanda)
+    /// Strip mode
     pub strip_mode: Option<String>,
     /// Extract structured data (Lightpanda)
     pub structured_data: Option<bool>,
     /// Include iframes (Lightpanda)
     pub include_frames: Option<bool>,
-    /// Wait event: load/domcontentloaded/networkidle/done (Lightpanda)
+    /// Wait event
     pub wait_until: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -644,7 +637,6 @@ pub struct WebScrapeOutput {
     pub meta: ScrapeMeta,
 }
 
-/// Structured data extracted from the scraped page (OpenGraph, description, headings)
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ScrapeStructuredData {
     pub description: Option<String>,
@@ -654,18 +646,17 @@ pub struct ScrapeStructuredData {
     pub headings: Vec<String>,
 }
 
-/// Metadata about the scrape operation
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ScrapeMeta {
-    /// Final URL after redirects
+    /// Final URL
     pub url: String,
-    /// HTTP status code
+    /// Status code
     pub status: u16,
-    /// Content type of the response
+    /// Content type
     pub content_type: Option<String>,
-    /// Time taken in milliseconds
+    /// Elapsed ms
     pub elapsed_ms: u64,
-    /// Whether JavaScript was rendered (Lightpanda mode)
+    /// JS rendered
     pub js_rendered: bool,
 }
 
@@ -673,25 +664,25 @@ pub struct ScrapeMeta {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebCrawlInput {
-    /// Starting URL (http/https)
+    /// Starting URL
     pub url: String,
-    /// Provider: default or lightpanda (renders JS)
+    /// Provider
     pub provider: Option<String>,
     /// Max BFS depth (default: 2)
     pub max_depth: Option<i32>,
     /// Max pages (default: 20)
     pub max_pages: Option<i32>,
-    /// Respect robots.txt (default: true)
+    /// Respect robots.txt
     pub obey_robots: Option<bool>,
-    /// Dump format: markdown/html/semantic_tree
+    /// Dump format
     pub dump_format: Option<String>,
-    /// Wait event: load/domcontentloaded/networkidle/done
+    /// Wait event
     pub wait_until: Option<String>,
     /// Include iframes (Lightpanda)
     pub include_frames: Option<bool>,
     /// Wait for CSS selector (Lightpanda)
     pub wait_selector: Option<String>,
-    /// Strip mode: js/css/ui/full (Lightpanda)
+    /// Strip mode
     pub strip_mode: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -730,13 +721,13 @@ pub struct WebCrawlOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebMapInput {
-    /// Website URL (fetches /sitemap.xml)
+    /// Website URL
     pub url: String,
     /// Provider: default or lightpanda
     pub provider: Option<String>,
     /// Max links (default: 100)
     pub limit: Option<i32>,
-    /// Filter URLs by substring
+    /// Filter by substring
     pub search: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -767,11 +758,11 @@ pub struct WebMapOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightFindConnectionsInput {
-    /// Entity name (omit for all cross-domain)
+    /// Entity name
     pub entity: Option<String>,
-    /// Min domains for connection (default: 2)
+    /// Min domains (default: 2)
     pub min_domains: Option<i32>,
-    /// Max results (default: 20, all-connections mode)
+    /// Max results (default: 20)
     pub limit: Option<i32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -781,19 +772,19 @@ pub struct InsightFindConnectionsInput {
 pub struct InsightFindConnectionsOutput {
     pub connections: Vec<EntityConnection>,
     pub count: usize,
-    /// Only present when entity is omitted (all connections mode)
+    /// All-connections only
     pub total_found: Option<usize>,
-    /// Only present when entity is omitted (all connections mode)
+    /// All-connections only
     pub stats: Option<InsightStats>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightTrendingInput {
-    /// Time window hours (default: 24)
+    /// Time window (default: 24h)
     pub time_window_hours: Option<i64>,
-    /// Min growth ratio (default: 2.0)
+    /// Min growth (default: 2.0)
     pub min_growth: Option<f64>,
-    /// Min current mentions (default: 3)
+    /// Min mentions (default: 3)
     pub min_current_mentions: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -812,19 +803,19 @@ pub struct InsightIndexArticle {
     pub id: String,
     /// Title
     pub title: String,
-    /// Publication date (ISO 8601)
+    /// Pub date
     pub pub_date: String,
     /// Source name
     pub source_name: String,
-    /// Domains (omit for auto-detection)
+    /// Domains (auto-detect)
     pub domains: Option<Vec<DomainInfo>>,
-    /// Entities (omit for auto-extraction)
+    /// Entities (auto-extract)
     pub entities: Option<Vec<EntityInfo>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct InsightIndexInput {
-    /// Articles to index (use enriched items for best results)
+    /// Articles to index
     pub articles: Vec<InsightIndexArticle>,
 }
 
@@ -848,11 +839,11 @@ pub struct InsightClearOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct CveSearchInput {
-    /// Search term (vulnerability name, CVE ID, product name)
+    /// Search term
     pub query: String,
-    /// Severity filter: "LOW", "MEDIUM", "HIGH", "CRITICAL"
+    /// Severity filter
     pub severity: Option<String>,
-    /// Days back to search (default: 30)
+    /// Days back (default: 30)
     pub days_back: Option<u32>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -881,9 +872,9 @@ pub struct CveEntry {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SecurityAdvisoriesInput {
-    /// Package ecosystem: "npm", "pip", "maven", "go", "rust"
+    /// Package ecosystem
     pub ecosystem: String,
-    /// Severity filter: "low", "medium", "high", "critical"
+    /// Severity filter
     pub severity: Option<String>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -917,33 +908,33 @@ pub struct SecurityAdvisory {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpGotoInput {
-    /// URL to navigate to
+    /// URL
     pub url: String,
-    /// Wait until event: "load", "domcontentloaded", "networkidle", "done"
+    /// Wait event
     pub wait_until: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpMarkdownInput {
-    /// Strip mode: "js", "css", "ui", "full"
+    /// Strip mode
     pub strip_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpLinksInput {
-    /// CSS selector to scope link extraction
+    /// Selector
     pub selector: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpEvaluateInput {
-    /// JavaScript expression to evaluate
+    /// Expression
     pub expression: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpSemanticTreeInput {
-    /// Include text content in the tree
+    /// Include text
     pub include_text: Option<bool>,
 }
 
@@ -959,62 +950,60 @@ pub struct LpStructuredDataInput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpDetectFormsInput {
-    /// CSS selector to scope form detection
+    /// Selector
     pub selector: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpClickInput {
-    /// CSS selector of element to click
+    /// Selector
     pub selector: String,
-    /// Wait for navigation after click
+    /// Wait for nav
     pub wait_for_navigation: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpFillInput {
-    /// CSS selector of form field
+    /// Selector
     pub selector: String,
-    /// Value to fill
+    /// Value
     pub value: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpScrollInput {
-    /// Direction: "up", "down", "left", "right"
+    /// Direction
     pub direction: Option<String>,
-    /// Pixels to scroll
+    /// Pixels
     pub pixels: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpWaitForSelectorInput {
-    /// CSS selector to wait for
+    /// Selector
     pub selector: String,
-    /// Timeout in ms
+    /// Timeout (ms)
     pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpInteractiveElementsInput {
-    /// CSS selector to scope
+    /// Selector
     pub selector: Option<String>,
 }
 
-/// Metadata about a Lightpanda browser operation
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct BrowserMeta {
-    /// Current URL after operation
+    /// Current URL
     pub url: String,
     /// Page title
     pub title: Option<String>,
-    /// Operation type (e.g., "goto", "click", "fill")
+    /// Operation type
     pub operation: String,
-    /// Time taken in milliseconds
+    /// Elapsed ms
     pub elapsed_ms: u64,
 }
 
-/// Generic output for Lightpanda MCP tools
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpToolOutput {
     pub success: bool,
@@ -1026,9 +1015,9 @@ pub struct LpToolOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WeatherForecastInput {
-    /// City name or "lat,lon"
+    /// Location
     pub location: String,
-    /// Forecast days (1-5, default 3)
+    /// Forecast days (1-5)
     pub days: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1100,7 +1089,7 @@ pub struct WeatherAlert {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FinanceMarketInput {
-    /// Stock symbols (e.g., ["AAPL", "GOOGL", "MSFT"])
+    /// Stock symbols
     pub symbols: Vec<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1124,9 +1113,9 @@ pub struct MarketQuote {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FinanceCryptoInput {
-    /// CoinGecko coin IDs (e.g., ["bitcoin", "ethereum", "solana"])
+    /// CoinGecko IDs
     pub symbols: Vec<String>,
-    /// CoinGecko IDs for API call (defaults to symbols if omitted)
+    /// CoinGecko IDs (override)
     #[serde(default)]
     pub ids: Vec<String>,
     #[serde(flatten)]
@@ -1172,11 +1161,11 @@ pub struct TrendingCoin {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PatentSearchInput {
-    /// Search query (e.g., "machine learning", "CRISPR gene editing")
+    /// Search query
     pub query: String,
-    /// Patent office: USPTO (default), EPO, WIPO
+    /// Patent office
     pub office: Option<String>,
-    /// Years back to search (default: 5)
+    /// Years back (default: 5)
     pub years_back: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1202,7 +1191,7 @@ pub struct PatentEntry {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PatentDetailsInput {
-    /// Patent ID (e.g., "US11234567")
+    /// Patent ID
     pub patent_id: String,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1222,9 +1211,9 @@ pub struct PatentDetailsOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GovtBillsInput {
-    /// Search query (e.g., "climate change", "healthcare")
+    /// Search query
     pub query: String,
-    /// Congress number (default: 118)
+    /// Congress number
     pub congress: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1250,7 +1239,7 @@ pub struct BillEntry {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GovtRegulationsInput {
-    /// Search query (e.g., "environmental protection", "financial regulation")
+    /// Search query
     pub query: String,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1275,25 +1264,23 @@ pub struct RegulationEntry {
 
 // ─── SOP Types ─────────────────────────────────────────────
 
-/// A single step in an SOP chain.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SopStep {
-    /// Tool to execute (e.g. "news.fetch", "web.search")
+    /// Tool name
     pub tool: String,
-    /// Parameters to pass to the tool
+    /// Tool params
     pub params: serde_json::Value,
-    /// Index of a prior step this depends on (must succeed first)
+    /// Depends on step
     pub depends_on: Option<usize>,
 }
 
-/// A named chain of composable SOP steps.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SopChain {
-    /// Unique chain name (e.g. "deep-threat-intel")
+    /// Chain name
     pub name: String,
-    /// Human-readable description
+    /// Description
     pub description: String,
-    /// Ordered steps to execute
+    /// Steps
     pub steps: Vec<SopStep>,
 }
 
@@ -1317,9 +1304,9 @@ pub struct SopChainInfo {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SopExecuteInput {
-    /// Chain name to execute (from sop.list)
+    /// Chain name
     pub chain_name: String,
-    /// Optional parameter overrides per step index (merge with step defaults)
+    /// Step overrides
     pub overrides: Option<Vec<serde_json::Value>>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1344,7 +1331,7 @@ pub struct SopStepResult {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResearchPubMedInput {
-    /// Search query (e.g., "CRISPR gene editing", "COVID-19 vaccine")
+    /// Search query
     pub query: String,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -1373,7 +1360,7 @@ pub struct ResearchPubMedPaper {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HealthCdcInput {
-    /// State name (optional, defaults to US total)
+    /// State name
     pub state: Option<String>,
     /// Year (default: 2021)
     pub year: Option<u32>,
@@ -1403,11 +1390,11 @@ pub struct HealthCause {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PoliticsFecInput {
-    /// Candidate name to search (e.g., "Biden", "Trump")
+    /// Candidate name
     pub name: String,
-    /// Office filter: P (President), S (Senate), H (House)
+    /// Office filter
     pub office: Option<String>,
-    /// Party filter: DEM, REP, etc.
+    /// Party filter
     pub party: Option<String>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -1436,9 +1423,9 @@ pub struct FecCandidate {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PoliticsFecCommitteesInput {
-    /// Committee name to search
+    /// Committee name
     pub name: String,
-    /// Committee type filter: N (National), O (Party), V (PAC), W (PAC-WC)
+    /// Committee type
     pub committee_type: Option<String>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -1468,15 +1455,15 @@ pub struct FecCommittee {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SatelliteFirmsInput {
-    /// West longitude of bounding box (e.g., -120.0)
+    /// West longitude
     pub west: f64,
-    /// South latitude of bounding box (e.g., 30.0)
+    /// South latitude
     pub south: f64,
-    /// East longitude of bounding box (e.g., -100.0)
+    /// East longitude
     pub east: f64,
-    /// North latitude of bounding box (e.g., 50.0)
+    /// North latitude
     pub north: f64,
-    /// Data source: VIIRS_SNPP_NRT (default), VIIRS_NOAA20_NRT, MODIS_NRT
+    /// Data source
     pub source: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1509,9 +1496,9 @@ pub struct FireHotspot {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EnvEpaFacilitiesInput {
-    /// State code (e.g., "CA", "NY", "US" for all)
+    /// State code
     pub state: Option<String>,
-    /// Facility name filter (optional)
+    /// Facility name
     pub name: Option<String>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -1541,7 +1528,7 @@ pub struct EpaFacility {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EnvEpaEmissionsInput {
-    /// State code (e.g., "CA", "NY")
+    /// State code
     pub state: Option<String>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -1570,9 +1557,9 @@ pub struct EpaEmissionsFacility {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LegalSearchInput {
-    /// Search query (e.g., "first amendment", "Miranda v. Arizona")
+    /// Search query
     pub query: String,
-    /// Court filter (e.g., "scotus", "ca9", "dcd")
+    /// Court filter
     pub court: Option<String>,
     #[serde(flatten)]
     pub limits: LimitInput,
@@ -1599,7 +1586,7 @@ pub struct LegalCase {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LegalCaseDetailsInput {
-    /// Case ID (from legal.search_cases)
+    /// Case ID
     pub case_id: u32,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1621,17 +1608,17 @@ pub struct LegalCaseDetailsOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ClimateNoaaInput {
-    /// Dataset: GHCND (daily), GSOM (monthly), GSOY (yearly)
+    /// Dataset
     pub dataset: Option<String>,
-    /// Location ID (e.g., "FIPS:US", "CITY:US060001", "ZIP:10001")
+    /// Location ID
     pub location: Option<String>,
-    /// Station ID (optional filter)
+    /// Station ID
     pub station: Option<String>,
-    /// Start date (YYYY-MM-DD)
+    /// Start date
     pub start_date: Option<String>,
-    /// End date (YYYY-MM-DD)
+    /// End date
     pub end_date: Option<String>,
-    /// Max results (default: 20, max: 1000)
+    /// Max results (20-1000)
     pub limit: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1655,9 +1642,9 @@ pub struct NoaaObservation {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ClimateNoaaStationsInput {
-    /// Location ID (e.g., "FIPS:US", "CITY:US060001")
+    /// Location ID
     pub location: Option<String>,
-    /// Max results (default: 20, max: 1000)
+    /// Max results (20-1000)
     pub limit: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
@@ -1686,9 +1673,9 @@ pub struct NoaaStation {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct HealthWhoInput {
-    /// WHO indicator code (e.g., "WHOSIS_000001" for life expectancy)
+    /// WHO indicator
     pub indicator: Option<String>,
-    /// Country code (e.g., "IND", "USA", "GBR")
+    /// Country code
     pub country: Option<String>,
     /// Year filter
     pub year: Option<u32>,

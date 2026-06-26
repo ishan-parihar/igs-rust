@@ -53,7 +53,7 @@ enum Commands {
         #[command(subcommand)]
         action: WebAction,
     },
-    /// Lightpanda browser automation (persistent session)
+    /// Browser automation (persistent session)
     Browser {
         #[command(subcommand)]
         action: BrowserAction,
@@ -252,7 +252,7 @@ enum WebAction {
         #[arg(long)]
         include_frames: bool,
     },
-    /// Crawl a website using Lightpanda
+    /// Crawl a website using Obscura
     Crawl {
         #[arg(long)]
         url: String,
@@ -395,7 +395,7 @@ async fn main() -> anyhow::Result<()> {
             println!("  HTTP:    timeout={}ms, retries={}, concurrency={}", settings.http.timeout_ms, settings.http.retries, settings.http.concurrency);
             println!("  Cache:   enabled={}, ttl={}ms", settings.cache.enabled, settings.cache.ttl_ms);
             println!("  NLP:     enabled={}, max_topics={}", settings.nlp.enabled, settings.nlp.max_topics);
-            println!("  Lightpanda: enabled={}", settings.lightpanda.enabled);
+            println!("  Obscura: enabled={}", settings.obscura.enabled);
             println!("  Output:  format={}", settings.output.default_format);
 
             let pools = igs_rust_mcp::config::load_pools().await?;
@@ -464,7 +464,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Sources { action } => match action {
             SourceAction::List { pool, active_only } => {
                 let pools = pool.map(|p| vec![p]);
-                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), pagination: PaginationInput { cursor: None, page_size: None }, output: OutputOptions { format: None } }).await)?;
+                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), cursor: None, page_size: None, output: OutputOptions { format: None } }).await)?;
                 output(fmt, &result);
             }
             SourceAction::Discover { url, pool, name } => {
@@ -593,93 +593,55 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Browser { action } => {
-            let settings = igs_rust_mcp::config::load_settings().await?;
-            let binary = igs_rust_mcp::lightpanda::LightpandaManager::new(&settings.lightpanda)
-                .ensure_ready().await.map_err(|e| anyhow::anyhow!("{}", e))?;
+            let _settings = igs_rust_mcp::config::load_settings().await?;
 
             match action {
                 BrowserAction::Goto { url, wait_until } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpGotoInput { url, wait_until: Some(wait_until) },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(&Arc::new(Mutex::new(None)), LpGotoInput { url, wait_until: Some(wait_until) }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Markdown { strip_mode } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_markdown(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpMarkdownInput { strip_mode },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_markdown(&Arc::new(Mutex::new(None)), LpMarkdownInput { strip_mode }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Links { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_links(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpLinksInput { selector },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_links(&Arc::new(Mutex::new(None)), LpLinksInput { selector }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Evaluate { expression } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_evaluate(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpEvaluateInput { expression },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_evaluate(&Arc::new(Mutex::new(None)), LpEvaluateInput { expression }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::SemanticTree { include_text } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_semantic_tree(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpSemanticTreeInput { include_text: Some(include_text) },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_semantic_tree(&Arc::new(Mutex::new(None)), LpSemanticTreeInput { include_text: Some(include_text) }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::StructuredData => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_structured_data(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpStructuredDataInput { jsonld: None, opengraph: None, microdata: None },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_structured_data(&Arc::new(Mutex::new(None)), LpStructuredDataInput { jsonld: None, opengraph: None, microdata: None }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::DetectForms { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_detect_forms(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpDetectFormsInput { selector },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_detect_forms(&Arc::new(Mutex::new(None)), LpDetectFormsInput { selector }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Click { selector, wait_for_navigation } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpClickInput { selector, wait_for_navigation: Some(wait_for_navigation) },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(&Arc::new(Mutex::new(None)), LpClickInput { selector, wait_for_navigation: Some(wait_for_navigation) }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Fill { selector, value } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_fill(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpFillInput { selector, value },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_fill(&Arc::new(Mutex::new(None)), LpFillInput { selector, value }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Scroll { direction, pixels } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpScrollInput { direction: Some(direction), pixels: Some(pixels) },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(&Arc::new(Mutex::new(None)), LpScrollInput { direction: Some(direction), pixels: Some(pixels) }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::WaitForSelector { selector, timeout_ms } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpWaitForSelectorInput { selector, timeout_ms: Some(timeout_ms) },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(&Arc::new(Mutex::new(None)), LpWaitForSelectorInput { selector, timeout_ms: Some(timeout_ms) }).await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::InteractiveElements { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_interactive_elements(
-                        &Arc::new(Mutex::new(None)), &binary,
-                        LpInteractiveElementsInput { selector },
-                    ).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_interactive_elements(&Arc::new(Mutex::new(None)), LpInteractiveElementsInput { selector }).await)?;
                     output(fmt, &result);
                 }
             }

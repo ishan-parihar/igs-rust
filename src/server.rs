@@ -1,7 +1,6 @@
 use crate::config;
 use crate::http::HttpClient;
-use crate::lightpanda::LightpandaManager;
-use crate::lightpanda_mcp::LightpandaMcpClient;
+use crate::obscura::ObscuraManager;
 use crate::persistence;
 use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, insights, legal, lp_mcp, news, parsers as parsers_tools, patents, pools, politics, reddit, research, satellite, security, sop, sources, tool_guide, types::*, web, weather};
 #[allow(unused_imports)]
@@ -416,7 +415,7 @@ fn format_output<T: Serialize>(value: &T, format: &str) -> CallToolResult {
 pub struct IgsMcpServer {
     tool_router: ToolRouter<IgsMcpServer>,
     insights: Arc<Mutex<InsightStorage>>,
-    lightpanda_mcp: Arc<Mutex<Option<LightpandaMcpClient>>>,
+    obscura: Arc<Mutex<Option<ObscuraManager>>>,
     /// Tool groups for progressive discovery. Empty = all groups available.
     tool_groups: Vec<String>,
     #[allow(dead_code)] // reserved for future tool use
@@ -464,7 +463,7 @@ impl IgsMcpServer {
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
-            lightpanda_mcp: Arc::new(Mutex::new(None)),
+            obscura: Arc::new(Mutex::new(None)),
             tool_groups: Vec::new(),
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
@@ -478,7 +477,7 @@ impl IgsMcpServer {
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
-            lightpanda_mcp: Arc::new(Mutex::new(None)),
+            obscura: Arc::new(Mutex::new(None)),
             tool_groups,
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
@@ -514,8 +513,8 @@ impl IgsMcpServer {
     #[tool(name = "sources.list", description = "List configured news sources. Filter by pools or active_only. Returns Source[].")]
     async fn sources_list(&self, params: Parameters<SourceListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let cursor = params.0.pagination.cursor.clone();
-        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let cursor = params.0.cursor.clone();
+        let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_list(params.0).await?;
         let (page, next_cursor) = paginate(&all_output.sources, cursor, page_size);
         let output = PaginatedOutput { items: page, next_cursor, total: all_output.sources.len() };
@@ -545,8 +544,8 @@ impl IgsMcpServer {
     #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[].")]
     async fn sources_countries(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let cursor = params.0.pagination.cursor.clone();
-        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let cursor = params.0.cursor.clone();
+        let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_countries().await?;
         let (page, next_cursor) = paginate(&all_output.countries, cursor, page_size);
         let output = PaginatedOutput { items: page, next_cursor, total: all_output.countries.len() };
@@ -556,8 +555,8 @@ impl IgsMcpServer {
     #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[].")]
     async fn sources_cities(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let cursor = params.0.pagination.cursor.clone();
-        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let cursor = params.0.cursor.clone();
+        let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_cities().await?;
         let (page, next_cursor) = paginate(&all_output.cities, cursor, page_size);
         let output = PaginatedOutput { items: page, next_cursor, total: all_output.cities.len() };
@@ -567,8 +566,8 @@ impl IgsMcpServer {
     #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[].")]
     async fn sources_domains(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
-        let cursor = params.0.pagination.cursor.clone();
-        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let cursor = params.0.cursor.clone();
+        let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_domains().await?;
         let (page, next_cursor) = paginate(&all_output.domains, cursor, page_size);
         let output = PaginatedOutput { items: page, next_cursor, total: all_output.domains.len() };
@@ -579,8 +578,8 @@ impl IgsMcpServer {
 
     #[tool(name = "parsers.list", description = "List available source parser keys (rss, generic_html, semantic_scholar, etc.). Auto-detects if parser not specified in sources.upsert.")]
     async fn parsers_list(&self, params: Parameters<ParserListInput>) -> Result<CallToolResult, String> {
-        let cursor = params.0.pagination.cursor.clone();
-        let page_size = params.0.pagination.page_size.unwrap_or(50);
+        let cursor = params.0.cursor.clone();
+        let page_size = params.0.page_size.unwrap_or(50);
         let all_output = parsers_tools::parsers_list().await?;
         let (page, next_cursor) = paginate(&all_output.parsers, cursor, page_size);
         let output = PaginatedOutput { items: page, next_cursor, total: all_output.parsers.len() };
@@ -1009,7 +1008,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata. Supports Lightpanda for JS rendering.")]
+    #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata. Supports Obscura for JS rendering and stealth.")]
     async fn web_scrape(&self, params: Parameters<WebScrapeInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -1026,7 +1025,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Returns pages with depth and status.")]
+    #[tool(name = "web.crawl", description = "BFS crawl a website using Obscura headless browser. Returns pages with depth and status.")]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -1089,90 +1088,66 @@ impl IgsMcpServer {
         insights::insights_clear(&self.insights).await.map(Json)
     }
 
-    // ── Lightpanda MCP Browser Automation Tools ──────────────────
+    // ── Obscura Browser Automation Tools ─────────────────────────
 
-    #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript.")]
+    #[tool(name = "browser.goto", description = "Navigate to URL. Renders JS, spawns session.")]
     async fn lp_goto(&self, params: Parameters<LpGotoInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_goto(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_goto(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown.")]
+    #[tool(name = "browser.markdown", description = "Get page content as markdown. Supports strip_mode.")]
     async fn lp_markdown(&self, params: Parameters<LpMarkdownInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_markdown(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_markdown(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text.")]
+    #[tool(name = "browser.links", description = "Extract all links from current page.")]
     async fn lp_links(&self, params: Parameters<LpLinksInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_links(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_links(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result.")]
+    #[tool(name = "browser.evaluate", description = "Execute JavaScript in current page. Returns result.")]
     async fn lp_evaluate(&self, params: Parameters<LpEvaluateInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_evaluate(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_evaluate(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation.")]
+    #[tool(name = "browser.semantic_tree", description = "Get semantic DOM tree of current page.")]
     async fn lp_semantic_tree(&self, params: Parameters<LpSemanticTreeInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_semantic_tree(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_semantic_tree(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.structured_data", description = "Extract structured data from the current page: JSON-LD, OpenGraph, microdata.")]
+    #[tool(name = "browser.structured_data", description = "Extract JSON-LD, OpenGraph, microdata from page.")]
     async fn lp_structured_data(&self, params: Parameters<LpStructuredDataInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_structured_data(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_structured_data(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.detect_forms", description = "Detect forms on the current page. Returns form fields, actions, and methods.")]
+    #[tool(name = "browser.detect_forms", description = "Detect forms: fields, actions, methods.")]
     async fn lp_detect_forms(&self, params: Parameters<LpDetectFormsInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_detect_forms(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_detect_forms(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector.")]
+    #[tool(name = "browser.click", description = "Click element by CSS selector.")]
     async fn lp_click(&self, params: Parameters<LpClickInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_click(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_click(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field.")]
+    #[tool(name = "browser.fill", description = "Fill form field by CSS selector.")]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_fill(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_fill(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right.")]
+    #[tool(name = "browser.scroll", description = "Scroll page: up/down/left/right + pixels.")]
     async fn lp_scroll(&self, params: Parameters<LpScrollInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_scroll(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_scroll(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.wait_for_selector", description = "Wait for a CSS selector to appear on the page.")]
+    #[tool(name = "browser.wait_for_selector", description = "Wait for CSS selector to appear on page.")]
     async fn lp_wait_for_selector(&self, params: Parameters<LpWaitForSelectorInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_wait_for_selector(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_wait_for_selector(&self.obscura, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.interactive_elements", description = "Find interactive elements on the current page (buttons, links, inputs).")]
+    #[tool(name = "browser.interactive_elements", description = "Find clickable/fillable elements on page.")]
     async fn lp_interactive_elements(&self, params: Parameters<LpInteractiveElementsInput>) -> Result<Json<LpToolOutput>, String> {
-        let binary = LightpandaManager::new(&self.settings.lightpanda)
-            .ensure_ready().await.map_err(|e| format!("{}", e))?;
-        lp_mcp::lp_interactive_elements(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
+        lp_mcp::lp_interactive_elements(&self.obscura, params.0).await.map(Json)
     }
 
     // ── SOP Tools ─────────────────────────────────────────────
