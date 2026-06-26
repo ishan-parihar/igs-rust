@@ -47,3 +47,9 @@ config/bin/.lightpanda_*
 config/bin/.lightpanda_version
 config/bin/.lightpanda_last_check
 
+
+# Plan files
+*PLAN*.md
+*PLAN*.md.bak
+SCRAPLING_INTEGRATION_PLAN.md
+UPGRADE_PLAN.md
