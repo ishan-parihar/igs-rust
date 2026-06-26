@@ -12,6 +12,8 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
     decision_tree.insert("I need to search the web".to_string(), "web.search".to_string());
     decision_tree.insert("I need to scrape a website".to_string(), "web.scrape".to_string());
     decision_tree.insert("I need to monitor Reddit".to_string(), "reddit.search".to_string());
+    decision_tree.insert("I need to search Twitter/X".to_string(), "twitter.search".to_string());
+    decision_tree.insert("I need to read a tweet".to_string(), "twitter.read".to_string());
     decision_tree.insert("I need to download a paper".to_string(), "research.download".to_string());
     decision_tree.insert("I need to crawl a website".to_string(), "web.crawl".to_string());
     decision_tree.insert("I need to test a news source".to_string(), "news.test_source".to_string());
@@ -132,10 +134,12 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
         ToolGuideItem { name: "insights.clear_index".to_string(), description: "Clear all indexed articles".to_string() },
     ]);
     
-    // Social - all 2 tools
+    // Social - all 4 tools
     categories.insert("Social".to_string(), vec![
         ToolGuideItem { name: "reddit.search".to_string(), description: "Search Reddit posts".to_string() },
         ToolGuideItem { name: "reddit.feed".to_string(), description: "Follow subreddit feeds".to_string() },
+        ToolGuideItem { name: "twitter.search".to_string(), description: "Search tweets by query".to_string() },
+        ToolGuideItem { name: "twitter.read".to_string(), description: "Read a tweet by URL or ID".to_string() },
     ]);
     
     // Weather - all 3 tools

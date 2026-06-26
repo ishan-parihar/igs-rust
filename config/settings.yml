@@ -95,3 +95,10 @@ output:
 # ─── Tool Groups ───────────────────────────────────────────────
 # Restrict available tools to specific groups (for focused sessions)
 # tool_groups: ["discovery", "news", "web"]
+
+# ─── Twitter/X Integration ───────────────────────────────────
+# Uses agent-twitter-client for cookie-based access to Twitter's internal APIs.
+# Set TWITTER_COOKIE env var with your browser cookie string.
+twitter:
+  enabled: false
+  cookie: ${TWITTER_COOKIE}

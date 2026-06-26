@@ -58,6 +58,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "twitter",
+        description: "Search and read tweets via Twitter/X. Uses cookie-based authentication. Requires twitter.enabled=true and twitter.cookie in settings.yml.",
+        tools: &[
+            "twitter.search", "twitter.read",
+        ],
+    },
+    ToolGroup {
         name: "weather",
         description: "Get weather forecasts, current conditions, and severe weather alerts for any location. Uses OpenWeatherMap free tier API.",
         tools: &[
@@ -145,6 +152,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
             "sop.list", "sop.execute",
         ],
     },
+    ToolGroup {
+        name: "youtube",
+        description: "Search YouTube videos, extract metadata and subtitles. Uses yt-dlp for data extraction.",
+        tools: &[
+            "youtube.search", "youtube.metadata", "youtube.subtitles",
+        ],
+    },
 ];
 
 /// Get tools available for a specific group name.
@@ -228,6 +242,8 @@ mod tests {
             "browser.detect_forms", "browser.click", "browser.fill",
             "browser.scroll", "browser.wait_for_selector", "browser.interactive_elements",
             "sop.list", "sop.execute",
+            "youtube.search", "youtube.metadata", "youtube.subtitles",
+            "twitter.search", "twitter.read",
         ];
         
         let registry_tools: Vec<&str> = TOOL_GROUPS.iter()

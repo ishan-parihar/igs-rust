@@ -48,3 +48,4 @@ html-to-markdown-rs = "3.5"
 clap = { version = "4", features = ["derive", "env"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 unpdf = "0.7"
+agent-twitter-client = "0.1.2"
