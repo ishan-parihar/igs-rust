@@ -10,7 +10,7 @@ pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOu
 
     let client = reqwest::Client::new();
     let query = urlencoding(&input.query);
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
     let mut url = format!(
         "https://www.courtlistener.com/api/rest/v4/search/?q={}&type=o&order_by=dateFiled%20desc&format=json",

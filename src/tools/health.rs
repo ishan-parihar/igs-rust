@@ -6,7 +6,7 @@ use super::types::*;
 pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCdcOutput, String> {
     let client = reqwest::Client::new();
     let year = input.year.unwrap_or(2021);
-    let limit = input.limit.unwrap_or(20).min(100);
+    let limit = input.limits.limit.unwrap_or(20).min(100);
 
     let mut url = format!(
         "https://data.cdc.gov/resource/3y38-azbh.json?$where=year='{}'&$order=deaths DESC&$limit={}",
@@ -70,7 +70,7 @@ pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, St
     let http = HttpClient::new(&settings.http, &cache_dir);
     
     let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     
     let mut filters = Vec::new();
     if let Some(ref country) = input.country {

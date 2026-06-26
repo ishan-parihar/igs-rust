@@ -9,7 +9,7 @@ pub async fn env_epa_facilities(input: EnvEpaFacilitiesInput) -> Result<EnvEpaFa
     let http = HttpClient::new(&settings.http, &cache_dir);
     
     let state = input.state.as_deref().unwrap_or("US");
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     
     let mut url = format!(
         "https://data.epa.gov/efservice/SEATTLE_ECHO_FACILITY/STATE_CODE/{}/JSON/rows/0:{}/LIST",
@@ -64,7 +64,7 @@ pub async fn env_epa_emissions(input: EnvEpaEmissionsInput) -> Result<EnvEpaEmis
     let http = HttpClient::new(&settings.http, &cache_dir);
     
     let state = input.state.as_deref().unwrap_or("US");
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     
     let url = format!(
         "https://data.epa.gov/efservice/TRI_FACILITY/ST/rows/0:{}/JSON",

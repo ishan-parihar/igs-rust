@@ -367,7 +367,7 @@ pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<Resear
     let http = HttpClient::new(&settings.http, &cache_dir);
 
     let query = urlencoding(&input.query);
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
     let search_url = format!(
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmax={}&retmode=json",

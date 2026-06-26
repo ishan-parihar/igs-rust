@@ -5,7 +5,7 @@ use crate::tools::types::*;
 use chrono::{Utc, Duration};
 
 pub async fn security_cve_search(input: CveSearchInput) -> Result<CveSearchOutput, String> {
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     let days_back = input.days_back.unwrap_or(30);
     let query_enc = urlencoding(&input.query);
 
@@ -165,7 +165,7 @@ fn extract_affected_products(cve: &serde_json::Value) -> Vec<String> {
 }
 
 pub async fn security_advisories(input: SecurityAdvisoriesInput) -> Result<SecurityAdvisoriesOutput, String> {
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
     let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());

@@ -9,7 +9,7 @@ pub async fn politics_fec_candidates(input: PoliticsFecInput) -> Result<Politics
     let http = HttpClient::new(&settings.http, &cache_dir);
     
     let name = urlencoding(&input.name);
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     
     let mut url = format!(
         "https://api.open.fec.gov/v1/candidates/?name={}&per_page={}&sort=name",
@@ -69,7 +69,7 @@ pub async fn politics_fec_committees(input: PoliticsFecCommitteesInput) -> Resul
     let http = HttpClient::new(&settings.http, &cache_dir);
     
     let name = urlencoding(&input.name);
-    let limit = input.limit.unwrap_or(20).clamp(1, 100);
+    let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     
     let mut url = format!(
         "https://api.open.fec.gov/v1/committees/?name={}&per_page={}&sort=name",

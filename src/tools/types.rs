@@ -31,6 +31,15 @@ pub fn paginate<T: Clone>(items: &[T], cursor: Option<String>, page_size: u32) -
     (page, next_cursor)
 }
 
+// ─── Limit Types ──────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LimitInput {
+    /// Max results (default: 20, max: 100)
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
 // ─── Tool Guide Types ──────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -845,8 +854,8 @@ pub struct CveSearchInput {
     pub severity: Option<String>,
     /// Days back to search (default: 30)
     pub days_back: Option<u32>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -876,8 +885,8 @@ pub struct SecurityAdvisoriesInput {
     pub ecosystem: String,
     /// Severity filter: "low", "medium", "high", "critical"
     pub severity: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1337,8 +1346,8 @@ pub struct SopStepResult {
 pub struct ResearchPubMedInput {
     /// Search query (e.g., "CRISPR gene editing", "COVID-19 vaccine")
     pub query: String,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1368,8 +1377,8 @@ pub struct HealthCdcInput {
     pub state: Option<String>,
     /// Year (default: 2021)
     pub year: Option<u32>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1400,8 +1409,8 @@ pub struct PoliticsFecInput {
     pub office: Option<String>,
     /// Party filter: DEM, REP, etc.
     pub party: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1431,8 +1440,8 @@ pub struct PoliticsFecCommitteesInput {
     pub name: String,
     /// Committee type filter: N (National), O (Party), V (PAC), W (PAC-WC)
     pub committee_type: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1504,8 +1513,8 @@ pub struct EnvEpaFacilitiesInput {
     pub state: Option<String>,
     /// Facility name filter (optional)
     pub name: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1534,8 +1543,8 @@ pub struct EpaFacility {
 pub struct EnvEpaEmissionsInput {
     /// State code (e.g., "CA", "NY")
     pub state: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1565,8 +1574,8 @@ pub struct LegalSearchInput {
     pub query: String,
     /// Court filter (e.g., "scotus", "ca9", "dcd")
     pub court: Option<String>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1683,8 +1692,8 @@ pub struct HealthWhoInput {
     pub country: Option<String>,
     /// Year filter
     pub year: Option<u32>,
-    /// Max results (default: 20, max: 100)
-    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
     #[serde(flatten)]
     pub output: OutputOptions,
 }

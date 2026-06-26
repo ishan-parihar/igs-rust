@@ -7,9 +7,11 @@ use crate::tools::{helpers::toon_encode, climate, env, finance, govt, health, in
 #[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
-    Json,
+    Json, RoleServer,
+    ErrorData,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
+    service::RequestContext,
     tool, tool_handler, tool_router,
 };
 use serde::Serialize;
@@ -485,26 +487,23 @@ impl IgsMcpServer {
 
     // ── Tool Guide ─────────────────────────────────────────────
 
-    #[tool(name = "tool.guide", description = "Categorized tool index with decision tree. Call this FIRST to find the right tool for your task. Returns decision_tree (maps questions to tools), categories (tools grouped by domain), and drill_down_chains (multi-step investigation sequences).")]
-    async fn tool_guide(&self) -> Result<Json<ToolGuideOutput>, String> {
-        tool_guide::get_tool_guide().await.map(Json::<ToolGuideOutput>)
-    }
+    // tool.guide moved to MCP resource (igs://tool-guide) to save ~1.5K tokens
 
     // ── Pool Tools ──────────────────────────────────────────────
 
-    #[tool(name = "pools.list", description = "List all configured source pools. Pools group related news sources (e.g. GLOBAL_TECH_CYBER, INDIA_NATIONAL_BASE). Use pool IDs as filters in news.fetch. Returns Pool[] with id, name, description, is_active. Do NOT use to fetch news content — use news.fetch instead.")]
+    #[tool(name = "pools.list", description = "List all configured source pools. Returns Pool[] with id, name, description, is_active.")]
     async fn pools_list(&self) -> Result<Json<PoolListOutput>, String> {
         let result: PoolListOutput = pools::pools_list().await?;
         Ok(Json(result))
     }
 
-    #[tool(name = "pools.upsert", description = "Create or update a source pool. Pools group related news sources for batch fetching. Input: id (unique identifier like GLOBAL_TECH_CYBER), name (display name), description (what the pool covers), is_active (default true). Use pools.list to see existing pools. Do NOT use to fetch news — use news.fetch.")]
+    #[tool(name = "pools.upsert", description = "Create or update a source pool. Input: id, name, description, is_active.")]
     async fn pools_upsert(&self, params: Parameters<PoolUpsertInput>) -> Result<Json<PoolUpsertOutput>, String> {
         let result: PoolUpsertOutput = pools::pools_upsert(params.0).await?;
         Ok(Json(result))
     }
 
-    #[tool(name = "pools.delete", description = "Permanently delete a pool by ID. Does not delete sources in the pool — only removes the grouping. Use pools.list to find the pool ID first. Do NOT use to modify sources — use sources.delete.")]
+    #[tool(name = "pools.delete", description = "Permanently delete a pool by ID.")]
     async fn pools_delete(&self, params: Parameters<PoolDeleteInput>) -> Result<Json<PoolDeleteOutput>, String> {
         let result: PoolDeleteOutput = pools::pools_delete(params.0).await?;
         Ok(Json(result))
@@ -512,7 +511,7 @@ impl IgsMcpServer {
 
     // ── Source Tools ────────────────────────────────────────────
 
-    #[tool(name = "sources.list", description = "List configured news sources (410+ across 47 countries). Filter by pools (pool IDs) or active_only=true. Returns Source[] with id, name, type, url, parser, pools, countries, cities, domains. Default output: TOON. Do NOT use to fetch news — use news.fetch.")]
+    #[tool(name = "sources.list", description = "List configured news sources. Filter by pools or active_only. Returns Source[].")]
     async fn sources_list(&self, params: Parameters<SourceListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let cursor = params.0.pagination.cursor.clone();
@@ -523,27 +522,27 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "sources.upsert", description = "Create or update a news source. Required: name, type (rss/generic_html/ofac/who_dons/newslaundry), url. Optional: id (auto-generated from name), headers (custom HTTP headers), parser (key from parsers.list), pools (pool IDs), countries (ISO codes), cities, domains, is_active. Use sources.autodiscover to auto-detect feeds first. Do NOT use to fetch news — use news.fetch.")]
+    #[tool(name = "sources.upsert", description = "Create or update a news source. Required: name, type, url. Optional: id, headers, parser, pools, countries, cities, domains, is_active.")]
     async fn sources_upsert(&self, params: Parameters<SourceUpsertInput>) -> Result<Json<SourceUpsertOutput>, String> {
         sources::sources_upsert(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.delete", description = "Permanently delete a source by ID from sources.yml. Cannot be undone. Use sources.list to find the source ID first. Do NOT use to modify pools — use pools.delete.")]
+    #[tool(name = "sources.delete", description = "Permanently delete a source by ID.")]
     async fn sources_delete(&self, params: Parameters<SourceDeleteInput>) -> Result<Json<SourceDeleteOutput>, String> {
         sources::sources_delete(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.autodiscover", description = "Auto-discover RSS/Atom feeds or sitemap from a homepage URL. Fetches the URL, looks for <link rel='alternate'> RSS/Atom tags, falls back to /sitemap.xml. Returns kind (rss/sitemap/none), url, sample items. Optionally adds discovered source to sources.yml with pools and name. Do NOT use to search the web — use web.search.")]
+    #[tool(name = "sources.autodiscover", description = "Auto-discover RSS/Atom feeds from a homepage URL. Returns kind, url, sample items.")]
     async fn sources_autodiscover(&self, params: Parameters<AutodiscoverInput>) -> Result<Json<AutodiscoverOutput>, String> {
         sources::sources_autodiscover(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.enable_generic_scraper", description = "Enable generic HTML scraping for a source. Sets parser to generic_html with CSS selectors. Input: source id, optional list_url (page to scrape), selectors (item, title, link, date, desc CSS selectors). Use sources.autodiscover first to find the source, then enable scraping for non-RSS sources. Do NOT use for RSS feeds — RSS sources work automatically.")]
+    #[tool(name = "sources.enable_generic_scraper", description = "Enable generic HTML scraping for a source with CSS selectors.")]
     async fn sources_enable_scraper(&self, params: Parameters<EnableScraperInput>) -> Result<Json<EnableScraperOutput>, String> {
         sources::sources_enable_scraper(params.0).await.map(Json)
     }
 
-    #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[] with name, ISO code, and source_count. Use ISO codes (IN, US, GB, etc.) as filters in news.fetch countries parameter. Default output: TOON. Do NOT use for city-level data — use sources.cities.")]
+    #[tool(name = "sources.countries", description = "List countries with source counts. Returns CountryInfo[].")]
     async fn sources_countries(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let cursor = params.0.pagination.cursor.clone();
@@ -554,7 +553,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[] with name and source_count. Use city names as filters in news.fetch cities parameter. Sorted by source count descending. Default output: TOON. Do NOT use for country-level data — use sources.countries.")]
+    #[tool(name = "sources.cities", description = "List cities with source counts. Returns CityInfo[].")]
     async fn sources_cities(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let cursor = params.0.pagination.cursor.clone();
@@ -565,7 +564,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[] with name and source_count. Domains are topical tags (geopolitics, business, tech, cyber, defense, health, etc.). Use domain names as filters in news.fetch domains parameter. Default output: TOON. Do NOT use to search — use web.search or news.fetch.")]
+    #[tool(name = "sources.domains", description = "List domains with source counts. Returns DomainInfoCount[].")]
     async fn sources_domains(&self, params: Parameters<GeoListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let cursor = params.0.pagination.cursor.clone();
@@ -590,7 +589,7 @@ impl IgsMcpServer {
 
     // ── News Tools ──────────────────────────────────────────────
 
-    #[tool(name = "news.fetch", description = "Fetch news from sources. Filter by pools, countries, cities, domains, time range, and keywords. depth='deep' runs full pipeline (fetch→enrich→index). Default output: TOON, use format='json' for JSON.")]
+    #[tool(name = "news.fetch", description = "Fetch news from sources. Filter by pools, countries, domains, keywords. depth='deep' runs full pipeline.")]
     async fn news_fetch(&self, params: Parameters<NewsFetchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let depth = params.0.depth_opts.depth.clone().unwrap_or_else(|| "default".to_string());
@@ -614,7 +613,7 @@ impl IgsMcpServer {
         }
     }
 
-    #[tool(name = "news.test_source", description = "Test a single source and return up to 10 items. Input: source ID (from sources.list). Useful for debugging source configuration, parser issues, or verifying a new source works. Returns NewsItem[]. Do NOT use to fetch multiple articles — use news.fetch.")]
+    #[tool(name = "news.test_source", description = "Test a single source and return up to 10 items.")]
     async fn news_test_source(&self, params: Parameters<NewsTestInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.id.clone();
@@ -650,21 +649,21 @@ impl IgsMcpServer {
 
     // ── Weather Tools ──────────────────────────────────────────
 
-    #[tool(name = "weather.forecast", description = "Get weather forecast for a location. Returns daily forecasts with temp, condition, humidity, wind. Uses OpenWeatherMap API (free tier). Location: city name or lat,lon. Days: 1-5 (default 3). Default output: TOON.")]
+    #[tool(name = "weather.forecast", description = "Get weather forecast for a location. Returns daily forecasts with temp, condition, humidity, wind.")]
     async fn weather_forecast(&self, params: Parameters<WeatherForecastInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = weather::weather_forecast(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "weather.current", description = "Get current weather for a location. Returns temp, feels_like, condition, humidity, wind, visibility. Uses OpenWeatherMap API. Location: city name or lat,lon. Default output: TOON.")]
+    #[tool(name = "weather.current", description = "Get current weather for a location. Returns temp, feels_like, condition, humidity, wind, visibility.")]
     async fn weather_current(&self, params: Parameters<WeatherCurrentInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = weather::weather_current(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "weather.alerts", description = "Get weather alerts for a lat/lon location. Returns active severe weather warnings. Uses OpenWeatherMap One Call API. Input: latitude and longitude. Default output: TOON.")]
+    #[tool(name = "weather.alerts", description = "Get weather alerts for a lat/lon location. Returns active severe weather warnings.")]
     async fn weather_alerts(&self, params: Parameters<WeatherAlertsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = weather::weather_alerts(params.0).await?;
@@ -673,7 +672,7 @@ impl IgsMcpServer {
 
     // ── Reddit Tools ────────────────────────────────────────────
 
-    #[tool(name = "reddit.search", description = "Search Reddit posts via reddit.com JSON API. Supports subreddits filter (e.g. [\"worldnews\",\"technology\"]), sort (relevance/hot/top/new), time (hour/day/week/month/year/all). Returns NewsItem[] compatible with news.enrich and insights.index_articles for cross-platform analysis. Do NOT use for general web search, news articles, or academic papers — use web.search, news.fetch, or research.* respectively.")]
+    #[tool(name = "reddit.search", description = "Search Reddit posts. Returns NewsItem[] for cross-platform analysis.")]
     async fn reddit_search(&self, params: Parameters<RedditSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.subreddits.as_ref().and_then(|s| s.first()).cloned().unwrap_or_else(|| params.0.query.clone());
@@ -690,7 +689,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds (old.reddit.com/r/{sub}/.rss). Reliable cross-platform access that works without API keys or residential IPs. Pass subreddit names without r/ prefix. Returns NewsItem[] compatible with news.enrich and insights.index_articles. Do NOT use to search — use reddit.search for queries.")]
+    #[tool(name = "reddit.feed", description = "Fetch latest posts from subreddits via RSS feeds. Returns NewsItem[].")]
     async fn reddit_feed(&self, params: Parameters<RedditFeedInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.subreddits.first().cloned().unwrap_or_default();
@@ -709,7 +708,7 @@ impl IgsMcpServer {
 
     // ── Research Tools ──────────────────────────────────────────
 
-    #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Supports categories (e.g. cs.AI, cs.CL), year_from, year_to filtering. Returns ResearchPaper[] with id (format: arxiv:XXXX or semanticscholar:XXXX), title, authors, abstract, year, citation_count, pdf_url. Use research.paper for details or research.download for PDF. Do NOT use for general web search, news articles, or Reddit discussions — use web.search, news.fetch, or reddit.* respectively.")]
+    #[tool(name = "research.search", description = "Search academic papers from arXiv and Semantic Scholar. Returns ResearchPaper[].")]
     async fn research_search(&self, params: Parameters<ResearchSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -726,7 +725,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "research.paper", description = "Get detailed paper information by ID. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. Returns PaperDetail with title, authors, abstract, year, citations, references, pdf_url. Optionally include_citations, include_references, extract_pdf. Do NOT use to search — use research.search first.")]
+    #[tool(name = "research.paper", description = "Get detailed paper information by ID. Returns PaperDetail with citations and references.")]
     async fn research_paper(&self, params: Parameters<ResearchPaperInput>) -> Result<Json<ResearchPaperOutput>, String> {
         let _subject = params.0.paper_id.clone();
         let output = research::research_paper(params.0).await?;
@@ -742,12 +741,12 @@ impl IgsMcpServer {
         Ok(Json(output))
     }
 
-    #[tool(name = "research.download", description = "Download a research paper PDF to disk. ID format: arxiv:XXXX.XXXXX or semanticscholar:XXXX. For Semantic Scholar, fetches PDF URL from API first. Optional output_path (default: {paper_id}.pdf) and format. Returns file path and size. Do NOT use to view abstracts — use research.paper for metadata.")]
+    #[tool(name = "research.download", description = "Download a research paper PDF to disk. Returns file path and size.")]
     async fn research_download(&self, params: Parameters<ResearchDownloadInput>) -> Result<Json<ResearchDownloadOutput>, String> {
         research::research_download(params.0).await.map(Json)
     }
 
-    #[tool(name = "research.pubmed_search", description = "Search PubMed for medical research papers. Returns PMID, title, authors, journal, publication date, and PubMed URL. Use for biomedical and life sciences research.")]
+    #[tool(name = "research.pubmed_search", description = "Search PubMed for medical research papers. Returns PMID, title, authors, journal.")]
     async fn research_pubmed_search(&self, params: Parameters<ResearchPubMedInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = research::research_pubmed_search(params.0).await?;
@@ -756,7 +755,7 @@ impl IgsMcpServer {
 
     // ── Finance Tools ────────────────────────────────────────────
 
-    #[tool(name = "finance.market", description = "Get stock market quotes for given symbols. Uses Yahoo Finance API (free, no key). Returns symbol, name, price, change, change_pct, volume. Default output: TOON.")]
+    #[tool(name = "finance.market", description = "Get stock market quotes for given symbols. Returns price, change, volume.")]
     async fn finance_market(&self, params: Parameters<FinanceMarketInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.symbols.join(",");
@@ -773,7 +772,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "finance.crypto", description = "Get cryptocurrency prices in USD. Uses CoinGecko API (free, no key). Input: CoinGecko IDs (e.g. [\"bitcoin\", \"ethereum\", \"solana\"]). Returns price_usd, change_24h_pct, market_cap, volume_24h. Default output: TOON.")]
+    #[tool(name = "finance.crypto", description = "Get cryptocurrency prices in USD. Returns price_usd, change_24h_pct, market_cap, volume_24h.")]
     async fn finance_crypto(&self, params: Parameters<FinanceCryptoInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.symbols.join(",");
@@ -790,7 +789,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "finance.trending", description = "Get trending cryptocurrencies on CoinGecko (free, no key). Returns top 7 trending coins by search volume with name, symbol, market_cap_rank, score. Default output: TOON.")]
+    #[tool(name = "finance.trending", description = "Get trending cryptocurrencies on CoinGecko. Returns top 7 trending coins.")]
     async fn finance_trending(&self, params: Parameters<FinanceTrendingInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = finance::finance_trending(params.0).await?;
@@ -799,7 +798,7 @@ impl IgsMcpServer {
 
     // ── Security Tools ──────────────────────────────────────────
 
-    #[tool(name = "security.cve", description = "Search CVE vulnerabilities from NVD (National Vulnerability Database). Returns CVE ID, severity, CVSS score, affected products, references. Use for threat intelligence and vulnerability monitoring. Supports days_back (default 30), severity filter, limit. Default output: TOON.")]
+    #[tool(name = "security.cve", description = "Search CVE vulnerabilities from NVD. Returns CVE ID, severity, CVSS score, affected products.")]
     async fn security_cve(&self, params: Parameters<CveSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -816,7 +815,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "security.advisories", description = "Search GitHub Security Advisories by ecosystem (npm, pip, maven, go, rust). Returns advisory ID (GHSA), CVE ID, severity, vulnerable version range, patched versions. Use for dependency vulnerability monitoring. Default output: TOON.")]
+    #[tool(name = "security.advisories", description = "Search GitHub Security Advisories by ecosystem. Returns advisory ID, CVE ID, severity.")]
     async fn security_advisories(&self, params: Parameters<SecurityAdvisoriesInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.ecosystem.clone();
@@ -835,7 +834,7 @@ impl IgsMcpServer {
 
     // ── Government Tools ────────────────────────────────────────
 
-    #[tool(name = "govt.bills", description = "Search US Congressional bills via Congress.gov API. Returns bill number, title, sponsor, introduced date, latest action, and URL. Supports congress number filter (default: 118). Default output: TOON.")]
+    #[tool(name = "govt.bills", description = "Search US Congressional bills via Congress.gov API. Returns bill number, title, sponsor.")]
     async fn govt_bills(&self, params: Parameters<GovtBillsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -852,7 +851,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "govt.regulations", description = "Search Federal Register regulations via federalregister.gov API. Returns document number, title, abstract, publication date, agency, and URL. Default output: TOON.")]
+    #[tool(name = "govt.regulations", description = "Search Federal Register regulations. Returns document number, title, agency.")]
     async fn govt_regulations(&self, params: Parameters<GovtRegulationsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -871,14 +870,14 @@ impl IgsMcpServer {
 
     // ── Politics Tools ──────────────────────────────────────────
 
-    #[tool(name = "politics.fec_candidates", description = "Search FEC for campaign finance candidate data. Returns candidate ID, name, party, office, state, receipts, disbursements, cash on hand. Use for political intelligence and campaign finance monitoring.")]
+    #[tool(name = "politics.fec_candidates", description = "Search FEC for campaign finance candidate data. Returns candidate ID, name, party.")]
     async fn politics_fec_candidates(&self, params: Parameters<PoliticsFecInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = politics::politics_fec_candidates(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "politics.fec_committees", description = "Search FEC for campaign finance committee data. Returns committee ID, name, type, party, state, receipts, disbursements. Use for PAC and party committee monitoring.")]
+    #[tool(name = "politics.fec_committees", description = "Search FEC for campaign finance committee data. Returns committee ID, name, type.")]
     async fn politics_fec_committees(&self, params: Parameters<PoliticsFecCommitteesInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = politics::politics_fec_committees(params.0).await?;
@@ -887,7 +886,7 @@ impl IgsMcpServer {
 
     // ── Patent Tools ────────────────────────────────────────────
 
-    #[tool(name = "patents.search", description = "Search USPTO patents via PatentsView API. Returns patent number, title, date, abstract, and Google Patents URL. Supports years_back (default 5). Default output: TOON.")]
+    #[tool(name = "patents.search", description = "Search USPTO patents via PatentsView API. Returns patent number, title, date.")]
     async fn patents_search(&self, params: Parameters<PatentSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -904,7 +903,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "patents.details", description = "Get detailed patent information by patent ID (e.g. US11234567). Returns title, date, abstract, claim count, and Google Patents URL. Do NOT use to search — use patents.search first.")]
+    #[tool(name = "patents.details", description = "Get detailed patent information by patent ID. Returns title, date, abstract, claims.")]
     async fn patents_details(&self, params: Parameters<PatentDetailsInput>) -> Result<Json<PatentDetailsOutput>, String> {
         let _subject = params.0.patent_id.clone();
         let output = patents::patents_details(params.0).await?;
@@ -922,7 +921,7 @@ impl IgsMcpServer {
 
     // ── Satellite Tools ────────────────────────────────────────
 
-    #[tool(name = "satellite.firms_fires", description = "Query NASA FIRMS active fire data for a geographic bounding box. Uses VIIRS (default: VIIRS_SNPP_NRT) or MODIS satellite sensors. Returns fire hotspots with lat/lon, brightness, confidence, fire radiative power (FRP), and acquisition metadata. Supports VIIRS_SNPP_NRT, VIIRS_NOAA20_NRT, MODIS_NRT sources. Default output: TOON.")]
+    #[tool(name = "satellite.firms_fires", description = "Query NASA FIRMS active fire data for a geographic bounding box. Returns fire hotspots.")]
     async fn satellite_firms_fires(&self, params: Parameters<SatelliteFirmsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = satellite::satellite_firms_fires(params.0).await?;
@@ -931,14 +930,14 @@ impl IgsMcpServer {
 
     // ── Environment Tools ─────────────────────────────────────
 
-    #[tool(name = "env.epa_facilities", description = "Search EPA regulated facilities via Envirofacts API. Returns facility name, address, city, state, zip, county, coordinates, and registry ID. Filter by state code (e.g. CA, NY) or facility name. Default output: TOON.")]
+    #[tool(name = "env.epa_facilities", description = "Search EPA regulated facilities via Envirofacts API. Returns facility name, address, coordinates.")]
     async fn env_epa_facilities(&self, params: Parameters<EnvEpaFacilitiesInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = env::env_epa_facilities(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "env.epa_emissions", description = "Search EPA Toxic Release Inventory (TRI) facility emissions data via Envirofacts API. Returns facility name, state, county, coordinates, and TRI facility ID. Filter by state code. Default output: TOON.")]
+    #[tool(name = "env.epa_emissions", description = "Search EPA Toxic Release Inventory facility emissions data. Returns facility name, state, county.")]
     async fn env_epa_emissions(&self, params: Parameters<EnvEpaEmissionsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = env::env_epa_emissions(params.0).await?;
@@ -947,28 +946,28 @@ impl IgsMcpServer {
 
     // ── Legal Tools ───────────────────────────────────────────
 
-    #[tool(name = "legal.search_cases", description = "Search US court cases via CourtListener API. Returns case name, court, date filed, citation count, and URL. Supports court filter (e.g. scotus, ca9, dcd). Requires courtlistener.apiKey in settings.yml. Default output: TOON.")]
+    #[tool(name = "legal.search_cases", description = "Search US court cases via CourtListener API. Returns case name, court, date filed.")]
     async fn legal_search_cases(&self, params: Parameters<LegalSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = legal::legal_search_cases(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "legal.case_details", description = "Get detailed case information by case ID from CourtListener. Returns case name, court, filing/termination dates, judges, nature of suit, and URL. Requires courtlistener.apiKey in settings.yml. Do NOT use to search — use legal.search_cases first.")]
+    #[tool(name = "legal.case_details", description = "Get detailed case information by case ID from CourtListener. Returns case name, court, judges.")]
     async fn legal_case_details(&self, params: Parameters<LegalCaseDetailsInput>) -> Result<Json<LegalCaseDetailsOutput>, String> {
         legal::legal_case_details(params.0).await.map(Json)
     }
 
     // ── Health Tools ─────────────────────────────────────────
 
-    #[tool(name = "health.cdc_leading_causes", description = "Query CDC leading causes of death data. Returns cause of death, state, year, deaths, age-adjusted rate. Use for US health statistics and mortality analysis.")]
+    #[tool(name = "health.cdc_leading_causes", description = "Query CDC leading causes of death data. Returns cause of death, state, year, deaths.")]
     async fn health_cdc_leading_causes(&self, params: Parameters<HealthCdcInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = health::health_cdc_leading_causes(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "health.who_gho", description = "Query WHO Global Health Observatory data. Returns health indicators for 194 countries. Use indicator codes like WHOSIS_000001 (life expectancy), WHS3_49 (births attended by skilled health personnel).")]
+    #[tool(name = "health.who_gho", description = "Query WHO Global Health Observatory data. Returns health indicators for 194 countries.")]
     async fn health_who_gho(&self, params: Parameters<HealthWhoInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = health::health_who_gho(params.0).await?;
@@ -977,14 +976,14 @@ impl IgsMcpServer {
 
     // ── Climate Tools ─────────────────────────────────────────
 
-    #[tool(name = "climate.noaa_observations", description = "Query NOAA Climate Data Online for historical weather observations. Returns daily temperature (TMAX/TMIN) and precipitation (PRCP) records. Supports GHCND (daily), GSOM (monthly), GSOY (yearly) datasets. Filter by location (FIPS:US, CITY:US060001, ZIP:10001), date range, and station. Requires noaa.apiKey in settings.yml. Default output: TOON.")]
+    #[tool(name = "climate.noaa_observations", description = "Query NOAA Climate Data Online for historical weather observations. Returns temperature and precipitation.")]
     async fn climate_noaa_observations(&self, params: Parameters<ClimateNoaaInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = climate::climate_noaa_observations(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "climate.noaa_stations", description = "List NOAA weather observation stations for a location. Returns station ID, name, coordinates, elevation, data coverage, and active date range. Use to discover station IDs for climate.noaa_observations filtering. Requires noaa.apiKey in settings.yml. Default output: TOON.")]
+    #[tool(name = "climate.noaa_stations", description = "List NOAA weather observation stations for a location. Returns station ID, name, coordinates.")]
     async fn climate_noaa_stations(&self, params: Parameters<ClimateNoaaStationsInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = climate::climate_noaa_stations(params.0).await?;
@@ -993,7 +992,7 @@ impl IgsMcpServer {
 
     // ── Web Tools ───────────────────────────────────────────────
 
-    #[tool(name = "web.search", description = "Realtime web search via Tavily (default) or Firecrawl API. Requires tavily.enabled=true or firecrawl.enabled=true in settings.yml with API key. Supports include_domains, exclude_domains, days, include_answer. Returns results array with title, url, content, score. Default output: TOON. Use format='json' for structured JSON. Do NOT use for academic papers, news articles, or Reddit posts — use research.search, news.fetch, or reddit.* respectively.")]
+    #[tool(name = "web.search", description = "Realtime web search via Tavily or Firecrawl API. Returns results with title, url, content, score.")]
     async fn web_search(&self, params: Parameters<WebSearchInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = params.0.query.clone();
@@ -1010,7 +1009,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata (title, headings, og:description, link count). Provider 'default' uses HTTP+html-to-markdown. Provider 'lightpanda' renders JavaScript — set lightpanda.enabled=true in settings.yml first. Lightpanda supports wait_selector, strip_mode, wait_until, include_frames for JS-heavy sites. Default output: TOON. Do NOT use for multiple pages, search results, or news — use web.crawl, web.search, or news.fetch respectively.")]
+    #[tool(name = "web.scrape", description = "Scrape a URL and return structured markdown with metadata. Supports Lightpanda for JS rendering.")]
     async fn web_scrape(&self, params: Parameters<WebScrapeInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -1027,7 +1026,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Renders JavaScript. Requires lightpanda.enabled=true in settings.yml (binary auto-downloads). Supports max_depth (default 2), max_pages (default 20), obey_robots, dump_format (markdown/html/semantic_tree), wait_until, wait_selector, strip_mode, include_frames. Returns pages with depth and status. Default output: TOON. Do NOT use for single pages, search, or news — use web.scrape, web.search, or news.fetch respectively.")]
+    #[tool(name = "web.crawl", description = "BFS crawl a website using Lightpanda headless browser. Returns pages with depth and status.")]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -1044,7 +1043,7 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Fetches /sitemap.xml, extracts <loc> URLs. Supports limit (default 100) and search filter. Returns WebMapOutput with links array containing url and optional title. Default output: TOON. Do NOT use to fetch content — use web.scrape or web.crawl.")]
+    #[tool(name = "web.map", description = "Discover URLs on a website by parsing sitemap.xml. Returns links array with url and title.")]
     async fn web_map(&self, params: Parameters<WebMapInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let _subject = url::Url::parse(&params.0.url).map(|u| u.host_str().unwrap_or("unknown").to_string()).unwrap_or_else(|_| params.0.url.clone());
@@ -1063,113 +1062,113 @@ impl IgsMcpServer {
 
     // ── Insight Tools ───────────────────────────────────────────
 
-    #[tool(name = "insights.find_connections", description = "Find cross-domain entity connections in indexed articles. Pass entity to look up specific entity, or omit to discover all cross-domain entities. Requires articles indexed via insights.index_articles or news.fetch with depth='deep'. Returns EntityConnection with domain breakdown and article IDs. Use min_domains to filter (default 2), limit for max results (default 20). Do NOT use for fetching news, web search, or paper research — use news.fetch, web.search, or research.* respectively.")]
+    #[tool(name = "insights.find_connections", description = "Find cross-domain entity connections in indexed articles. Returns EntityConnection with domain breakdown.")]
     async fn insight_find_connections(&self, params: Parameters<InsightFindConnectionsInput>) -> Result<Json<InsightFindConnectionsOutput>, String> {
         insights::insights_find_connections(&self.insights, params.0).await.map(Json)
     }
 
-    #[tool(name = "insights.trending_entities", description = "Detect entities with increasing mention frequency in indexed articles. Compares current time window vs previous. Requires articles indexed via insights.index_articles. Use time_window_hours (default 24), min_growth (default 2.0), min_current_mentions (default 3). Do NOT use to find connections — use insights.find_connections.")]
+    #[tool(name = "insights.trending_entities", description = "Detect entities with increasing mention frequency in indexed articles.")]
     async fn insights_trending(&self, params: Parameters<InsightTrendingInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = insights::insights_trending(&self.insights, params.0).await?;
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "insights.index_articles", description = "Index articles in the in-memory insight engine for cross-article entity analysis. Input: articles with id, title, pub_date, source_name, and optionally domains (Vec<DomainInfo>) and entities (Vec<EntityInfo>). Use news.fetch with depth='deep' to automate fetch→enrich→index pipeline. After indexing, use insights.find_connections or insights.trending_entities. Do NOT use to search — use insights.find_connections or insights.trending_entities.")]
+    #[tool(name = "insights.index_articles", description = "Index articles in the in-memory insight engine for cross-article entity analysis.")]
     async fn insights_index(&self, params: Parameters<InsightIndexInput>) -> Result<Json<InsightIndexOutput>, String> {
         insights::insights_index(&self.insights, params.0).await.map(Json)
     }
 
-    #[tool(name = "insights.get_stats", description = "Get insight engine statistics. Returns total_articles, total_entities, total_domains, avg_entities_per_article, avg_domains_per_article. Use to check what's been indexed before running insights.find_connections or insights.trending_entities. Do NOT use to find connections — use insights.find_connections.")]
+    #[tool(name = "insights.get_stats", description = "Get insight engine statistics. Returns total_articles, total_entities, total_domains.")]
     async fn insights_stats(&self) -> Result<Json<InsightStatsOutput>, String> {
         insights::insights_stats(&self.insights).await.map(Json)
     }
 
-    #[tool(name = "insights.clear_index", description = "Clear all indexed articles from the in-memory insight engine. Resets all entity connections, trending data, and statistics. Use insights.getStats first to see what will be lost. Do NOT use unless you need to reset the insight engine.")]
+    #[tool(name = "insights.clear_index", description = "Clear all indexed articles from the in-memory insight engine.")]
     async fn insights_clear(&self) -> Result<Json<InsightClearOutput>, String> {
         insights::insights_clear(&self.insights).await.map(Json)
     }
 
     // ── Lightpanda MCP Browser Automation Tools ──────────────────
 
-    #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript. Spawns persistent browser session on first call. Use wait_until to control when page is considered loaded. Do NOT use for simple HTTP fetching, API calls, or non-web content — use web.scrape for simple fetching.")]
+    #[tool(name = "lightpanda.goto", description = "Navigate to a URL using Lightpanda headless browser. Renders JavaScript.")]
     async fn lp_goto(&self, params: Parameters<LpGotoInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_goto(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown. Supports strip_mode to remove js/css/ui elements. Do NOT use to navigate — call lightpanda.goto first.")]
+    #[tool(name = "lightpanda.markdown", description = "Get the current page content as structured markdown.")]
     async fn lp_markdown(&self, params: Parameters<LpMarkdownInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_markdown(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text. Do NOT use to navigate — call lightpanda.goto first.")]
+    #[tool(name = "lightpanda.links", description = "Extract all links from the current page. Returns URLs and link text.")]
     async fn lp_links(&self, params: Parameters<LpLinksInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_links(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result. Example: document.title, document.querySelectorAll('h1').length. Do NOT use for simple content extraction — use lightpanda.markdown.")]
+    #[tool(name = "lightpanda.evaluate", description = "Execute JavaScript in the current page context. Returns the result.")]
     async fn lp_evaluate(&self, params: Parameters<LpEvaluateInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_evaluate(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation of page structure. Do NOT use for full page content — use lightpanda.markdown.")]
+    #[tool(name = "lightpanda.semantic_tree", description = "Get the semantic DOM tree of the current page. AI-friendly representation.")]
     async fn lp_semantic_tree(&self, params: Parameters<LpSemanticTreeInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_semantic_tree(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.structured_data", description = "Extract structured data from the current page: JSON-LD, OpenGraph metadata, microdata. Do NOT use for raw content — use lightpanda.markdown.")]
+    #[tool(name = "lightpanda.structured_data", description = "Extract structured data from the current page: JSON-LD, OpenGraph, microdata.")]
     async fn lp_structured_data(&self, params: Parameters<LpStructuredDataInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_structured_data(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.detect_forms", description = "Detect forms on the current page. Returns form fields, actions, and methods. Do NOT use to fill forms — use lightpanda.fill.")]
+    #[tool(name = "lightpanda.detect_forms", description = "Detect forms on the current page. Returns form fields, actions, and methods.")]
     async fn lp_detect_forms(&self, params: Parameters<LpDetectFormsInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_detect_forms(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector. Optionally wait for navigation. Do NOT use to fill forms — use lightpanda.fill.")]
+    #[tool(name = "lightpanda.click", description = "Click an element on the current page by CSS selector.")]
     async fn lp_click(&self, params: Parameters<LpClickInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_click(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field. Do NOT use to click buttons — use lightpanda.click.")]
+    #[tool(name = "lightpanda.fill", description = "Fill a form field on the current page. Use CSS selector to target the field.")]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_fill(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right. Pixels: amount to scroll. Do NOT use for navigation — use lightpanda.goto.")]
+    #[tool(name = "lightpanda.scroll", description = "Scroll the current page. Direction: up/down/left/right.")]
     async fn lp_scroll(&self, params: Parameters<LpScrollInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_scroll(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.wait_for_selector", description = "Wait for a CSS selector to appear on the page. Useful for SPAs that load content dynamically. Do NOT use for navigation — use lightpanda.goto.")]
+    #[tool(name = "lightpanda.wait_for_selector", description = "Wait for a CSS selector to appear on the page.")]
     async fn lp_wait_for_selector(&self, params: Parameters<LpWaitForSelectorInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
         lp_mcp::lp_wait_for_selector(&self.lightpanda_mcp, &binary, params.0).await.map(Json)
     }
 
-    #[tool(name = "lightpanda.interactive_elements", description = "Find interactive elements on the current page (buttons, links, inputs). Returns clickable/fillable elements. Do NOT use to interact — use lightpanda.click or lightpanda.fill.")]
+    #[tool(name = "lightpanda.interactive_elements", description = "Find interactive elements on the current page (buttons, links, inputs).")]
     async fn lp_interactive_elements(&self, params: Parameters<LpInteractiveElementsInput>) -> Result<Json<LpToolOutput>, String> {
         let binary = LightpandaManager::new(&self.settings.lightpanda)
             .ensure_ready().await.map_err(|e| format!("{}", e))?;
@@ -1178,14 +1177,14 @@ impl IgsMcpServer {
 
     // ── SOP Tools ─────────────────────────────────────────────
 
-    #[tool(name = "sop.list", description = "List available SOP (Standard Operating Procedure) chains for composable multi-step intelligence workflows. Each chain defines a sequence of tool calls with dependency ordering. Use sop.execute to run a chain. Default output: TOON.")]
+    #[tool(name = "sop.list", description = "List available SOP chains for composable multi-step intelligence workflows.")]
     async fn sop_list(&self, params: Parameters<SopListInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sop::sop_list();
         Ok(format_output(&output, &format))
     }
 
-    #[tool(name = "sop.execute", description = "Execute a named SOP chain. Pass chain_name from sop.list. Chains chain multiple IGS tools with dependency ordering. Use $QUERY placeholder in chain params — it will be replaced by your query context. Returns step-by-step results with status. Default output: TOON.")]
+    #[tool(name = "sop.execute", description = "Execute a named SOP chain. Chains multiple IGS tools with dependency ordering.")]
     async fn sop_execute(&self, params: Parameters<SopExecuteInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0);
         let output = sop::sop_execute(params.0)?;
@@ -1198,8 +1197,44 @@ impl IgsMcpServer {
 #[tool_handler(router = self.tool_router)]
 impl rmcp::ServerHandler for IgsMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("igs-rust-mcp", "0.2.0"))
             .with_instructions("Intelligence Gathering System MCP Server. Provides tools for RSS/HTTP source monitoring, news fetching, Reddit search, academic paper research, web search/scraping, and cross-article entity insight analysis.")
+    }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListResourcesResult, ErrorData> {
+        let resource = RawResource::new("igs://tool-guide", "tool-guide")
+            .with_description("Categorized tool index with decision tree, categories, and drill-down chains")
+            .with_mime_type("application/json");
+        Ok(ListResourcesResult {
+            resources: vec![Annotated::new(resource, None)],
+            next_cursor: None,
+            meta: None,
+        })
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResult, ErrorData> {
+        if request.uri == "igs://tool-guide" {
+            let guide = tool_guide::get_tool_guide().await
+                .map_err(|e| ErrorData::internal_error(e, None))?;
+            let json = serde_json::to_string(&guide)
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+            Ok(ReadResourceResult::new(vec![
+                ResourceContents::text(json, "igs://tool-guide"),
+            ]))
+        } else {
+            Err(ErrorData::resource_not_found(
+                format!("Unknown resource: {}", request.uri),
+                None,
+            ))
+        }
     }
 }
