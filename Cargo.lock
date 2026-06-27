@@ -1436,7 +1436,7 @@ dependencies = [
 
 [[package]]
 name = "igs-rust-mcp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "agent-twitter-client",
  "anyhow",
@@ -1446,6 +1446,7 @@ dependencies = [
  "feed-rs",
  "hex",
  "html-to-markdown-rs",
+ "openssl-sys",
  "rand",
  "reqwest 0.12.28",
  "rmcp",
@@ -1794,6 +1795,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "openssl-src"
+version = "300.6.0+3.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8e8cbfd3a4a8c8f089147fd7aaa33cf8c7450c4d09f8f80698a0cf093abeff4"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1801,6 +1811,7 @@ checksum = "b47e7e6bb2c38cd930d25a23b40fa52e068c10e85f3e03a7f5ba5aaca5713695"
 dependencies = [
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]

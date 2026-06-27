@@ -1,6 +1,6 @@
 [package]
 name = "igs-rust-mcp"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 description = "Intelligence Gathering System - RSS/HTTP source monitoring MCP server with NLP enrichment"
 authors = ["Ishan Parihar"]
@@ -49,3 +49,4 @@ clap = { version = "4", features = ["derive", "env"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 unpdf = "0.7"
 agent-twitter-client = "0.1.2"
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
