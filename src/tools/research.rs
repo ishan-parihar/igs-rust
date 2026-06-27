@@ -8,11 +8,15 @@ use unpdf;
 
 /// Search academic papers across arXiv and Semantic Scholar
 pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearchOutput, String> {
-    let sources = input.sources.unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
+    let sources = input
+        .sources
+        .unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
     let limit = input.limit.unwrap_or(25).clamp(1, 100);
     let query_enc = urlencoding(&input.query);
 
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -21,13 +25,26 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
 
     // Search arXiv
     if sources.contains(&"arxiv".to_string()) {
-        let cat_filter = input.categories.as_ref()
-            .map(|cats| cats.iter().map(|c| format!("cat:{}", c)).collect::<Vec<_>>().join("+OR+"))
+        let cat_filter = input
+            .categories
+            .as_ref()
+            .map(|cats| {
+                cats.iter()
+                    .map(|c| format!("cat:{}", c))
+                    .collect::<Vec<_>>()
+                    .join("+OR+")
+            })
             .unwrap_or_default();
         let arxiv_query = if cat_filter.is_empty() {
-            format!("search_query=all:{}&start=0&max_results={}", query_enc, limit)
+            format!(
+                "search_query=all:{}&start=0&max_results={}",
+                query_enc, limit
+            )
         } else {
-            format!("search_query=(all:{})+AND+({})&start=0&max_results={}", query_enc, cat_filter, limit)
+            format!(
+                "search_query=(all:{})+AND+({})&start=0&max_results={}",
+                query_enc, cat_filter, limit
+            )
         };
         let arxiv_url = format!("https://export.arxiv.org/api/query?{}", arxiv_query);
 
@@ -37,13 +54,23 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
                     let body = resp.body_text;
                     if let Ok(feed) = feed_rs::parser::parse(body.as_bytes()) {
                         for entry in &feed.entries {
-                            let arxiv_id = entry.id.trim_start_matches("https://arxiv.org/abs/").to_string();
+                            let arxiv_id = entry
+                                .id
+                                .trim_start_matches("https://arxiv.org/abs/")
+                                .to_string();
                             let pdf_url = format!("https://arxiv.org/pdf/{}.pdf", arxiv_id);
-                            let title = entry.title.as_ref().map(|t| t.content.clone()).unwrap_or_default();
-                            let abstract_text = entry.summary.as_ref().map(|s| s.content.clone()).unwrap_or_default();
-                            let authors: Vec<String> = entry.authors.iter()
-                                .map(|a| a.name.clone())
-                                .collect();
+                            let title = entry
+                                .title
+                                .as_ref()
+                                .map(|t| t.content.clone())
+                                .unwrap_or_default();
+                            let abstract_text = entry
+                                .summary
+                                .as_ref()
+                                .map(|s| s.content.clone())
+                                .unwrap_or_default();
+                            let authors: Vec<String> =
+                                entry.authors.iter().map(|a| a.name.clone()).collect();
                             let year = entry.published.map(|d| d.year());
 
                             all_papers.push(ResearchPaper {
@@ -55,12 +82,20 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
                                 citation_count: None,
                                 pdf_url: Some(pdf_url),
                                 source: "arXiv".into(),
-                                link: Some(entry.links.first().map(|l| l.href.clone()).unwrap_or_default()),
+                                link: Some(
+                                    entry
+                                        .links
+                                        .first()
+                                        .map(|l| l.href.clone())
+                                        .unwrap_or_default(),
+                                ),
                             });
                         }
                     }
 
-                    if let Some(total_str) = body.split("<opensearch:totalResults").nth(1)
+                    if let Some(total_str) = body
+                        .split("<opensearch:totalResults")
+                        .nth(1)
                         .and_then(|s| s.split('>').nth(1))
                         .and_then(|s| s.split('<').next())
                     {
@@ -91,12 +126,16 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
                                 let abstract_text = paper["abstract"].as_str().unwrap_or("");
                                 let year = paper["year"].as_i64();
                                 let citations = paper["citationCount"].as_i64();
-                                let pdf_url = paper["openAccessPdf"]["url"].as_str().map(|s| s.to_string());
+                                let pdf_url = paper["openAccessPdf"]["url"]
+                                    .as_str()
+                                    .map(|s| s.to_string());
                                 let authors: Vec<String> = paper["authors"]
                                     .as_array()
                                     .map(|a| {
                                         a.iter()
-                                            .filter_map(|author| author["name"].as_str().map(|n| n.to_string()))
+                                            .filter_map(|author| {
+                                                author["name"].as_str().map(|n| n.to_string())
+                                            })
                                             .collect()
                                     })
                                     .unwrap_or_default();
@@ -110,7 +149,10 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
                                     citation_count: citations.map(|c| c as i32),
                                     pdf_url,
                                     source: "Semantic Scholar".into(),
-                                    link: Some(format!("https://api.semanticscholar.org/{}/{}", paper_id, "CorpusId")),
+                                    link: Some(format!(
+                                        "https://api.semanticscholar.org/{}/{}",
+                                        paper_id, "CorpusId"
+                                    )),
                                 });
                             }
                         }
@@ -163,13 +205,33 @@ async fn fetch_s2_related_papers(
                             if let Some(data) = json["data"].as_array() {
                                 for item in data {
                                     if let Some(paper) = item[nested_key].as_object() {
-                                        let pid = paper.get("paperId").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                        let title = paper.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                        let authors: Vec<String> = paper.get("authors")
+                                        let pid = paper
+                                            .get("paperId")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let title = paper
+                                            .get("title")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let authors: Vec<String> = paper
+                                            .get("authors")
                                             .and_then(|a| a.as_array())
-                                            .map(|a| a.iter().filter_map(|author| author["name"].as_str().map(|n| n.to_string())).collect())
+                                            .map(|a| {
+                                                a.iter()
+                                                    .filter_map(|author| {
+                                                        author["name"]
+                                                            .as_str()
+                                                            .map(|n| n.to_string())
+                                                    })
+                                                    .collect()
+                                            })
                                             .unwrap_or_default();
-                                        let year = paper.get("year").and_then(|v| v.as_i64()).map(|y| y as i32);
+                                        let year = paper
+                                            .get("year")
+                                            .and_then(|v| v.as_i64())
+                                            .map(|y| y as i32);
 
                                         all_entries.push(PaperCitationEntry {
                                             paper_id: pid,
@@ -182,7 +244,9 @@ async fn fetch_s2_related_papers(
                             }
 
                             match json.get("next").and_then(|n| n.as_i64()).map(|n| n as i32) {
-                                Some(next_offset) if next_offset > offset && next_offset < max_offset => {
+                                Some(next_offset)
+                                    if next_offset > offset && next_offset < max_offset =>
+                                {
                                     offset = next_offset;
                                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                                     continue;
@@ -191,7 +255,10 @@ async fn fetch_s2_related_papers(
                             }
                         }
                         Err(e) => {
-                            eprintln!("[igs] Warning: failed to parse S2 {} response: {}", endpoint, e);
+                            eprintln!(
+                                "[igs] Warning: failed to parse S2 {} response: {}",
+                                endpoint, e
+                            );
                             break;
                         }
                     }
@@ -218,11 +285,22 @@ fn pdf_to_markdown(bytes: &[u8]) -> Result<String, String> {
     Ok(markdown)
 }
 
-type PaperFetchResult = (String, Vec<String>, String, Option<i32>, Option<i32>, Option<i32>, Option<String>, Option<String>);
+type PaperFetchResult = (
+    String,
+    Vec<String>,
+    String,
+    Option<i32>,
+    Option<i32>,
+    Option<i32>,
+    Option<String>,
+    Option<String>,
+);
 
 /// Get detailed information about a specific paper by ID
 pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -299,23 +377,27 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
                 Ok(resp) => {
                     if resp.status().is_success() {
                         match resp.bytes().await {
-                            Ok(bytes) => {
-                                match pdf_to_markdown(&bytes) {
-                                    Ok(md) => Some(md),
-                                    Err(e) => {
-                                        tracing::warn!("PDF to markdown failed: {}", e);
-                                        None
-                                    }
+                            Ok(bytes) => match pdf_to_markdown(&bytes) {
+                                Ok(md) => Some(md),
+                                Err(e) => {
+                                    tracing::warn!("PDF to markdown failed: {}", e);
+                                    None
                                 }
-                            }
+                            },
                             Err(_) => None,
                         }
-                    } else { None }
+                    } else {
+                        None
+                    }
                 }
                 Err(_) => None,
             }
-        } else { None }
-    } else { None };
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     // Determine S2-compatible ID for citation/reference fetching
     let s2_lookup_id = if paper_id.starts_with("arxiv:") {
@@ -361,8 +443,12 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
 }
 
 /// Search PubMed for biomedical and life sciences research papers
-pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<ResearchPubMedOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+pub async fn research_pubmed_search(
+    input: ResearchPubMedInput,
+) -> Result<ResearchPubMedOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -374,7 +460,9 @@ pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<Resear
         query, limit
     );
 
-    let search_outcome = http.fetch(&search_url, None, "bypass").await
+    let search_outcome = http
+        .fetch(&search_url, None, "bypass")
+        .await
         .map_err(|e| format!("PubMed search error: {}", e))?;
 
     let search_resp = match search_outcome {
@@ -387,7 +475,11 @@ pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<Resear
 
     let pmids: Vec<String> = search_data["esearchresult"]["idlist"]
         .as_array()
-        .map(|ids| ids.iter().filter_map(|id| id.as_str().map(String::from)).collect())
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| id.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     if pmids.is_empty() {
@@ -404,7 +496,9 @@ pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<Resear
         ids
     );
 
-    let detail_outcome = http.fetch(&detail_url, None, "bypass").await
+    let detail_outcome = http
+        .fetch(&detail_url, None, "bypass")
+        .await
         .map_err(|e| format!("PubMed detail error: {}", e))?;
 
     let detail_resp = match detail_outcome {
@@ -419,8 +513,13 @@ pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<Resear
     if let Some(result) = detail_data["result"].as_object() {
         for pmid in &pmids {
             if let Some(paper) = result.get(pmid) {
-                let authors = paper["authors"].as_array()
-                    .map(|arr| arr.iter().filter_map(|a| a["name"].as_str().map(String::from)).collect())
+                let authors = paper["authors"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|a| a["name"].as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default();
 
                 papers.push(ResearchPubMedPaper {
@@ -443,8 +542,12 @@ pub async fn research_pubmed_search(input: ResearchPubMedInput) -> Result<Resear
 }
 
 /// Download a research paper PDF
-pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchDownloadOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+pub async fn research_download(
+    input: ResearchDownloadInput,
+) -> Result<ResearchDownloadOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -493,20 +596,24 @@ pub async fn research_download(input: ResearchDownloadInput) -> Result<ResearchD
         .map_err(|e| format!("Failed to download PDF: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("PDF download failed with status: {}", resp.status()));
+        return Err(format!(
+            "PDF download failed with status: {}",
+            resp.status()
+        ));
     }
 
-    let bytes = resp.bytes().await
+    let bytes = resp
+        .bytes()
+        .await
         .map_err(|e| format!("Failed to read PDF content: {}", e))?;
 
     // Determine output path
-    let output_path = input.output_path.unwrap_or_else(|| {
-        format!("{}.pdf", input.paper_id.replace(":", "_"))
-    });
+    let output_path = input
+        .output_path
+        .unwrap_or_else(|| format!("{}.pdf", input.paper_id.replace(":", "_")));
 
     // Write PDF to file
-    std::fs::write(&output_path, &bytes)
-        .map_err(|e| format!("Failed to write PDF file: {}", e))?;
+    std::fs::write(&output_path, &bytes).map_err(|e| format!("Failed to write PDF file: {}", e))?;
 
     // Optionally convert to markdown sidecar
     let markdown_path = if input.convert_to_markdown.unwrap_or(false) {

@@ -68,7 +68,10 @@ impl ObscuraManager {
 
         // Download
         let arch = Self::detect_arch()?;
-        let url = format!("{}/{}/obscura-{}", GITHUB_DOWNLOAD_BASE, latest_version, arch);
+        let url = format!(
+            "{}/{}/obscura-{}",
+            GITHUB_DOWNLOAD_BASE, latest_version, arch
+        );
 
         info!("Downloading Obscura {} from {}", latest_version, url);
         self.download_binary(&url).await?;
@@ -86,7 +89,10 @@ impl ObscuraManager {
                 .context("Failed to make Obscura binary executable")?;
         }
 
-        info!("Obscura {} installed to {:?}", latest_version, self.binary_path);
+        info!(
+            "Obscura {} installed to {:?}",
+            latest_version, self.binary_path
+        );
         Ok(self.binary_path.clone())
     }
 
@@ -153,7 +159,9 @@ impl ObscuraManager {
         }
 
         let json: serde_json::Value = resp.json().await?;
-        let releases = json.as_array().context("Expected JSON array from releases API")?;
+        let releases = json
+            .as_array()
+            .context("Expected JSON array from releases API")?;
 
         // Find the first stable release (not prerelease, not draft)
         for release in releases {
@@ -188,8 +196,7 @@ impl ObscuraManager {
         }
 
         let bytes = resp.bytes().await?;
-        std::fs::write(&self.binary_path, &bytes)
-            .context("Failed to write Obscura binary")?;
+        std::fs::write(&self.binary_path, &bytes).context("Failed to write Obscura binary")?;
 
         Ok(())
     }
@@ -197,7 +204,8 @@ impl ObscuraManager {
     /// Fetch a URL using Obscura's fetch command.
     /// `dump_format` can be "markdown", "html", "text", or "semantic_tree".
     pub async fn fetch(&self, url: &str, dump_format: &str, obey_robots: bool) -> Result<String> {
-        self.fetch_with_options(url, dump_format, obey_robots, "networkidle", false).await
+        self.fetch_with_options(url, dump_format, obey_robots, "networkidle", false)
+            .await
     }
 
     /// Fetch a URL with control over Obscura options.
@@ -209,8 +217,15 @@ impl ObscuraManager {
         wait_until: &str,
         include_frames: bool,
     ) -> Result<String> {
-        self.fetch_with_all_options(url, dump_format, obey_robots, wait_until, include_frames, None)
-            .await
+        self.fetch_with_all_options(
+            url,
+            dump_format,
+            obey_robots,
+            wait_until,
+            include_frames,
+            None,
+        )
+        .await
     }
 
     /// Fetch with all available options including wait_selector.

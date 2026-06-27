@@ -163,14 +163,16 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
 
 /// Get tools available for a specific group name.
 pub fn get_group_tools(group_name: &str) -> Option<&'static [&'static str]> {
-    TOOL_GROUPS.iter()
+    TOOL_GROUPS
+        .iter()
         .find(|g| g.name == group_name)
         .map(|g| g.tools)
 }
 
 /// Get all available group names.
 pub fn list_groups() -> Vec<(&'static str, &'static str)> {
-    TOOL_GROUPS.iter()
+    TOOL_GROUPS
+        .iter()
         .map(|g| (g.name, g.description))
         .collect()
 }
@@ -178,7 +180,8 @@ pub fn list_groups() -> Vec<(&'static str, &'static str)> {
 /// Filter a list of tool names to only those in the specified group.
 pub fn filter_tools_by_group(tool_names: &[String], group: &str) -> Vec<String> {
     match get_group_tools(group) {
-        Some(allowed) => tool_names.iter()
+        Some(allowed) => tool_names
+            .iter()
             .filter(|t| allowed.contains(&t.as_str()))
             .cloned()
             .collect(),
@@ -194,68 +197,129 @@ pub fn total_tool_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_no_duplicate_tools_across_groups() {
         let mut all_tools = Vec::new();
         for group in TOOL_GROUPS {
             for tool in group.tools {
-                assert!(!all_tools.contains(tool), "Tool '{}' appears in multiple groups", tool);
+                assert!(
+                    !all_tools.contains(tool),
+                    "Tool '{}' appears in multiple groups",
+                    tool
+                );
                 all_tools.push(tool);
             }
         }
     }
-    
+
     #[test]
     fn test_all_groups_have_tools() {
         for group in TOOL_GROUPS {
-            assert!(!group.tools.is_empty(), "Group '{}' has no tools", group.name);
+            assert!(
+                !group.tools.is_empty(),
+                "Group '{}' has no tools",
+                group.name
+            );
         }
     }
-    
+
     #[test]
     fn test_registry_tools_match_expected() {
         let expected = vec![
-            "pools.list", "pools.upsert", "pools.delete",
-            "sources.list", "sources.upsert", "sources.delete",
-            "sources.autodiscover", "sources.enable_generic_scraper",
-            "sources.countries", "sources.cities", "sources.domains",
+            "pools.list",
+            "pools.upsert",
+            "pools.delete",
+            "sources.list",
+            "sources.upsert",
+            "sources.delete",
+            "sources.autodiscover",
+            "sources.enable_generic_scraper",
+            "sources.countries",
+            "sources.cities",
+            "sources.domains",
             "parsers.list",
-            "news.fetch", "news.test_source", "news.enrich",
-            "reddit.search", "reddit.feed",
-            "research.search", "research.paper", "research.download", "research.pubmed_search",
-            "web.search", "web.scrape", "web.crawl", "web.map",
-            "insights.find_connections", "insights.trending_entities",
-            "insights.index_articles", "insights.get_stats", "insights.clear_index",
-            "weather.forecast", "weather.current", "weather.alerts",
-            "finance.market", "finance.crypto", "finance.trending",
-            "security.cve", "security.advisories",
-            "patents.search", "patents.details",
-            "govt.bills", "govt.regulations",
-            "env.epa_facilities", "env.epa_emissions", "satellite.firms_fires",
-            "health.cdc_leading_causes", "health.who_gho",
-            "politics.fec_candidates", "politics.fec_committees",
-            "climate.noaa_observations", "climate.noaa_stations",
-            "legal.search_cases", "legal.case_details",
-            "browser.goto", "browser.markdown", "browser.links",
-            "browser.evaluate", "browser.semantic_tree", "browser.structured_data",
-            "browser.detect_forms", "browser.click", "browser.fill",
-            "browser.scroll", "browser.wait_for_selector", "browser.interactive_elements",
-            "sop.list", "sop.execute",
-            "youtube.search", "youtube.metadata", "youtube.subtitles",
-            "twitter.search", "twitter.read",
+            "news.fetch",
+            "news.test_source",
+            "news.enrich",
+            "reddit.search",
+            "reddit.feed",
+            "research.search",
+            "research.paper",
+            "research.download",
+            "research.pubmed_search",
+            "web.search",
+            "web.scrape",
+            "web.crawl",
+            "web.map",
+            "insights.find_connections",
+            "insights.trending_entities",
+            "insights.index_articles",
+            "insights.get_stats",
+            "insights.clear_index",
+            "weather.forecast",
+            "weather.current",
+            "weather.alerts",
+            "finance.market",
+            "finance.crypto",
+            "finance.trending",
+            "security.cve",
+            "security.advisories",
+            "patents.search",
+            "patents.details",
+            "govt.bills",
+            "govt.regulations",
+            "env.epa_facilities",
+            "env.epa_emissions",
+            "satellite.firms_fires",
+            "health.cdc_leading_causes",
+            "health.who_gho",
+            "politics.fec_candidates",
+            "politics.fec_committees",
+            "climate.noaa_observations",
+            "climate.noaa_stations",
+            "legal.search_cases",
+            "legal.case_details",
+            "browser.goto",
+            "browser.markdown",
+            "browser.links",
+            "browser.evaluate",
+            "browser.semantic_tree",
+            "browser.structured_data",
+            "browser.detect_forms",
+            "browser.click",
+            "browser.fill",
+            "browser.scroll",
+            "browser.wait_for_selector",
+            "browser.interactive_elements",
+            "sop.list",
+            "sop.execute",
+            "youtube.search",
+            "youtube.metadata",
+            "youtube.subtitles",
+            "twitter.search",
+            "twitter.read",
         ];
-        
-        let registry_tools: Vec<&str> = TOOL_GROUPS.iter()
+
+        let registry_tools: Vec<&str> = TOOL_GROUPS
+            .iter()
             .flat_map(|g| g.tools.iter())
             .copied()
             .collect();
-        
+
         for tool in &expected {
-            assert!(registry_tools.contains(tool), "Tool '{}' not in registry", tool);
+            assert!(
+                registry_tools.contains(tool),
+                "Tool '{}' not in registry",
+                tool
+            );
         }
         for tool in &registry_tools {
-            assert!(expected.contains(tool), "Tool '{}' in registry but not in expected list", tool);
+            assert!(
+                expected.contains(tool),
+                "Tool '{}' in registry but not in expected list",
+                tool
+            );
         }
     }
 }

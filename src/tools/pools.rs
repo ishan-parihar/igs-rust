@@ -1,6 +1,6 @@
 use crate::config;
-use crate::types::*;
 use crate::tools::types::*;
+use crate::types::*;
 
 /// List all configured pools
 pub async fn pools_list() -> Result<PoolListOutput, String> {
@@ -29,7 +29,9 @@ pub async fn pools_upsert(input: PoolUpsertInput) -> Result<PoolUpsertOutput, St
                     is_active: input.is_active,
                 });
             }
-            config::save_pools(&pf).await.map_err(|e| format!("Save failed: {}", e))?;
+            config::save_pools(&pf)
+                .await
+                .map_err(|e| format!("Save failed: {}", e))?;
             Ok(PoolUpsertOutput { updated: true })
         }
         Err(e) => Err(format!("Failed to load pools: {}", e)),
@@ -43,7 +45,9 @@ pub async fn pools_delete(input: PoolDeleteInput) -> Result<PoolDeleteOutput, St
             let before = pf.pools.len();
             pf.pools.retain(|p| p.id != input.id);
             let removed = pf.pools.len() < before;
-            config::save_pools(&pf).await.map_err(|e| format!("Save failed: {}", e))?;
+            config::save_pools(&pf)
+                .await
+                .map_err(|e| format!("Save failed: {}", e))?;
             Ok(PoolDeleteOutput { removed })
         }
         Err(e) => Err(format!("Failed to load pools: {}", e)),

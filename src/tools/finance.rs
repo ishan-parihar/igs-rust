@@ -1,31 +1,42 @@
+use super::types::*;
 use crate::config;
 use crate::http::{self as http_mod, HttpClient};
-use super::types::*;
 
 pub async fn finance_market(input: FinanceMarketInput) -> Result<FinanceMarketOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
     let mut quotes = Vec::new();
-    
+
     for symbol in &input.symbols {
-        let url = format!("https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d", symbol);
-        let outcome = http.fetch(&url, None, "bypass").await
+        let url = format!(
+            "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d",
+            symbol
+        );
+        let outcome = http
+            .fetch(&url, None, "bypass")
+            .await
             .map_err(|e| format!("Yahoo Finance error: {}", e))?;
-        
+
         if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
             let data: serde_json::Value = serde_json::from_str(&resp.body_text)
                 .map_err(|e| format!("JSON parse error: {}", e))?;
-            
+
             if let Some(result) = data["chart"]["result"].as_array().and_then(|r| r.first()) {
                 let meta = &result["meta"];
                 let price = meta["regularMarketPrice"].as_f64().unwrap_or(0.0);
                 let prev_close = meta["previousClose"].as_f64().unwrap_or(price);
                 let change = price - prev_close;
-                let change_pct = if prev_close > 0.0 { (change / prev_close) * 100.0 } else { 0.0 };
+                let change_pct = if prev_close > 0.0 {
+                    (change / prev_close) * 100.0
+                } else {
+                    0.0
+                };
                 let name = meta["shortName"].as_str().unwrap_or(symbol).to_string();
                 let volume = meta["regularMarketVolume"].as_u64().unwrap_or(0);
-                
+
                 quotes.push(MarketQuote {
                     symbol: symbol.clone(),
                     name,
@@ -38,30 +49,38 @@ pub async fn finance_market(input: FinanceMarketInput) -> Result<FinanceMarketOu
             }
         }
     }
-    
+
     Ok(FinanceMarketOutput { quotes })
 }
 
 pub async fn finance_crypto(input: FinanceCryptoInput) -> Result<FinanceCryptoOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
-    
-    let ids = if input.ids.is_empty() { input.symbols.clone() } else { input.ids };
+
+    let ids = if input.ids.is_empty() {
+        input.symbols.clone()
+    } else {
+        input.ids
+    };
     let ids_str = ids.join(",");
     let url = format!("https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true&include_market_cap=true", ids_str);
-    
-    let outcome = http.fetch(&url, None, "bypass").await
+
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("CoinGecko API error: {}", e))?;
-    
+
     let resp = match outcome {
         http_mod::FetchOutcome::Response(r, _, _) => r,
         _ => return Err("CoinGecko returned cached response".into()),
     };
-    
-    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
-    
+
+    let data: serde_json::Value =
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {}", e))?;
+
     let mut prices = Vec::new();
     for id in &input.symbols {
         if let Some(coin) = data.get(id) {
@@ -76,27 +95,33 @@ pub async fn finance_crypto(input: FinanceCryptoInput) -> Result<FinanceCryptoOu
             });
         }
     }
-    
+
     Ok(FinanceCryptoOutput { prices })
 }
 
-pub async fn finance_trending(_input: FinanceTrendingInput) -> Result<FinanceTrendingOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+pub async fn finance_trending(
+    _input: FinanceTrendingInput,
+) -> Result<FinanceTrendingOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
-    
+
     let url = "https://api.coingecko.com/api/v3/search/trending";
-    let outcome = http.fetch(url, None, "bypass").await
+    let outcome = http
+        .fetch(url, None, "bypass")
+        .await
         .map_err(|e| format!("CoinGecko API error: {}", e))?;
-    
+
     let resp = match outcome {
         http_mod::FetchOutcome::Response(r, _, _) => r,
         _ => return Err("CoinGecko returned cached response".into()),
     };
-    
-    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
-    
+
+    let data: serde_json::Value =
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {}", e))?;
+
     let mut trending = Vec::new();
     if let Some(coins) = data["coins"].as_array() {
         for coin in coins {
@@ -109,6 +134,6 @@ pub async fn finance_trending(_input: FinanceTrendingInput) -> Result<FinanceTre
             });
         }
     }
-    
+
     Ok(FinanceTrendingOutput { trending })
 }

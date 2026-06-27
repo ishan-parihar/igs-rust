@@ -228,7 +228,12 @@ pub async fn lp_wait_for_selector(
     input: LpWaitForSelectorInput,
 ) -> Result<LpToolOutput, String> {
     let url = current_url();
-    let args = vec![url.as_str(), "--stealth", "--wait-selector", &input.selector];
+    let args = vec![
+        url.as_str(),
+        "--stealth",
+        "--wait-selector",
+        &input.selector,
+    ];
     let mut output = run_obscura_cli(&args, None).await?;
     output.meta.url = url;
     output.meta.operation = "wait_for_selector".to_string();

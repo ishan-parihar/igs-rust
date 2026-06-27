@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::types::NewsItem;
+use std::collections::HashSet;
 
 pub struct ArticleCluster {
     pub representative: NewsItem,
@@ -10,27 +10,35 @@ pub struct ArticleCluster {
 
 fn extract_entities(text: &str) -> Vec<String> {
     let stop_words: HashSet<&str> = [
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "can", "shall", "to", "of", "in", "for",
-        "on", "with", "at", "by", "from", "as", "into", "through", "during",
-        "before", "after", "above", "below", "between", "out", "off", "over",
-        "under", "again", "further", "then", "once", "here", "there", "when",
-        "where", "why", "how", "all", "each", "every", "both", "few", "more",
-        "most", "other", "some", "such", "no", "nor", "not", "only", "own",
-        "same", "so", "than", "too", "very", "just", "because", "but", "and",
-        "or", "if", "while", "about", "against", "up", "down", "its", "it",
-        "this", "that", "these", "those", "new", "says", "said", "also",
-    ].iter().cloned().collect();
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "could", "should", "may", "might", "can", "shall",
+        "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into", "through",
+        "during", "before", "after", "above", "below", "between", "out", "off", "over", "under",
+        "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all",
+        "each", "every", "both", "few", "more", "most", "other", "some", "such", "no", "nor",
+        "not", "only", "own", "same", "so", "than", "too", "very", "just", "because", "but", "and",
+        "or", "if", "while", "about", "against", "up", "down", "its", "it", "this", "that",
+        "these", "those", "new", "says", "said", "also",
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     text.split_whitespace()
         .filter(|word| {
             let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
             clean.len() > 2
                 && !stop_words.contains(clean.to_lowercase().as_str())
-                && clean.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                && clean
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false)
         })
-        .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+        .map(|word| {
+            word.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_string()
+        })
         .collect()
 }
 
@@ -39,10 +47,14 @@ pub fn cluster_articles(items: Vec<NewsItem>, min_overlap: usize) -> Vec<Article
         return vec![];
     }
 
-    let item_entities: Vec<(usize, Vec<String>)> = items.iter().enumerate().map(|(i, item)| {
-        let text = format!("{} {}", item.title, item.content_snippet);
-        (i, extract_entities(&text))
-    }).collect();
+    let item_entities: Vec<(usize, Vec<String>)> = items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let text = format!("{} {}", item.title, item.content_snippet);
+            (i, extract_entities(&text))
+        })
+        .collect();
 
     let mut assigned = vec![false; items.len()];
     let mut clusters = Vec::new();
@@ -60,7 +72,10 @@ pub fn cluster_articles(items: Vec<NewsItem>, min_overlap: usize) -> Vec<Article
                 continue;
             }
 
-            let overlap = entities_i.iter().filter(|e| entities_j.contains(*e)).count();
+            let overlap = entities_i
+                .iter()
+                .filter(|e| entities_j.contains(*e))
+                .count();
             if overlap >= min_overlap {
                 cluster_indices.push(*j);
             }
@@ -70,16 +85,19 @@ pub fn cluster_articles(items: Vec<NewsItem>, min_overlap: usize) -> Vec<Article
             assigned[idx] = true;
         }
 
-        let members: Vec<NewsItem> = cluster_indices.iter()
+        let members: Vec<NewsItem> = cluster_indices
+            .iter()
             .map(|&idx| items[idx].clone())
             .collect();
 
-        let source_count = members.iter()
+        let source_count = members
+            .iter()
             .map(|m| &m.source_name)
             .collect::<HashSet<_>>()
             .len();
 
-        let representative = members.iter()
+        let representative = members
+            .iter()
             .max_by_key(|m| m.freshness_score.map(|s| (s * 1000.0) as i64).unwrap_or(0))
             .unwrap_or(&members[0])
             .clone();
@@ -92,8 +110,11 @@ pub fn cluster_articles(items: Vec<NewsItem>, min_overlap: usize) -> Vec<Article
         });
     }
 
-    clusters.sort_by(|a, b| b.source_count.cmp(&a.source_count)
-        .then(b.members.len().cmp(&a.members.len())));
+    clusters.sort_by(|a, b| {
+        b.source_count
+            .cmp(&a.source_count)
+            .then(b.members.len().cmp(&a.members.len()))
+    });
 
     clusters
 }

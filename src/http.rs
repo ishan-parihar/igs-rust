@@ -110,7 +110,10 @@ impl HttpClient {
         }
 
         // Acquire both global and per-host semaphore
-        let _global_permit = self.global_semaphore.acquire().await
+        let _global_permit = self
+            .global_semaphore
+            .acquire()
+            .await
             .map_err(|e| anyhow::anyhow!("Global semaphore closed: {}", e))?;
         let host = Self::extract_host(url);
         let _host_permit = self.host_semaphores.acquire(&host).await;
@@ -126,7 +129,9 @@ impl HttpClient {
                 tokio::time::sleep(Duration::from_millis(backoff_ms as u64)).await;
             }
 
-            let result = self.execute_request(url, extra_headers, cached.as_ref()).await;
+            let result = self
+                .execute_request(url, extra_headers, cached.as_ref())
+                .await;
 
             match result {
                 Ok(outcome) => {
@@ -152,7 +157,8 @@ impl HttpClient {
             }
         }
 
-        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("Request failed after {} retries", max_retries)))
+        Err(last_err
+            .unwrap_or_else(|| anyhow::anyhow!("Request failed after {} retries", max_retries)))
     }
 
     /// Execute a single HTTP request attempt
@@ -230,12 +236,17 @@ impl HttpClient {
         body: &serde_json::Value,
         extra_headers: Option<&HashMap<String, String>>,
     ) -> Result<FetchOutcome> {
-        let _global_permit = self.global_semaphore.acquire().await
+        let _global_permit = self
+            .global_semaphore
+            .acquire()
+            .await
             .map_err(|e| anyhow::anyhow!("Global semaphore closed: {}", e))?;
         let host = Self::extract_host(url);
         let _host_permit = self.host_semaphores.acquire(&host).await;
 
-        let mut req = self.client.post(url)
+        let mut req = self
+            .client
+            .post(url)
             .header("Content-Type", "application/json")
             .json(body);
 
@@ -248,10 +259,12 @@ impl HttpClient {
         let res = req.send().await?;
         let status = res.status().as_u16();
         let headers = res.headers().clone();
-        let etag = headers.get("etag")
+        let etag = headers
+            .get("etag")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
-        let last_modified = headers.get("last-modified")
+        let last_modified = headers
+            .get("last-modified")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
@@ -262,7 +275,11 @@ impl HttpClient {
         let body_text = res.text().await?;
 
         Ok(FetchOutcome::Response(
-            FetchResponse { status, headers, body_text },
+            FetchResponse {
+                status,
+                headers,
+                body_text,
+            },
             etag,
             last_modified,
         ))
@@ -279,9 +296,7 @@ impl HttpClient {
         etag: Option<String>,
         last_modified: Option<String>,
     ) -> Result<()> {
-        self.cache
-            .write(url, etag, last_modified, items)
-            .await
+        self.cache.write(url, etag, last_modified, items).await
     }
 }
 

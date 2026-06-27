@@ -218,7 +218,12 @@ fn default_firecrawl_timeout() -> u64 {
     60000
 }
 fn default_formats() -> Vec<String> {
-    vec!["markdown".to_string(), "html".to_string(), "screenshot".to_string(), "links".to_string()]
+    vec![
+        "markdown".to_string(),
+        "html".to_string(),
+        "screenshot".to_string(),
+        "links".to_string(),
+    ]
 }
 
 fn default_true() -> bool {
@@ -281,17 +286,39 @@ pub struct CourtListenerSettings {
     pub api_key: Option<String>,
 }
 
-fn default_max_topics() -> usize { 8 }
-fn default_max_entities() -> usize { 20 }
-fn default_min_entity_length() -> usize { 2 }
-fn default_dedup_threshold() -> f64 { 0.3 }
-fn default_pipeline_pool() -> String { "GLOBAL_TECH_CYBER".to_string() }
-fn default_pipeline_limit() -> i32 { 50 }
-fn default_output_format() -> String { "toon".to_string() }
-fn default_toon_indent() -> usize { 2 }
-fn default_max_items_per_response() -> i32 { 500 }
-fn default_dump_enabled() -> bool { false }
-fn default_dump_dir() -> String { "~/Documents/IGS".to_string() }
+fn default_max_topics() -> usize {
+    8
+}
+fn default_max_entities() -> usize {
+    20
+}
+fn default_min_entity_length() -> usize {
+    2
+}
+fn default_dedup_threshold() -> f64 {
+    0.3
+}
+fn default_pipeline_pool() -> String {
+    "GLOBAL_TECH_CYBER".to_string()
+}
+fn default_pipeline_limit() -> i32 {
+    50
+}
+fn default_output_format() -> String {
+    "toon".to_string()
+}
+fn default_toon_indent() -> usize {
+    2
+}
+fn default_max_items_per_response() -> i32 {
+    500
+}
+fn default_dump_enabled() -> bool {
+    false
+}
+fn default_dump_dir() -> String {
+    "~/Documents/IGS".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

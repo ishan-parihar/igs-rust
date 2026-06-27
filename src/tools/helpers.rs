@@ -9,17 +9,15 @@ pub fn urlencoding(s: &str) -> String {
 pub fn extract_topics(text: &str, max: usize) -> Vec<String> {
     let lower = text.to_lowercase();
     let stop_words = [
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-        "of", "by", "with", "from", "is", "are", "was", "were", "be", "been",
-        "being", "have", "has", "had", "do", "does", "did", "will", "would",
-        "could", "should", "may", "might", "shall", "can", "need", "dare",
-        "it", "its", "it's", "this", "that", "these", "those", "i", "you",
-        "he", "she", "we", "they", "me", "him", "her", "us", "them", "my",
-        "your", "his", "its", "our", "their", "not", "no", "nor", "so", "up",
-        "down", "out", "off", "over", "under", "again", "further", "then",
-        "once", "here", "there", "when", "where", "why", "how", "all", "each",
-        "every", "both", "few", "more", "most", "other", "some", "such", "only",
-        "own", "same", "than", "too", "very", "just", "also", "about",
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "by", "with",
+        "from", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do",
+        "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can", "need",
+        "dare", "it", "its", "it's", "this", "that", "these", "those", "i", "you", "he", "she",
+        "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "its", "our", "their",
+        "not", "no", "nor", "so", "up", "down", "out", "off", "over", "under", "again", "further",
+        "then", "once", "here", "there", "when", "where", "why", "how", "all", "each", "every",
+        "both", "few", "more", "most", "other", "some", "such", "only", "own", "same", "than",
+        "too", "very", "just", "also", "about",
     ];
 
     let words: Vec<&str> = lower
@@ -34,7 +32,11 @@ pub fn extract_topics(text: &str, max: usize) -> Vec<String> {
 
     let mut topics: Vec<(&str, usize)> = freq.into_iter().collect();
     topics.sort_by(|a, b| b.1.cmp(&a.1));
-    topics.into_iter().take(max).map(|(w, _)| w.to_string()).collect()
+    topics
+        .into_iter()
+        .take(max)
+        .map(|(w, _)| w.to_string())
+        .collect()
 }
 
 /// Basic entity extraction
@@ -45,7 +47,8 @@ pub fn extract_basic_entities(text: &str) -> Vec<serde_json::Value> {
     let mut i = 0;
     while i < words.len() {
         let w = words[i].trim_matches(|c: char| !c.is_alphanumeric());
-        if w.len() >= 2 && w.chars().next().is_some_and(|c| c.is_uppercase())
+        if w.len() >= 2
+            && w.chars().next().is_some_and(|c| c.is_uppercase())
             && !w.chars().all(|c| c.is_uppercase())
         {
             let mut name = w.to_string();
@@ -59,8 +62,15 @@ pub fn extract_basic_entities(text: &str) -> Vec<serde_json::Value> {
                     break;
                 }
             }
-            if !entities.iter().any(|e: &serde_json::Value| e["name"] == name) {
-                let entity_type = if name.contains(' ') { "Person" } else { "Organization" };
+            if !entities
+                .iter()
+                .any(|e: &serde_json::Value| e["name"] == name)
+            {
+                let entity_type = if name.contains(' ') {
+                    "Person"
+                } else {
+                    "Organization"
+                };
                 entities.push(serde_json::json!({
                     "name": name,
                     "type": entity_type,
@@ -78,20 +88,95 @@ pub fn extract_basic_entities(text: &str) -> Vec<serde_json::Value> {
 /// Basic sentiment analysis
 pub fn basic_sentiment(text: &str) -> serde_json::Value {
     let positive_words = [
-        "good", "great", "excellent", "amazing", "wonderful", "fantastic", "outstanding",
-        "positive", "success", "successful", "growth", "breakthrough", "opportunity",
-        "progress", "innovation", "achievement", "benefit", "improve", "improvement",
-        "strong", "profit", "gain", "boost", "surge", "rally", "hope", "optimistic",
-        "bright", "promising", "remarkable", "impressive", "best", "better", "win",
-        "victory", "celebration", "happy", "love", "beautiful", "exciting", "thrilled",
+        "good",
+        "great",
+        "excellent",
+        "amazing",
+        "wonderful",
+        "fantastic",
+        "outstanding",
+        "positive",
+        "success",
+        "successful",
+        "growth",
+        "breakthrough",
+        "opportunity",
+        "progress",
+        "innovation",
+        "achievement",
+        "benefit",
+        "improve",
+        "improvement",
+        "strong",
+        "profit",
+        "gain",
+        "boost",
+        "surge",
+        "rally",
+        "hope",
+        "optimistic",
+        "bright",
+        "promising",
+        "remarkable",
+        "impressive",
+        "best",
+        "better",
+        "win",
+        "victory",
+        "celebration",
+        "happy",
+        "love",
+        "beautiful",
+        "exciting",
+        "thrilled",
     ];
     let negative_words = [
-        "bad", "terrible", "awful", "horrible", "worst", "poor", "negative", "failure",
-        "fail", "crisis", "disaster", "decline", "drop", "loss", "lose", "damage",
-        "damage", "threat", "risk", "danger", "dangerous", "war", "conflict", "attack",
-        "crime", "illegal", "corruption", "scandal", "fraud", "banned", "restrict",
-        "regret", "sad", "angry", "furious", "tragic", "deadly", "fatal", "kill",
-        "death", "destroy", "destruction", "hate", "wrong", "ugly", "harsh",
+        "bad",
+        "terrible",
+        "awful",
+        "horrible",
+        "worst",
+        "poor",
+        "negative",
+        "failure",
+        "fail",
+        "crisis",
+        "disaster",
+        "decline",
+        "drop",
+        "loss",
+        "lose",
+        "damage",
+        "damage",
+        "threat",
+        "risk",
+        "danger",
+        "dangerous",
+        "war",
+        "conflict",
+        "attack",
+        "crime",
+        "illegal",
+        "corruption",
+        "scandal",
+        "fraud",
+        "banned",
+        "restrict",
+        "regret",
+        "sad",
+        "angry",
+        "furious",
+        "tragic",
+        "deadly",
+        "fatal",
+        "kill",
+        "death",
+        "destroy",
+        "destruction",
+        "hate",
+        "wrong",
+        "ugly",
+        "harsh",
     ];
 
     let lower = text.to_lowercase();
@@ -103,7 +188,13 @@ pub fn basic_sentiment(text: &str) -> serde_json::Value {
     let score = (pos_count as f64) - (neg_count as f64);
     let total = words.len() as f64;
     let comparative = if total > 0.0 { score / total } else { 0.0 };
-    let label = if score > 0.0 { "positive" } else if score < 0.0 { "negative" } else { "neutral" };
+    let label = if score > 0.0 {
+        "positive"
+    } else if score < 0.0 {
+        "negative"
+    } else {
+        "neutral"
+    };
 
     serde_json::json!({
         "score": score,
@@ -115,12 +206,15 @@ pub fn basic_sentiment(text: &str) -> serde_json::Value {
 /// Sync helper: find RSS/Atom feed link in HTML body
 pub fn find_feed_url(body: &str, base_url: &str) -> Option<String> {
     let doc = scraper::Html::parse_document(body);
-    if let Ok(sel) = scraper::Selector::parse("link[rel='alternate'][type*='rss'], link[rel='alternate'][type*='atom']") {
+    if let Ok(sel) = scraper::Selector::parse(
+        "link[rel='alternate'][type*='rss'], link[rel='alternate'][type*='atom']",
+    ) {
         for el in doc.select(&sel) {
             if let Some(href) = el.attr("href") {
-                let abs = url::Url::parse(base_url).ok().and_then(|base| {
-                    url::Url::parse(href).ok().or_else(|| base.join(href).ok())
-                }).map(|u| u.to_string());
+                let abs = url::Url::parse(base_url)
+                    .ok()
+                    .and_then(|base| url::Url::parse(href).ok().or_else(|| base.join(href).ok()))
+                    .map(|u| u.to_string());
                 if abs.is_some() {
                     return abs;
                 }
@@ -132,7 +226,8 @@ pub fn find_feed_url(body: &str, base_url: &str) -> Option<String> {
 
 /// TOON-format encode a serializable value for AI-agent token-efficiency
 pub fn toon_encode<T: serde::Serialize>(value: &T) -> String {
-    toon_format::encode_default(value).unwrap_or_else(|_| serde_json::to_string(value).unwrap_or_default())
+    toon_format::encode_default(value)
+        .unwrap_or_else(|_| serde_json::to_string(value).unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -192,7 +287,8 @@ mod tests {
         let text = "John Smith went to New York City";
         let entities = extract_basic_entities(text);
         assert!(!entities.is_empty());
-        let names: Vec<String> = entities.iter()
+        let names: Vec<String> = entities
+            .iter()
             .map(|e| e["name"].as_str().unwrap().to_string())
             .collect();
         assert!(names.contains(&"John Smith".to_string()));
@@ -203,7 +299,8 @@ mod tests {
         let text = "Microsoft released a new product";
         let entities = extract_basic_entities(text);
         assert!(!entities.is_empty());
-        let names: Vec<String> = entities.iter()
+        let names: Vec<String> = entities
+            .iter()
             .map(|e| e["name"].as_str().unwrap().to_string())
             .collect();
         assert!(names.contains(&"Microsoft".to_string()));
@@ -245,4 +342,3 @@ mod tests {
         assert_eq!(encoded, "");
     }
 }
-

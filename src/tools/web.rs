@@ -31,7 +31,9 @@ fn extract_internal_links(
 
 /// Search the web in realtime. Uses Tavily or Firecrawl API.
 pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let provider = input.provider.as_deref().unwrap_or("auto");
 
     // Try Tavily first
@@ -39,16 +41,17 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
         if let Some(ref tavily) = settings.tavily {
             if tavily.enabled {
                 if let Some(ref api_key) = tavily.api_key {
-                    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+                    let cache_dir =
+                        http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
                     let http = HttpClient::new(&settings.http, &cache_dir);
-                    
+
                     let mut body = serde_json::json!({
                         "api_key": api_key,
                         "query": input.query,
                         "max_results": input.max_results.unwrap_or(10),
                         "topic": input.topic.as_deref().unwrap_or("general"),
                     });
-                    
+
                     if let Some(ref domains) = input.include_domains {
                         if !domains.is_empty() {
                             body["include_domains"] = serde_json::json!(domains);
@@ -65,20 +68,39 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                     if let Some(answer) = input.include_answer {
                         body["include_answer"] = serde_json::json!(answer);
                     }
-                    
-                    match http.post_json("https://api.tavily.com/search", &body, None).await {
+
+                    match http
+                        .post_json("https://api.tavily.com/search", &body, None)
+                        .await
+                    {
                         Ok(outcome) => {
                             if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                                if let Ok(json) =
+                                    serde_json::from_str::<serde_json::Value>(&resp.body_text)
+                                {
                                     let results: Vec<WebSearchResult> = json["results"]
                                         .as_array()
-                                        .map(|arr| arr.iter().map(|r| WebSearchResult {
-                                            title: r["title"].as_str().unwrap_or("").to_string(),
-                                            url: r["url"].as_str().unwrap_or("").to_string(),
-                                            content: r["content"].as_str().map(|s| s.to_string()),
-                                            score: r["score"].as_f64(),
-                                            raw_content: r["raw_content"].as_str().map(|s| s.to_string()),
-                                        }).collect())
+                                        .map(|arr| {
+                                            arr.iter()
+                                                .map(|r| WebSearchResult {
+                                                    title: r["title"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                    url: r["url"]
+                                                        .as_str()
+                                                        .unwrap_or("")
+                                                        .to_string(),
+                                                    content: r["content"]
+                                                        .as_str()
+                                                        .map(|s| s.to_string()),
+                                                    score: r["score"].as_f64(),
+                                                    raw_content: r["raw_content"]
+                                                        .as_str()
+                                                        .map(|s| s.to_string()),
+                                                })
+                                                .collect()
+                                        })
                                         .unwrap_or_default();
                                     let answer = json["answer"].as_str().map(|s| s.to_string());
                                     let count = results.len();
@@ -113,23 +135,45 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let query_enc = urlencoding(&input.query);
                 let url = format!(
                     "https://api.firecrawl.dev/v1/search?query={}&limit={}",
-                    query_enc, input.max_results.unwrap_or(10)
+                    query_enc,
+                    input.max_results.unwrap_or(10)
                 );
                 let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
                 let http = HttpClient::new(&settings.http, &cache_dir);
-                match http.fetch(&url, Some(&HashMap::from([("Authorization".into(), format!("Bearer {}", api_key))])), "bypass").await {
+                match http
+                    .fetch(
+                        &url,
+                        Some(&HashMap::from([(
+                            "Authorization".into(),
+                            format!("Bearer {}", api_key),
+                        )])),
+                        "bypass",
+                    )
+                    .await
+                {
                     Ok(outcome) => {
                         if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                            if let Ok(json) =
+                                serde_json::from_str::<serde_json::Value>(&resp.body_text)
+                            {
                                 let results: Vec<WebSearchResult> = json["data"]["web"]
                                     .as_array()
-                                    .map(|arr| arr.iter().map(|r| WebSearchResult {
-                                        title: r["title"].as_str().unwrap_or("").to_string(),
-                                        url: r["url"].as_str().unwrap_or("").to_string(),
-                                        content: r["content"].as_str().map(|s| s.to_string()),
-                                        score: r["score"].as_f64(),
-                                        raw_content: None,
-                                    }).collect())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .map(|r| WebSearchResult {
+                                                title: r["title"]
+                                                    .as_str()
+                                                    .unwrap_or("")
+                                                    .to_string(),
+                                                url: r["url"].as_str().unwrap_or("").to_string(),
+                                                content: r["content"]
+                                                    .as_str()
+                                                    .map(|s| s.to_string()),
+                                                score: r["score"].as_f64(),
+                                                raw_content: None,
+                                            })
+                                            .collect()
+                                    })
                                     .unwrap_or_default();
                                 let count = results.len();
                                 return Ok(WebSearchOutput {
@@ -144,7 +188,9 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                             }
                         }
                     }
-                    Err(e) => { tracing::warn!("Firecrawl search failed: {}", e); }
+                    Err(e) => {
+                        tracing::warn!("Firecrawl search failed: {}", e);
+                    }
                 }
             }
         }
@@ -154,7 +200,9 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
 }
 
 pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let provider = input.provider.as_deref().unwrap_or("default");
 
     match provider {
@@ -164,7 +212,10 @@ pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String
 }
 
 /// Scrape using plain HTTP + html-to-markdown-rs (default provider)
-async fn web_scrape_default(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
+async fn web_scrape_default(
+    input: &WebScrapeInput,
+    settings: &crate::types::Settings,
+) -> Result<WebScrapeOutput, String> {
     let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -177,7 +228,10 @@ async fn web_scrape_default(input: &WebScrapeInput, settings: &crate::types::Set
                 resp.body_text
             }
             http_mod::FetchOutcome::Cached(_) => {
-                return Err(format!("Server returned 304 Not Modified for URL: {}. Try again later.", input.url));
+                return Err(format!(
+                    "Server returned 304 Not Modified for URL: {}. Try again later.",
+                    input.url
+                ));
             }
         },
         Err(e) => return Err(format!("Scrape failed: {}", e)),
@@ -187,7 +241,10 @@ async fn web_scrape_default(input: &WebScrapeInput, settings: &crate::types::Set
 }
 
 /// Scrape using Obscura headless browser (JS rendering)
-async fn web_scrape_obscura(input: &WebScrapeInput, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
+async fn web_scrape_obscura(
+    input: &WebScrapeInput,
+    settings: &crate::types::Settings,
+) -> Result<WebScrapeOutput, String> {
     if !settings.obscura.enabled {
         return Err("Obscura is not enabled. Set obscura.enabled=true in settings.yml to use provider='obscura'".into());
     }
@@ -197,20 +254,27 @@ async fn web_scrape_obscura(input: &WebScrapeInput, settings: &crate::types::Set
     let dump_format = "markdown";
     let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
 
-    let body = obscura.fetch_with_all_options(
-        &input.url,
-        dump_format,
-        obey_robots,
-        wait_until,
-        input.include_frames.unwrap_or(false),
-        input.wait_selector.as_deref(),
-    ).await.map_err(|e| format!("Obscura scrape failed: {}", e))?;
+    let body = obscura
+        .fetch_with_all_options(
+            &input.url,
+            dump_format,
+            obey_robots,
+            wait_until,
+            input.include_frames.unwrap_or(false),
+            input.wait_selector.as_deref(),
+        )
+        .await
+        .map_err(|e| format!("Obscura scrape failed: {}", e))?;
 
     extract_scrape_output(&input.url, &body, "obscura", input.formats.as_deref())
 }
 
-
-fn extract_scrape_output(url: &str, body: &str, _provider: &str, _formats: Option<&[String]>) -> Result<WebScrapeOutput, String> {
+fn extract_scrape_output(
+    url: &str,
+    body: &str,
+    _provider: &str,
+    _formats: Option<&[String]>,
+) -> Result<WebScrapeOutput, String> {
     let doc = scraper::Html::parse_document(body);
 
     let title = scraper::Selector::parse("title")
@@ -258,7 +322,11 @@ fn extract_scrape_output(url: &str, body: &str, _provider: &str, _formats: Optio
             .filter(|s: &String| !s.trim().is_empty());
         converted.unwrap_or_else(|| {
             let main_content: String = doc.root_element().text().collect::<String>();
-            main_content.split_whitespace().take(2000).collect::<Vec<_>>().join(" ")
+            main_content
+                .split_whitespace()
+                .take(2000)
+                .collect::<Vec<_>>()
+                .join(" ")
         })
     };
 
@@ -285,7 +353,9 @@ fn extract_scrape_output(url: &str, body: &str, _provider: &str, _formats: Optio
 }
 
 pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let provider = input.provider.as_deref().unwrap_or("obscura");
 
     match provider {
@@ -294,10 +364,16 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
     }
 }
 
-async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
+async fn web_crawl_obscura(
+    input: &WebCrawlInput,
+    settings: &crate::types::Settings,
+) -> Result<WebCrawlOutput, String> {
     let obscura_settings = settings.obscura.clone();
     if !obscura_settings.enabled {
-        return Err("Obscura is not enabled. Set obscura.enabled=true in settings.yml to use web.crawl".into());
+        return Err(
+            "Obscura is not enabled. Set obscura.enabled=true in settings.yml to use web.crawl"
+                .into(),
+        );
     }
 
     let obscura = crate::obscura::ObscuraManager::new(&obscura_settings);
@@ -310,13 +386,21 @@ async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Setti
     let include_frames = input.include_frames.unwrap_or(false);
     let wait_selector = input.wait_selector.as_deref();
 
-    let _binary = obscura.ensure_ready().await
+    let _binary = obscura
+        .ensure_ready()
+        .await
         .map_err(|e| format!("Obscura not ready: {}", e))?;
 
-    let content = obscura.fetch_with_all_options(
-        &input.url, dump_format, obey_robots, wait_until, include_frames,
-        wait_selector,
-    ).await
+    let content = obscura
+        .fetch_with_all_options(
+            &input.url,
+            dump_format,
+            obey_robots,
+            wait_until,
+            include_frames,
+            wait_selector,
+        )
+        .await
         .map_err(|e| format!("Obscura fetch failed: {}", e))?;
 
     let title = {
@@ -340,7 +424,8 @@ async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Setti
             .map_err(|e| format!("Invalid URL '{}': {}", input.url, e))?;
         let base_host = base_url.host_str().unwrap_or("").to_string();
 
-        let mut queue: std::collections::VecDeque<(String, i32)> = std::collections::VecDeque::new();
+        let mut queue: std::collections::VecDeque<(String, i32)> =
+            std::collections::VecDeque::new();
         let mut visited = std::collections::HashSet::new();
         visited.insert(input.url.clone());
 
@@ -360,7 +445,17 @@ async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Setti
                 break;
             }
 
-            match obscura.fetch_with_all_options(&url_str, dump_format, obey_robots, wait_until, include_frames, wait_selector).await {
+            match obscura
+                .fetch_with_all_options(
+                    &url_str,
+                    dump_format,
+                    obey_robots,
+                    wait_until,
+                    include_frames,
+                    wait_selector,
+                )
+                .await
+            {
                 Ok(content) => {
                     let title = {
                         let doc = scraper::Html::parse_document(&content);
@@ -374,7 +469,9 @@ async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Setti
                         let doc = scraper::Html::parse_document(&content);
                         let sel = scraper::Selector::parse("a[href]").expect("valid selector");
                         for link_url in extract_internal_links(&doc, &sel, &base_url, &base_host) {
-                            if !visited.contains(&link_url) && pages.len() + queue.len() < max_pages as usize {
+                            if !visited.contains(&link_url)
+                                && pages.len() + queue.len() < max_pages as usize
+                            {
                                 visited.insert(link_url.clone());
                                 queue.push_back((link_url, depth + 1));
                             }
@@ -420,10 +517,11 @@ async fn web_crawl_obscura(input: &WebCrawlInput, settings: &crate::types::Setti
     })
 }
 
-
 /// Discover URLs on a website by analyzing sitemap and links.
 pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -432,37 +530,45 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
 
     let mut links: Vec<WebMapLink> = Vec::new();
     // Try sitemap.xml
-    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&sitemap_url, None, "bypass").await {
-            let doc = scraper::Html::parse_document(&resp.body_text);
-            // Try to extract <loc> elements from sitemap XML
-            for line in resp.body_text.lines() {
-                if line.contains("<loc>") {
-                    if let Some(start) = line.find("<loc>") {
-                        let rest = &line[start + 5..];
-                        if let Some(end) = rest.find("</loc>") {
-                            let url = &rest[..end];
-                            links.push(WebMapLink { url: url.to_string(), title: None });
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) =
+        http.fetch(&sitemap_url, None, "bypass").await
+    {
+        let doc = scraper::Html::parse_document(&resp.body_text);
+        // Try to extract <loc> elements from sitemap XML
+        for line in resp.body_text.lines() {
+            if line.contains("<loc>") {
+                if let Some(start) = line.find("<loc>") {
+                    let rest = &line[start + 5..];
+                    if let Some(end) = rest.find("</loc>") {
+                        let url = &rest[..end];
+                        links.push(WebMapLink {
+                            url: url.to_string(),
+                            title: None,
+                        });
+                    }
+                }
+            }
+        }
+        // Also get <url> elements
+        if let Ok(sel) = scraper::Selector::parse("url") {
+            for el in doc.select(&sel) {
+                if let Ok(loc_sel) = scraper::Selector::parse("loc") {
+                    if let Some(loc) = el.select(&loc_sel).next() {
+                        let url_str = loc.text().collect::<String>().trim().to_string();
+                        if !url_str.is_empty() && !links.iter().any(|l| l.url == url_str) {
+                            let title = scraper::Selector::parse("news\\:title")
+                                .or_else(|_| scraper::Selector::parse("title"))
+                                .ok()
+                                .and_then(|ts| el.select(&ts).next())
+                                .map(|t| t.text().collect::<String>());
+                            links.push(WebMapLink {
+                                url: url_str,
+                                title,
+                            });
                         }
                     }
                 }
             }
-            // Also get <url> elements
-            if let Ok(sel) = scraper::Selector::parse("url") {
-                for el in doc.select(&sel) {
-                    if let Ok(loc_sel) = scraper::Selector::parse("loc") {
-                        if let Some(loc) = el.select(&loc_sel).next() {
-                            let url_str = loc.text().collect::<String>().trim().to_string();
-                            if !url_str.is_empty() && !links.iter().any(|l| l.url == url_str) {
-                                let title = scraper::Selector::parse("news\\:title")
-                                    .or_else(|_| scraper::Selector::parse("title"))
-                                    .ok()
-                                    .and_then(|ts| el.select(&ts).next())
-                                    .map(|t| t.text().collect::<String>());
-                                links.push(WebMapLink { url: url_str, title });
-                            }
-                        }
-                    }
-                }
         }
     }
 
@@ -471,7 +577,10 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
         let search_lower = search.to_lowercase();
         links.retain(|link| {
             link.url.to_lowercase().contains(&search_lower)
-                || link.title.as_ref().is_some_and(|t| t.to_lowercase().contains(&search_lower))
+                || link
+                    .title
+                    .as_ref()
+                    .is_some_and(|t| t.to_lowercase().contains(&search_lower))
         });
     }
 

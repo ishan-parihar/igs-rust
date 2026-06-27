@@ -12,12 +12,20 @@ pub struct PaginatedOutput<T> {
     pub total: usize,
 }
 
-pub fn paginate<T: Clone>(items: &[T], cursor: Option<String>, page_size: u32) -> (Vec<T>, Option<String>) {
+pub fn paginate<T: Clone>(
+    items: &[T],
+    cursor: Option<String>,
+    page_size: u32,
+) -> (Vec<T>, Option<String>) {
     let page_size = page_size.min(100) as usize;
     let start = cursor.and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
     let end = (start + page_size).min(items.len());
     let page = items[start..end].to_vec();
-    let next_cursor = if end < items.len() { Some(end.to_string()) } else { None };
+    let next_cursor = if end < items.len() {
+        Some(end.to_string())
+    } else {
+        None
+    };
     (page, next_cursor)
 }
 

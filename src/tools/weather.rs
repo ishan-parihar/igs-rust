@@ -3,11 +3,20 @@ use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
 
 /// Get weather forecast for a location using OpenWeatherMap 5-day/3-hour forecast API.
-pub async fn weather_forecast(input: WeatherForecastInput) -> Result<WeatherForecastOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
-    let api_key = settings.openweather.as_ref()
+pub async fn weather_forecast(
+    input: WeatherForecastInput,
+) -> Result<WeatherForecastOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+    let api_key = settings
+        .openweather
+        .as_ref()
         .and_then(|ow| ow.api_key.as_deref())
-        .ok_or_else(|| "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml.".to_string())?;
+        .ok_or_else(|| {
+            "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml."
+                .to_string()
+        })?;
 
     let location = input.location.clone();
     let days = input.days.unwrap_or(3).clamp(1, 5);
@@ -23,7 +32,9 @@ pub async fn weather_forecast(input: WeatherForecastInput) -> Result<WeatherFore
         limit,
     );
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let resp = match outcome {
@@ -41,7 +52,10 @@ pub async fn weather_forecast(input: WeatherForecastInput) -> Result<WeatherFore
         ));
     }
 
-    let city_name = json["city"]["name"].as_str().unwrap_or(&location).to_string();
+    let city_name = json["city"]["name"]
+        .as_str()
+        .unwrap_or(&location)
+        .to_string();
     let country = json["city"]["country"].as_str().unwrap_or("").to_string();
 
     let mut forecasts = Vec::new();
@@ -49,12 +63,15 @@ pub async fn weather_forecast(input: WeatherForecastInput) -> Result<WeatherFore
         for entry in list {
             let dt_txt = entry["dt_txt"].as_str().unwrap_or("");
             let main = &entry["main"];
-            let weather = entry["weather"].as_array()
+            let weather = entry["weather"]
+                .as_array()
                 .and_then(|w| w.first())
-                .map(|w| (
-                    w["main"].as_str().unwrap_or("Unknown").to_string(),
-                    w["description"].as_str().unwrap_or("").to_string(),
-                ))
+                .map(|w| {
+                    (
+                        w["main"].as_str().unwrap_or("Unknown").to_string(),
+                        w["description"].as_str().unwrap_or("").to_string(),
+                    )
+                })
                 .unwrap_or_default();
             let wind = &entry["wind"];
 
@@ -80,10 +97,17 @@ pub async fn weather_forecast(input: WeatherForecastInput) -> Result<WeatherFore
 
 /// Get current weather for a location using OpenWeatherMap current weather API.
 pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurrentOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
-    let api_key = settings.openweather.as_ref()
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+    let api_key = settings
+        .openweather
+        .as_ref()
         .and_then(|ow| ow.api_key.as_deref())
-        .ok_or_else(|| "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml.".to_string())?;
+        .ok_or_else(|| {
+            "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml."
+                .to_string()
+        })?;
 
     let location = input.location.clone();
 
@@ -96,7 +120,9 @@ pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurren
         api_key,
     );
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let resp = match outcome {
@@ -117,12 +143,15 @@ pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurren
     let city_name = json["name"].as_str().unwrap_or(&location).to_string();
     let country = json["sys"]["country"].as_str().unwrap_or("").to_string();
     let main = &json["main"];
-    let weather = json["weather"].as_array()
+    let weather = json["weather"]
+        .as_array()
         .and_then(|w| w.first())
-        .map(|w| (
-            w["main"].as_str().unwrap_or("Unknown").to_string(),
-            w["description"].as_str().unwrap_or("").to_string(),
-        ))
+        .map(|w| {
+            (
+                w["main"].as_str().unwrap_or("Unknown").to_string(),
+                w["description"].as_str().unwrap_or("").to_string(),
+            )
+        })
         .unwrap_or_default();
     let wind = &json["wind"];
 
@@ -141,10 +170,17 @@ pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurren
 
 /// Get weather alerts for a lat/lon location using OpenWeatherMap One Call API.
 pub async fn weather_alerts(input: WeatherAlertsInput) -> Result<WeatherAlertsOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
-    let api_key = settings.openweather.as_ref()
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+    let api_key = settings
+        .openweather
+        .as_ref()
         .and_then(|ow| ow.api_key.as_deref())
-        .ok_or_else(|| "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml.".to_string())?;
+        .ok_or_else(|| {
+            "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml."
+                .to_string()
+        })?;
 
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
@@ -156,7 +192,9 @@ pub async fn weather_alerts(input: WeatherAlertsInput) -> Result<WeatherAlertsOu
         api_key,
     );
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let resp = match outcome {
@@ -182,13 +220,21 @@ pub async fn weather_alerts(input: WeatherAlertsInput) -> Result<WeatherAlertsOu
             alerts.push(WeatherAlert {
                 sender: alert["sender_name"].as_str().unwrap_or("").to_string(),
                 event: alert["event"].as_str().unwrap_or("").to_string(),
-                start: alert["start"].as_i64().map(|ts| chrono::DateTime::from_timestamp(ts, 0)
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_default())
+                start: alert["start"]
+                    .as_i64()
+                    .map(|ts| {
+                        chrono::DateTime::from_timestamp(ts, 0)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    })
                     .unwrap_or_default(),
-                end: alert["end"].as_i64().map(|ts| chrono::DateTime::from_timestamp(ts, 0)
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_default())
+                end: alert["end"]
+                    .as_i64()
+                    .map(|ts| {
+                        chrono::DateTime::from_timestamp(ts, 0)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    })
                     .unwrap_or_default(),
                 description: alert["description"].as_str().unwrap_or("").to_string(),
             });

@@ -6,10 +6,20 @@ pub async fn youtube_search(input: YoutubeSearchInput) -> Result<YoutubeSearchOu
     let search_term = format!("ytsearch{}:{}", limit, input.query);
 
     let output = Command::new("yt-dlp")
-        .args([&search_term, "--flat-playlist", "--print", "%(id)s|||%(title)s|||%(channel)s|||%(duration_string)s"])
+        .args([
+            &search_term,
+            "--flat-playlist",
+            "--print",
+            "%(id)s|||%(title)s|||%(channel)s|||%(duration_string)s",
+        ])
         .output()
         .await
-        .map_err(|e| format!("yt-dlp not found or failed to execute: {}. Install with: pip install yt-dlp", e))?;
+        .map_err(|e| {
+            format!(
+                "yt-dlp not found or failed to execute: {}. Install with: pip install yt-dlp",
+                e
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -23,10 +33,14 @@ pub async fn youtube_search(input: YoutubeSearchInput) -> Result<YoutubeSearchOu
 
     for line in stdout.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
 
         let parts: Vec<&str> = line.splitn(4, "|||").collect();
-        if parts.len() < 3 { continue; }
+        if parts.len() < 3 {
+            continue;
+        }
 
         videos.push(YoutubeVideo {
             id: parts[0].to_string(),
@@ -45,13 +59,20 @@ pub async fn youtube_search(input: YoutubeSearchInput) -> Result<YoutubeSearchOu
     Ok(YoutubeSearchOutput { videos, count })
 }
 
-pub async fn youtube_metadata(input: YoutubeMetadataInput) -> Result<YoutubeMetadataOutput, String> {
+pub async fn youtube_metadata(
+    input: YoutubeMetadataInput,
+) -> Result<YoutubeMetadataOutput, String> {
     let output = Command::new("yt-dlp")
         .args(["--dump-json", "--no-download", "--no-playlist"])
         .arg(&input.url)
         .output()
         .await
-        .map_err(|e| format!("yt-dlp not found or failed to execute: {}. Install with: pip install yt-dlp", e))?;
+        .map_err(|e| {
+            format!(
+                "yt-dlp not found or failed to execute: {}. Install with: pip install yt-dlp",
+                e
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -73,15 +94,27 @@ pub async fn youtube_metadata(input: YoutubeMetadataInput) -> Result<YoutubeMeta
     })
 }
 
-pub async fn youtube_subtitles(input: YoutubeSubtitlesInput) -> Result<YoutubeSubtitlesOutput, String> {
+pub async fn youtube_subtitles(
+    input: YoutubeSubtitlesInput,
+) -> Result<YoutubeSubtitlesOutput, String> {
     let lang = input.language.unwrap_or_else(|| "en".to_string());
 
     let list_output = Command::new("yt-dlp")
-        .args(["--list-subs", "--no-download", "--no-playlist", "--skip-download"])
+        .args([
+            "--list-subs",
+            "--no-download",
+            "--no-playlist",
+            "--skip-download",
+        ])
         .arg(&input.url)
         .output()
         .await
-        .map_err(|e| format!("yt-dlp not found or failed to execute: {}. Install with: pip install yt-dlp", e))?;
+        .map_err(|e| {
+            format!(
+                "yt-dlp not found or failed to execute: {}. Install with: pip install yt-dlp",
+                e
+            )
+        })?;
 
     let list_stdout = String::from_utf8_lossy(&list_output.stdout);
 
@@ -91,7 +124,13 @@ pub async fn youtube_subtitles(input: YoutubeSubtitlesInput) -> Result<YoutubeSu
         "en".to_string()
     } else {
         let auto_output = Command::new("yt-dlp")
-            .args(["--list-subs", "--no-download", "--no-playlist", "--skip-download", "--write-auto-sub"])
+            .args([
+                "--list-subs",
+                "--no-download",
+                "--no-playlist",
+                "--skip-download",
+                "--write-auto-sub",
+            ])
             .arg(&input.url)
             .output()
             .await
@@ -112,11 +151,16 @@ pub async fn youtube_subtitles(input: YoutubeSubtitlesInput) -> Result<YoutubeSu
 
     let dl_output = Command::new("yt-dlp")
         .args([
-            "--write-sub", "--write-auto-sub",
-            "--sub-format", "vtt",
-            "--sub-langs", &actual_lang,
-            "--skip-download", "--no-playlist",
-            "-o", &output_template.to_string_lossy(),
+            "--write-sub",
+            "--write-auto-sub",
+            "--sub-format",
+            "vtt",
+            "--sub-langs",
+            &actual_lang,
+            "--skip-download",
+            "--no-playlist",
+            "-o",
+            &output_template.to_string_lossy(),
         ])
         .arg(&input.url)
         .output()
@@ -125,7 +169,10 @@ pub async fn youtube_subtitles(input: YoutubeSubtitlesInput) -> Result<YoutubeSu
 
     if !dl_output.status.success() {
         let stderr = String::from_utf8_lossy(&dl_output.stderr);
-        return Err(format!("yt-dlp subtitle download failed: {}", stderr.trim()));
+        return Err(format!(
+            "yt-dlp subtitle download failed: {}",
+            stderr.trim()
+        ));
     }
 
     let subtitle_text = if let Some(entries) = std::fs::read_dir(&temp_dir).ok() {
@@ -167,7 +214,10 @@ fn parse_vtt_to_text(vtt: &str) -> String {
         let trimmed = line.trim();
 
         if skip_header {
-            if trimmed.starts_with("WEBVTT") || trimmed.starts_with("Kind:") || trimmed.starts_with("Language:") {
+            if trimmed.starts_with("WEBVTT")
+                || trimmed.starts_with("Kind:")
+                || trimmed.starts_with("Language:")
+            {
                 continue;
             }
             if trimmed.is_empty() {
@@ -188,7 +238,8 @@ fn parse_vtt_to_text(vtt: &str) -> String {
             continue;
         }
 
-        if trimmed.starts_with("NOTE") || trimmed.starts_with("STYLE") || trimmed.starts_with("::") {
+        if trimmed.starts_with("NOTE") || trimmed.starts_with("STYLE") || trimmed.starts_with("::")
+        {
             continue;
         }
 

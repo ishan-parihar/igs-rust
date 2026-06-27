@@ -1,12 +1,19 @@
-use crate::config;
 use super::helpers::urlencoding;
 use super::types::*;
+use crate::config;
 
 pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
-    let api_key = settings.courtlistener.as_ref()
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+    let api_key = settings
+        .courtlistener
+        .as_ref()
         .and_then(|cl| cl.api_key.as_deref())
-        .ok_or_else(|| "CourtListener API token not configured. Set courtlistener.apiKey in settings.yml.".to_string())?;
+        .ok_or_else(|| {
+            "CourtListener API token not configured. Set courtlistener.apiKey in settings.yml."
+                .to_string()
+        })?;
 
     let client = reqwest::Client::new();
     let query = urlencoding(&input.query);
@@ -32,7 +39,10 @@ pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOu
         .map_err(|e| format!("CourtListener API error: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("CourtListener API returned status {}", resp.status()));
+        return Err(format!(
+            "CourtListener API returned status {}",
+            resp.status()
+        ));
     }
 
     let data: serde_json::Value = resp
@@ -53,7 +63,10 @@ pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOu
                 court: r["court"].as_str().unwrap_or("").to_string(),
                 date_filed: r["dateFiled"].as_str().unwrap_or("").to_string(),
                 citation: r["citeCount"].as_u64().unwrap_or(0),
-                url: format!("https://www.courtlistener.com{}", r["absolute_url"].as_str().unwrap_or("")),
+                url: format!(
+                    "https://www.courtlistener.com{}",
+                    r["absolute_url"].as_str().unwrap_or("")
+                ),
             });
         }
     }
@@ -67,11 +80,20 @@ pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOu
     })
 }
 
-pub async fn legal_case_details(input: LegalCaseDetailsInput) -> Result<LegalCaseDetailsOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
-    let api_key = settings.courtlistener.as_ref()
+pub async fn legal_case_details(
+    input: LegalCaseDetailsInput,
+) -> Result<LegalCaseDetailsOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+    let api_key = settings
+        .courtlistener
+        .as_ref()
         .and_then(|cl| cl.api_key.as_deref())
-        .ok_or_else(|| "CourtListener API token not configured. Set courtlistener.apiKey in settings.yml.".to_string())?;
+        .ok_or_else(|| {
+            "CourtListener API token not configured. Set courtlistener.apiKey in settings.yml."
+                .to_string()
+        })?;
 
     let client = reqwest::Client::new();
 
@@ -89,7 +111,10 @@ pub async fn legal_case_details(input: LegalCaseDetailsInput) -> Result<LegalCas
         .map_err(|e| format!("CourtListener API error: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("CourtListener API returned status {}", resp.status()));
+        return Err(format!(
+            "CourtListener API returned status {}",
+            resp.status()
+        ));
     }
 
     let data: serde_json::Value = resp
@@ -101,8 +126,13 @@ pub async fn legal_case_details(input: LegalCaseDetailsInput) -> Result<LegalCas
         return Err(format!("CourtListener error: {}", err));
     }
 
-    let judges = data["judges"].as_array()
-        .map(|arr| arr.iter().filter_map(|j| j.as_str().map(String::from)).collect())
+    let judges = data["judges"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|j| j.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     Ok(LegalCaseDetailsOutput {
@@ -113,6 +143,9 @@ pub async fn legal_case_details(input: LegalCaseDetailsInput) -> Result<LegalCas
         date_terminated: data["dateTerminated"].as_str().unwrap_or("").to_string(),
         judges,
         nature_of_suit: data["natureOfSuit"].as_str().unwrap_or("").to_string(),
-        url: format!("https://www.courtlistener.com{}", data["absolute_url"].as_str().unwrap_or("")),
+        url: format!(
+            "https://www.courtlistener.com{}",
+            data["absolute_url"].as_str().unwrap_or("")
+        ),
     })
 }

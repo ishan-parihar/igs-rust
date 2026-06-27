@@ -1,8 +1,13 @@
 use clap::{Parser, Subcommand};
 use igs_rust_mcp::server::IgsMcpServer;
-use igs_rust_mcp::tools::{news, pools, sources, reddit, research, web, helpers::toon_encode, parsers as parsers_tools, registry};
 use igs_rust_mcp::tools::types::*;
-use igs_rust_mcp::tools::types_base::{DepthOptions, DiscoveryFilters, KeywordFilter, OutputOptions};
+use igs_rust_mcp::tools::types_base::{
+    DepthOptions, DiscoveryFilters, KeywordFilter, OutputOptions,
+};
+use igs_rust_mcp::tools::{
+    helpers::toon_encode, news, parsers as parsers_tools, pools, reddit, registry, research,
+    sources, twitter, web, youtube,
+};
 use rmcp::ServiceExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -52,6 +57,16 @@ enum Commands {
     Web {
         #[command(subcommand)]
         action: WebAction,
+    },
+    /// Twitter/X search and read
+    Twitter {
+        #[command(subcommand)]
+        action: TwitterAction,
+    },
+    /// YouTube search, metadata, and subtitles
+    Youtube {
+        #[command(subcommand)]
+        action: YoutubeAction,
     },
     /// Browser automation (persistent session)
     Browser {
@@ -279,6 +294,42 @@ enum WebAction {
 }
 
 #[derive(Subcommand)]
+enum TwitterAction {
+    Search {
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "10")]
+        limit: i32,
+        #[arg(long)]
+        mode: Option<String>,
+    },
+    Read {
+        #[arg(long)]
+        url: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum YoutubeAction {
+    Search {
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "10")]
+        limit: i32,
+    },
+    Metadata {
+        #[arg(long)]
+        url: String,
+    },
+    Subtitles {
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        lang: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum BrowserAction {
     /// Navigate to a URL
     Goto {
@@ -366,7 +417,9 @@ fn output<T: serde::Serialize>(format: &str, value: &T) {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
+        )
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .init();
@@ -380,9 +433,12 @@ async fn main() -> anyhow::Result<()> {
             let settings = igs_rust_mcp::config::load_settings().await?;
             let tool_groups = settings.tool_groups.unwrap_or_default();
             let server = IgsMcpServer::new_with_groups(tool_groups);
-            let service = server.serve(rmcp::transport::stdio()).await.inspect_err(|e| {
-                tracing::error!("MCP server error: {:?}", e);
-            })?;
+            let service = server
+                .serve(rmcp::transport::stdio())
+                .await
+                .inspect_err(|e| {
+                    tracing::error!("MCP server error: {:?}", e);
+                })?;
             service.waiting().await?;
             return Ok(());
         }
@@ -391,10 +447,22 @@ async fn main() -> anyhow::Result<()> {
             let settings = igs_rust_mcp::config::load_settings().await?;
             println!("IGS Intelligence Gathering System");
             println!("  Version: {}", env!("CARGO_PKG_VERSION"));
-            println!("  Config:  {}", igs_rust_mcp::config::user_config_dir().display());
-            println!("  HTTP:    timeout={}ms, retries={}, concurrency={}", settings.http.timeout_ms, settings.http.retries, settings.http.concurrency);
-            println!("  Cache:   enabled={}, ttl={}ms", settings.cache.enabled, settings.cache.ttl_ms);
-            println!("  NLP:     enabled={}, max_topics={}", settings.nlp.enabled, settings.nlp.max_topics);
+            println!(
+                "  Config:  {}",
+                igs_rust_mcp::config::user_config_dir().display()
+            );
+            println!(
+                "  HTTP:    timeout={}ms, retries={}, concurrency={}",
+                settings.http.timeout_ms, settings.http.retries, settings.http.concurrency
+            );
+            println!(
+                "  Cache:   enabled={}, ttl={}ms",
+                settings.cache.enabled, settings.cache.ttl_ms
+            );
+            println!(
+                "  NLP:     enabled={}, max_topics={}",
+                settings.nlp.enabled, settings.nlp.max_topics
+            );
             println!("  Obscura: enabled={}", settings.obscura.enabled);
             println!("  Output:  format={}", settings.output.default_format);
 
@@ -424,19 +492,26 @@ async fn main() -> anyhow::Result<()> {
                         return Err(anyhow::anyhow!(
                             "Unknown group '{}'. Available groups: {}",
                             group_name,
-                            registry::list_groups().iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ")
+                            registry::list_groups()
+                                .iter()
+                                .map(|(n, _)| *n)
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         ));
                     }
                 }
             } else {
-                let groups: Vec<_> = registry::TOOL_GROUPS.iter().map(|g| {
-                    serde_json::json!({
-                        "name": g.name,
-                        "description": g.description,
-                        "tool_count": g.tools.len(),
-                        "tools": g.tools,
+                let groups: Vec<_> = registry::TOOL_GROUPS
+                    .iter()
+                    .map(|g| {
+                        serde_json::json!({
+                            "name": g.name,
+                            "description": g.description,
+                            "tool_count": g.tools.len(),
+                            "tools": g.tools,
+                        })
                     })
-                }).collect();
+                    .collect();
                 let result = serde_json::json!({
                     "total_groups": groups.len(),
                     "total_tools": registry::total_tool_count(),
@@ -451,8 +526,18 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(pools::pools_list().await)?;
                 output(fmt, &result);
             }
-            PoolAction::Upsert { id, name, description } => {
-                let result = r(pools::pools_upsert(PoolUpsertInput { id, name, description, is_active: Some(true) }).await)?;
+            PoolAction::Upsert {
+                id,
+                name,
+                description,
+            } => {
+                let result = r(pools::pools_upsert(PoolUpsertInput {
+                    id,
+                    name,
+                    description,
+                    is_active: Some(true),
+                })
+                .await)?;
                 output(fmt, &result);
             }
             PoolAction::Delete { id } => {
@@ -464,12 +549,20 @@ async fn main() -> anyhow::Result<()> {
         Commands::Sources { action } => match action {
             SourceAction::List { pool, active_only } => {
                 let pools = pool.map(|p| vec![p]);
-                let result = r(sources::sources_list(SourceListInput { pools, active_only: Some(active_only), cursor: None, page_size: None, output: OutputOptions { format: None } }).await)?;
+                let result = r(sources::sources_list(SourceListInput {
+                    pools,
+                    active_only: Some(active_only),
+                    cursor: None,
+                    page_size: None,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
             SourceAction::Discover { url, pool, name } => {
                 let pools = pool.map(|p| vec![p]);
-                let result = r(sources::sources_autodiscover(AutodiscoverInput { url, pools, name }).await)?;
+                let result =
+                    r(sources::sources_autodiscover(AutodiscoverInput { url, pools, name }).await)?;
                 output(fmt, &result);
             }
             SourceAction::Countries => {
@@ -487,23 +580,50 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::News { action } => match action {
-            NewsAction::Fetch { pools, sources: srcs, countries, start, end, keywords, limit, cache_mode, depth } => {
+            NewsAction::Fetch {
+                pools,
+                sources: srcs,
+                countries,
+                start,
+                end,
+                keywords,
+                limit,
+                cache_mode,
+                depth,
+            } => {
                 let kw = keywords.map(KeywordFilter::Multiple);
                 let result = r(news::news_fetch(NewsFetchInput {
                     filters: DiscoveryFilters {
-                        pools, sources: srcs, countries, cities: None, domains: None,
-                        start, end, keywords: kw, exclude_keywords: None, match_all: None,
-                        limit: Some(limit), cache_mode: Some(cache_mode),
+                        pools,
+                        sources: srcs,
+                        countries,
+                        cities: None,
+                        domains: None,
+                        start,
+                        end,
+                        keywords: kw,
+                        exclude_keywords: None,
+                        match_all: None,
+                        limit: Some(limit),
+                        cache_mode: Some(cache_mode),
                     },
-                    discovery_mode: None, urgency: None,
-                    skip_enrich: None, skip_index: None,
+                    discovery_mode: None,
+                    urgency: None,
+                    skip_enrich: None,
+                    skip_index: None,
                     depth_opts: DepthOptions { depth },
                     output: OutputOptions { format: None },
-                }).await)?;
+                })
+                .await)?;
                 output(fmt, &result);
             }
             NewsAction::Test { id, cache_mode } => {
-                let result = r(news::news_test_source(NewsTestInput { id, cache_mode: Some(cache_mode), output: OutputOptions { format: None } }).await)?;
+                let result = r(news::news_test_source(NewsTestInput {
+                    id,
+                    cache_mode: Some(cache_mode),
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
             NewsAction::Enrich { input, extract } => {
@@ -516,78 +636,230 @@ async fn main() -> anyhow::Result<()> {
                         std::fs::read_to_string(&path)?
                     }
                 } else {
-                    return Err(anyhow::anyhow!("Provide --input <file> or --input - for stdin"));
+                    return Err(anyhow::anyhow!(
+                        "Provide --input <file> or --input - for stdin"
+                    ));
                 };
                 let items: Vec<EnrichItemInput> = serde_json::from_str(&items_json)?;
-                let result = r(news::news_enrich(NewsEnrichInput { items, extract, output: OutputOptions { format: None } }).await)?;
+                let result = r(news::news_enrich(NewsEnrichInput {
+                    items,
+                    extract,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
         },
 
         Commands::Reddit { action } => match action {
-            RedditAction::Search { query, subreddits, sort, time, limit } => {
+            RedditAction::Search {
+                query,
+                subreddits,
+                sort,
+                time,
+                limit,
+            } => {
                 let result = r(reddit::reddit_search(RedditSearchInput {
-                    query, subreddits, sort: Some(sort), time: Some(time), limit: Some(limit), output: OutputOptions { format: None },
-                }).await)?;
+                    query,
+                    subreddits,
+                    sort: Some(sort),
+                    time: Some(time),
+                    limit: Some(limit),
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
             RedditAction::Feed { subreddits, limit } => {
                 let result = r(reddit::reddit_feed(RedditFeedInput {
-                    subreddits, limit: Some(limit), output: OutputOptions { format: None },
-                }).await)?;
+                    subreddits,
+                    limit: Some(limit),
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
         },
 
         Commands::Research { action } => match action {
-            ResearchAction::Search { query, sources: srcs, categories, year_from, year_to, limit } => {
+            ResearchAction::Search {
+                query,
+                sources: srcs,
+                categories,
+                year_from,
+                year_to,
+                limit,
+            } => {
                 let result = r(research::research_search(ResearchSearchInput {
-                    query, sources: Some(srcs), categories, year_from, year_to, limit: Some(limit), output: OutputOptions { format: None },
-                }).await)?;
+                    query,
+                    sources: Some(srcs),
+                    categories,
+                    year_from,
+                    year_to,
+                    limit: Some(limit),
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
-            ResearchAction::Paper { id, include_citations, include_references } => {
+            ResearchAction::Paper {
+                id,
+                include_citations,
+                include_references,
+            } => {
                 let result = r(research::research_paper(ResearchPaperInput {
-                    paper_id: id, include_citations: Some(include_citations), include_references: Some(include_references), extract_pdf: None,
-                }).await)?;
+                    paper_id: id,
+                    include_citations: Some(include_citations),
+                    include_references: Some(include_references),
+                    extract_pdf: None,
+                })
+                .await)?;
                 output(fmt, &result);
             }
-            ResearchAction::Download { id, output: out, convert_to_markdown } => {
+            ResearchAction::Download {
+                id,
+                output: out,
+                convert_to_markdown,
+            } => {
                 let result = r(research::research_download(ResearchDownloadInput {
-                    paper_id: id, output_path: out, output: OutputOptions { format: None }, convert_to_markdown: Some(convert_to_markdown),
-                }).await)?;
+                    paper_id: id,
+                    output_path: out,
+                    output: OutputOptions { format: None },
+                    convert_to_markdown: Some(convert_to_markdown),
+                })
+                .await)?;
                 output(fmt, &result);
             }
         },
 
         Commands::Web { action } => match action {
-            WebAction::Search { query, max_results, topic, include_domains, exclude_domains } => {
+            WebAction::Search {
+                query,
+                max_results,
+                topic,
+                include_domains,
+                exclude_domains,
+            } => {
                 let result = r(web::web_search(WebSearchInput {
-                    query, provider: None, max_results: Some(max_results), topic,
-                    include_domains, exclude_domains, days: None, include_answer: None, output: OutputOptions { format: None },
-                }).await)?;
+                    query,
+                    provider: None,
+                    max_results: Some(max_results),
+                    topic,
+                    include_domains,
+                    exclude_domains,
+                    days: None,
+                    include_answer: None,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
-            WebAction::Scrape { url, provider, wait_selector, strip_mode, wait_until, include_frames } => {
+            WebAction::Scrape {
+                url,
+                provider,
+                wait_selector,
+                strip_mode,
+                wait_until,
+                include_frames,
+            } => {
                 let result = r(web::web_scrape(WebScrapeInput {
-                    url, provider: Some(provider), formats: None,
-                    wait_selector, strip_mode, structured_data: None,
-                    include_frames: Some(include_frames), wait_until, output: OutputOptions { format: None },
-                }).await)?;
+                    url,
+                    provider: Some(provider),
+                    formats: None,
+                    wait_selector,
+                    strip_mode,
+                    structured_data: None,
+                    include_frames: Some(include_frames),
+                    wait_until,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
-            WebAction::Crawl { url, max_depth, max_pages, obey_robots, dump_format, wait_selector } => {
+            WebAction::Crawl {
+                url,
+                max_depth,
+                max_pages,
+                obey_robots,
+                dump_format,
+                wait_selector,
+            } => {
                 let result = r(web::web_crawl(WebCrawlInput {
-                    url, provider: None, max_depth: Some(max_depth), max_pages: Some(max_pages),
-                    obey_robots: Some(obey_robots), dump_format: Some(dump_format),
-                    wait_until: None, include_frames: None, wait_selector, strip_mode: None, output: OutputOptions { format: None },
-                }).await)?;
+                    url,
+                    provider: None,
+                    max_depth: Some(max_depth),
+                    max_pages: Some(max_pages),
+                    obey_robots: Some(obey_robots),
+                    dump_format: Some(dump_format),
+                    wait_until: None,
+                    include_frames: None,
+                    wait_selector,
+                    strip_mode: None,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
                 output(fmt, &result);
             }
             WebAction::Map { url, limit, search } => {
                 let result = r(web::web_map(WebMapInput {
-                    url, provider: None, limit: Some(limit), search, output: OutputOptions { format: None },
-                }).await)?;
+                    url,
+                    provider: None,
+                    limit: Some(limit),
+                    search,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+        },
+
+        Commands::Twitter { action } => match action {
+            TwitterAction::Search {
+                query,
+                limit,
+                mode,
+            } => {
+                let result = r(twitter::twitter_search(TwitterSearchInput {
+                    query,
+                    limit: Some(limit as u32),
+                    search_mode: mode,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+            TwitterAction::Read { url } => {
+                let result = r(twitter::twitter_read(TwitterReadInput {
+                    url,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+        },
+
+        Commands::Youtube { action } => match action {
+            YoutubeAction::Search { query, limit } => {
+                let result = r(youtube::youtube_search(YoutubeSearchInput {
+                    query,
+                    limit: Some(limit as u32),
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+            YoutubeAction::Metadata { url } => {
+                let result = r(youtube::youtube_metadata(YoutubeMetadataInput {
+                    url,
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+            YoutubeAction::Subtitles { url, lang } => {
+                let result = r(youtube::youtube_subtitles(YoutubeSubtitlesInput {
+                    url,
+                    language: lang,
+                })
+                .await)?;
                 output(fmt, &result);
             }
         },
@@ -597,55 +869,127 @@ async fn main() -> anyhow::Result<()> {
 
             match action {
                 BrowserAction::Goto { url, wait_until } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(&Arc::new(Mutex::new(None)), LpGotoInput { url, wait_until: Some(wait_until) }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(
+                        &Arc::new(Mutex::new(None)),
+                        LpGotoInput {
+                            url,
+                            wait_until: Some(wait_until),
+                        },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Markdown { strip_mode } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_markdown(&Arc::new(Mutex::new(None)), LpMarkdownInput { strip_mode }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_markdown(
+                        &Arc::new(Mutex::new(None)),
+                        LpMarkdownInput { strip_mode },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Links { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_links(&Arc::new(Mutex::new(None)), LpLinksInput { selector }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_links(
+                        &Arc::new(Mutex::new(None)),
+                        LpLinksInput { selector },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Evaluate { expression } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_evaluate(&Arc::new(Mutex::new(None)), LpEvaluateInput { expression }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_evaluate(
+                        &Arc::new(Mutex::new(None)),
+                        LpEvaluateInput { expression },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::SemanticTree { include_text } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_semantic_tree(&Arc::new(Mutex::new(None)), LpSemanticTreeInput { include_text: Some(include_text) }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_semantic_tree(
+                        &Arc::new(Mutex::new(None)),
+                        LpSemanticTreeInput {
+                            include_text: Some(include_text),
+                        },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::StructuredData => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_structured_data(&Arc::new(Mutex::new(None)), LpStructuredDataInput { jsonld: None, opengraph: None, microdata: None }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_structured_data(
+                        &Arc::new(Mutex::new(None)),
+                        LpStructuredDataInput {
+                            jsonld: None,
+                            opengraph: None,
+                            microdata: None,
+                        },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::DetectForms { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_detect_forms(&Arc::new(Mutex::new(None)), LpDetectFormsInput { selector }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_detect_forms(
+                        &Arc::new(Mutex::new(None)),
+                        LpDetectFormsInput { selector },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
-                BrowserAction::Click { selector, wait_for_navigation } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(&Arc::new(Mutex::new(None)), LpClickInput { selector, wait_for_navigation: Some(wait_for_navigation) }).await)?;
+                BrowserAction::Click {
+                    selector,
+                    wait_for_navigation,
+                } => {
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(
+                        &Arc::new(Mutex::new(None)),
+                        LpClickInput {
+                            selector,
+                            wait_for_navigation: Some(wait_for_navigation),
+                        },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Fill { selector, value } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_fill(&Arc::new(Mutex::new(None)), LpFillInput { selector, value }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_fill(
+                        &Arc::new(Mutex::new(None)),
+                        LpFillInput { selector, value },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::Scroll { direction, pixels } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(&Arc::new(Mutex::new(None)), LpScrollInput { direction: Some(direction), pixels: Some(pixels) }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(
+                        &Arc::new(Mutex::new(None)),
+                        LpScrollInput {
+                            direction: Some(direction),
+                            pixels: Some(pixels),
+                        },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
-                BrowserAction::WaitForSelector { selector, timeout_ms } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(&Arc::new(Mutex::new(None)), LpWaitForSelectorInput { selector, timeout_ms: Some(timeout_ms) }).await)?;
+                BrowserAction::WaitForSelector {
+                    selector,
+                    timeout_ms,
+                } => {
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(
+                        &Arc::new(Mutex::new(None)),
+                        LpWaitForSelectorInput {
+                            selector,
+                            timeout_ms: Some(timeout_ms),
+                        },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
                 BrowserAction::InteractiveElements { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_interactive_elements(&Arc::new(Mutex::new(None)), LpInteractiveElementsInput { selector }).await)?;
+                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_interactive_elements(
+                        &Arc::new(Mutex::new(None)),
+                        LpInteractiveElementsInput { selector },
+                    )
+                    .await)?;
                     output(fmt, &result);
                 }
             }
-        },
+        }
     }
 
     Ok(())

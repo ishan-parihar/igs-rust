@@ -7,6 +7,6 @@ pub mod http;
 pub mod obscura;
 pub mod parsers;
 pub mod persistence;
+pub mod server;
 pub mod tools;
 pub mod types;
-pub mod server;

@@ -27,7 +27,10 @@ pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutp
     match config::load_sources().await {
         Ok(mut sf) => {
             let id = input.id.unwrap_or_else(|| {
-                input.name.to_lowercase().replace(|c: char| !c.is_alphanumeric() && c != '_', "_")
+                input
+                    .name
+                    .to_lowercase()
+                    .replace(|c: char| !c.is_alphanumeric() && c != '_', "_")
             });
             let src = Source {
                 id: id.clone(),
@@ -54,7 +57,9 @@ pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutp
             } else {
                 sf.sources.push(src);
             }
-            config::save_sources(&sf).await.map_err(|e| format!("Save failed: {}", e))?;
+            config::save_sources(&sf)
+                .await
+                .map_err(|e| format!("Save failed: {}", e))?;
             Ok(SourceUpsertOutput { id })
         }
         Err(e) => Err(format!("Failed to load sources: {}", e)),
@@ -68,7 +73,9 @@ pub async fn sources_delete(input: SourceDeleteInput) -> Result<SourceDeleteOutp
             let before = sf.sources.len();
             sf.sources.retain(|s| s.id != input.id);
             let removed = sf.sources.len() < before;
-            config::save_sources(&sf).await.map_err(|e| format!("Save failed: {}", e))?;
+            config::save_sources(&sf)
+                .await
+                .map_err(|e| format!("Save failed: {}", e))?;
             Ok(SourceDeleteOutput { removed })
         }
         Err(e) => Err(format!("Failed to load sources: {}", e)),
@@ -84,7 +91,9 @@ pub async fn sources_autodiscover(input: AutodiscoverInput) -> Result<Autodiscov
             match http.fetch(&input.url, None, "bypass").await {
                 Ok(outcome) => {
                     let body = match outcome {
-                        http_mod::FetchOutcome::Cached(_) => return Err("Unexpected cache hit".into()),
+                        http_mod::FetchOutcome::Cached(_) => {
+                            return Err("Unexpected cache hit".into())
+                        }
                         http_mod::FetchOutcome::Response(resp, _, _) => resp.body_text,
                     };
                     let feed_url = find_feed_url(&body, &input.url);
@@ -96,7 +105,8 @@ pub async fn sources_autodiscover(input: AutodiscoverInput) -> Result<Autodiscov
                             sample: vec![],
                         })
                     } else {
-                        let sitemap_url = format!("{}/sitemap.xml", input.url.trim_end_matches('/'));
+                        let sitemap_url =
+                            format!("{}/sitemap.xml", input.url.trim_end_matches('/'));
                         match http.fetch(&sitemap_url, None, "bypass").await {
                             Ok(_) => Ok(AutodiscoverOutput {
                                 kind: "sitemap".into(),
@@ -119,7 +129,9 @@ pub async fn sources_autodiscover(input: AutodiscoverInput) -> Result<Autodiscov
 }
 
 /// Enable generic HTML scraping for a source
-pub async fn sources_enable_scraper(input: EnableScraperInput) -> Result<EnableScraperOutput, String> {
+pub async fn sources_enable_scraper(
+    input: EnableScraperInput,
+) -> Result<EnableScraperOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {
             if let Some(idx) = sf.sources.iter().position(|s| s.id == input.id) {
@@ -135,7 +147,9 @@ pub async fn sources_enable_scraper(input: EnableScraperInput) -> Result<EnableS
                         desc: sel_map.get("desc").cloned(),
                     }),
                 });
-                config::save_sources(&sf).await.map_err(|e| format!("Save failed: {}", e))?;
+                config::save_sources(&sf)
+                    .await
+                    .map_err(|e| format!("Save failed: {}", e))?;
                 Ok(EnableScraperOutput { updated: true })
             } else {
                 Err(format!("Source not found: {}", input.id))
@@ -147,8 +161,12 @@ pub async fn sources_enable_scraper(input: EnableScraperInput) -> Result<EnableS
 
 /// List countries with available source counts
 pub async fn sources_countries() -> Result<CountriesOutput, String> {
-    let countries = config::load_countries().await.unwrap_or(serde_json::json!({"countries": []}));
-    let sources = config::load_sources().await.unwrap_or(SourcesFile { sources: vec![] });
+    let countries = config::load_countries()
+        .await
+        .unwrap_or(serde_json::json!({"countries": []}));
+    let sources = config::load_sources()
+        .await
+        .unwrap_or(SourcesFile { sources: vec![] });
     let out: Vec<CountryInfo> = countries["countries"]
         .as_array()
         .map(|arr| {
@@ -161,10 +179,16 @@ pub async fn sources_countries() -> Result<CountriesOutput, String> {
                         .iter()
                         .filter(|s| {
                             s.is_active.unwrap_or(true)
-                                && s.countries.iter().any(|sc| sc.to_uppercase() == code.to_uppercase())
+                                && s.countries
+                                    .iter()
+                                    .any(|sc| sc.to_uppercase() == code.to_uppercase())
                         })
                         .count();
-                    Some(CountryInfo { name, code, source_count: count })
+                    Some(CountryInfo {
+                        name,
+                        code,
+                        source_count: count,
+                    })
                 })
                 .collect()
         })
@@ -174,7 +198,9 @@ pub async fn sources_countries() -> Result<CountriesOutput, String> {
 
 /// List cities with available source counts
 pub async fn sources_cities() -> Result<CitiesOutput, String> {
-    let sources = config::load_sources().await.unwrap_or(SourcesFile { sources: vec![] });
+    let sources = config::load_sources()
+        .await
+        .unwrap_or(SourcesFile { sources: vec![] });
     let mut city_map: HashMap<String, usize> = HashMap::new();
     for s in &sources.sources {
         if s.is_active.unwrap_or(true) {
@@ -185,7 +211,10 @@ pub async fn sources_cities() -> Result<CitiesOutput, String> {
     }
     let mut cities: Vec<CityInfo> = city_map
         .into_iter()
-        .map(|(name, count)| CityInfo { name, source_count: count })
+        .map(|(name, count)| CityInfo {
+            name,
+            source_count: count,
+        })
         .collect();
     cities.sort_by(|a, b| b.source_count.cmp(&a.source_count));
     Ok(CitiesOutput { cities })
@@ -193,7 +222,9 @@ pub async fn sources_cities() -> Result<CitiesOutput, String> {
 
 /// List domains with available source counts
 pub async fn sources_domains() -> Result<DomainsOutput, String> {
-    let sources = config::load_sources().await.unwrap_or(SourcesFile { sources: vec![] });
+    let sources = config::load_sources()
+        .await
+        .unwrap_or(SourcesFile { sources: vec![] });
     let mut domain_map: HashMap<String, usize> = HashMap::new();
     for s in &sources.sources {
         if s.is_active.unwrap_or(true) {
@@ -204,7 +235,10 @@ pub async fn sources_domains() -> Result<DomainsOutput, String> {
     }
     let mut domains: Vec<DomainInfoCount> = domain_map
         .into_iter()
-        .map(|(name, count)| DomainInfoCount { name, source_count: count })
+        .map(|(name, count)| DomainInfoCount {
+            name,
+            source_count: count,
+        })
         .collect();
     domains.sort_by(|a, b| b.source_count.cmp(&a.source_count));
     Ok(DomainsOutput { domains })

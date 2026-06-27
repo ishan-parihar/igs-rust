@@ -14,8 +14,7 @@ pub fn user_config_dir() -> PathBuf {
         }
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let xdg = std::env::var("XDG_CONFIG_HOME")
-        .unwrap_or_else(|_| format!("{}/.config", home));
+    let xdg = std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| format!("{}/.config", home));
     PathBuf::from(xdg).join("igs-mcp")
 }
 

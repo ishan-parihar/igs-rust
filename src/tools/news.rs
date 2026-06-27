@@ -21,15 +21,29 @@ fn depth_limits(depth: &str) -> (usize, usize) {
 
 /// Fetch normalized news items from configured sources
 pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = Arc::new(HttpClient::new(&settings.http, &cache_dir));
-    let sf = config::load_sources().await.map_err(|e| format!("Sources: {}", e))?;
+    let sf = config::load_sources()
+        .await
+        .map_err(|e| format!("Sources: {}", e))?;
 
-    let cache_mode = input.filters.cache_mode.unwrap_or_else(|| "prefer".to_string());
-    let depth = input.depth_opts.depth.unwrap_or_else(|| "default".to_string());
+    let cache_mode = input
+        .filters
+        .cache_mode
+        .unwrap_or_else(|| "prefer".to_string());
+    let depth = input
+        .depth_opts
+        .depth
+        .unwrap_or_else(|| "default".to_string());
     let (max_sources, max_results) = depth_limits(&depth);
-    let limit = input.filters.limit.unwrap_or(max_results as i32).clamp(1, 500) as usize;
+    let limit = input
+        .filters
+        .limit
+        .unwrap_or(max_results as i32)
+        .clamp(1, 500) as usize;
 
     let mut sources = sf.sources;
     sources.retain(|s| s.is_active.unwrap_or(true));
@@ -46,20 +60,32 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
         if !countries.is_empty() {
             sources.retain(|s| {
                 s.countries.iter().any(|sc| {
-                    countries.iter().any(|c| sc.to_uppercase() == c.to_uppercase())
+                    countries
+                        .iter()
+                        .any(|c| sc.to_uppercase() == c.to_uppercase())
                 })
             });
         }
     }
     if let Some(ref cities) = input.filters.cities {
         if !cities.is_empty() {
-            sources.retain(|s| s.cities.iter().any(|c| cities.iter().any(|cc| c.to_lowercase() == cc.to_lowercase())));
+            sources.retain(|s| {
+                s.cities.iter().any(|c| {
+                    cities
+                        .iter()
+                        .any(|cc| c.to_lowercase() == cc.to_lowercase())
+                })
+            });
         }
     }
     if let Some(ref domains) = input.filters.domains {
         if !domains.is_empty() {
             sources.retain(|s| {
-                s.domains.iter().any(|d| domains.iter().any(|dd| d.to_lowercase() == dd.to_lowercase()))
+                s.domains.iter().any(|d| {
+                    domains
+                        .iter()
+                        .any(|dd| d.to_lowercase() == dd.to_lowercase())
+                })
             });
         }
     }
@@ -71,7 +97,9 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
     let mut succeeded = 0usize;
     let mut failed = 0usize;
 
-    let sem = Arc::new(tokio::sync::Semaphore::new(settings.http.concurrency as usize));
+    let sem = Arc::new(tokio::sync::Semaphore::new(
+        settings.http.concurrency as usize,
+    ));
     let total = sources.len();
 
     let mut handles = Vec::new();
@@ -97,22 +125,26 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
                     source_groups.push((items.clone(), weight));
                 }
                 all_items.extend(items);
-                if ok { succeeded += 1; } else { failed += 1; }
+                if ok {
+                    succeeded += 1;
+                } else {
+                    failed += 1;
+                }
             }
-            Err(_) => { failed += 1; }
+            Err(_) => {
+                failed += 1;
+            }
         }
     }
 
     all_items = if source_groups.len() > 1 {
         fusion::weighted_rrf_fusion(source_groups, 60)
     } else {
-        all_items.sort_by(|a, b| {
-            match (a.freshness_score, b.freshness_score) {
-                (Some(fa), Some(fb)) => fb.partial_cmp(&fa).unwrap_or(std::cmp::Ordering::Equal),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                _ => b.pub_date.cmp(&a.pub_date),
-            }
+        all_items.sort_by(|a, b| match (a.freshness_score, b.freshness_score) {
+            (Some(fa), Some(fb)) => fb.partial_cmp(&fa).unwrap_or(std::cmp::Ordering::Equal),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            _ => b.pub_date.cmp(&a.pub_date),
         });
         all_items
     };
@@ -140,7 +172,12 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
         }
     }
     if !input.discovery_mode.unwrap_or(false) {
-        let exclude = input.filters.exclude_keywords.as_ref().cloned().unwrap_or_default();
+        let exclude = input
+            .filters
+            .exclude_keywords
+            .as_ref()
+            .cloned()
+            .unwrap_or_default();
         all_items = parsers::filter_by_keywords(
             all_items,
             input.filters.keywords.as_ref(),
@@ -169,12 +206,18 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
 
     let clusters = if depth == "deep" && all_items.len() >= 5 {
         let article_clusters = clustering::cluster_articles(all_items.clone(), 2);
-        Some(article_clusters.into_iter().take(20).map(|c| ClusterInfo {
-            representative: c.representative,
-            member_count: c.members.len(),
-            entities: c.entities,
-            source_count: c.source_count,
-        }).collect())
+        Some(
+            article_clusters
+                .into_iter()
+                .take(20)
+                .map(|c| ClusterInfo {
+                    representative: c.representative,
+                    member_count: c.members.len(),
+                    entities: c.entities,
+                    source_count: c.source_count,
+                })
+                .collect(),
+        )
     } else {
         None
     };
@@ -215,38 +258,48 @@ pub async fn fetch_news_intelligent(
 
     // Step 2: Enrich with NLP (unless skipped)
     let enriched_items: Vec<EnrichedItem> = if input.skip_enrich.unwrap_or(false) {
-        fetch_output.items.iter().map(|item| EnrichedItem {
-            item: serde_json::json!({
-                "id": item.id,
-                "title": item.title,
-                "link": item.link,
-                "pub_date": item.pub_date,
-                "source_name": item.source_name,
-                "pool_id": item.pool_id,
-                "content_snippet": item.content_snippet,
-                "date_confidence": item.date_confidence,
-                "freshness_score": item.freshness_score,
-            }),
-            topics: Vec::new(),
-            entities: Vec::new(),
-            sentiment: None,
-            summary: None,
-        }).collect()
+        fetch_output
+            .items
+            .iter()
+            .map(|item| EnrichedItem {
+                item: serde_json::json!({
+                    "id": item.id,
+                    "title": item.title,
+                    "link": item.link,
+                    "pub_date": item.pub_date,
+                    "source_name": item.source_name,
+                    "pool_id": item.pool_id,
+                    "content_snippet": item.content_snippet,
+                    "date_confidence": item.date_confidence,
+                    "freshness_score": item.freshness_score,
+                }),
+                topics: Vec::new(),
+                entities: Vec::new(),
+                sentiment: None,
+                summary: None,
+            })
+            .collect()
     } else {
         let enrich_input = NewsEnrichInput {
-            items: fetch_output.items.iter().map(|item| EnrichItemInput {
-                id: item.id.clone(),
-                title: item.title.clone(),
-                link: item.link.clone(),
-                pub_date: item.pub_date.clone(),
-                source_name: item.source_name.clone(),
-                pool_id: item.pool_id.clone(),
-                content_snippet: Some(item.content_snippet.clone()),
-                date_confidence: item.date_confidence.clone(),
-                freshness_score: item.freshness_score,
-            }).collect(),
+            items: fetch_output
+                .items
+                .iter()
+                .map(|item| EnrichItemInput {
+                    id: item.id.clone(),
+                    title: item.title.clone(),
+                    link: item.link.clone(),
+                    pub_date: item.pub_date.clone(),
+                    source_name: item.source_name.clone(),
+                    pool_id: item.pool_id.clone(),
+                    content_snippet: Some(item.content_snippet.clone()),
+                    date_confidence: item.date_confidence.clone(),
+                    freshness_score: item.freshness_score,
+                })
+                .collect(),
             extract: None,
-            output: OutputOptions { format: Some("json".to_string()) },
+            output: OutputOptions {
+                format: Some("json".to_string()),
+            },
         };
 
         let enrich_output = news_enrich(enrich_input).await?;
@@ -259,36 +312,44 @@ pub async fn fetch_news_intelligent(
     let indexed_count = if input.skip_index.unwrap_or(false) {
         0
     } else {
-        let articles: Vec<InsightIndexArticle> = enriched_items.iter().filter_map(|item| {
-            let id = item.item["id"].as_str()?.to_string();
-            let title = item.item["title"].as_str()?.to_string();
-            let pub_date = item.item["pub_date"].as_str()?.to_string();
-            let source_name = item.item["source_name"].as_str()?.to_string();
+        let articles: Vec<InsightIndexArticle> = enriched_items
+            .iter()
+            .filter_map(|item| {
+                let id = item.item["id"].as_str()?.to_string();
+                let title = item.item["title"].as_str()?.to_string();
+                let pub_date = item.item["pub_date"].as_str()?.to_string();
+                let source_name = item.item["source_name"].as_str()?.to_string();
 
-            let entities = Some(item.entities.clone());
+                let entities = Some(item.entities.clone());
 
-            let domains = item.item.get("pool_id").and_then(|p| p.as_str()).map(|pool| {
-                vec![DomainInfo {
-                    domain: pool.to_string(),
-                    score: Some(1.0),
-                }]
-            });
+                let domains = item
+                    .item
+                    .get("pool_id")
+                    .and_then(|p| p.as_str())
+                    .map(|pool| {
+                        vec![DomainInfo {
+                            domain: pool.to_string(),
+                            score: Some(1.0),
+                        }]
+                    });
 
-            Some(InsightIndexArticle {
-                id,
-                title,
-                pub_date,
-                source_name,
-                domains,
-                entities,
+                Some(InsightIndexArticle {
+                    id,
+                    title,
+                    pub_date,
+                    source_name,
+                    domains,
+                    entities,
+                })
             })
-        }).collect();
+            .collect();
 
         if articles.is_empty() {
             0
         } else {
             let index_input = InsightIndexInput { articles };
-            let index_output = crate::tools::insights::insights_index(insights, index_input).await?;
+            let index_output =
+                crate::tools::insights::insights_index(insights, index_input).await?;
             index_output.indexed
         }
     };
@@ -306,12 +367,19 @@ pub async fn fetch_news_intelligent(
 
 /// Debug helper. Test a single source and return up to 10 items.
 pub async fn news_test_source(input: NewsTestInput) -> Result<NewsTestOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
-    let sf = config::load_sources().await.map_err(|e| format!("Sources: {}", e))?;
+    let sf = config::load_sources()
+        .await
+        .map_err(|e| format!("Sources: {}", e))?;
 
-    let src = sf.sources.iter().find(|s| s.id == input.id)
+    let src = sf
+        .sources
+        .iter()
+        .find(|s| s.id == input.id)
         .ok_or_else(|| format!("Source not found: {}", input.id))?;
 
     let cache_mode = input.cache_mode.as_deref().unwrap_or("bypass");
@@ -326,15 +394,24 @@ pub async fn news_test_source(input: NewsTestInput) -> Result<NewsTestOutput, St
 
 /// NLP enrichment (offline). Adds basic topics, sentiment, and summary to items.
 pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, String> {
-    let extract = input.extract.unwrap_or_else(|| vec![
-        "topics".into(), "entities".into(), "sentiment".into(), "summary".into(),
-    ]);
+    let extract = input.extract.unwrap_or_else(|| {
+        vec![
+            "topics".into(),
+            "entities".into(),
+            "sentiment".into(),
+            "summary".into(),
+        ]
+    });
     let features = extract.clone();
     let want: std::collections::HashSet<String> = extract.into_iter().collect();
 
     let mut out = Vec::new();
     for item in &input.items {
-        let text = format!("{} {}", item.title, item.content_snippet.as_deref().unwrap_or(""));
+        let text = format!(
+            "{} {}",
+            item.title,
+            item.content_snippet.as_deref().unwrap_or("")
+        );
 
         let mut enriched = EnrichedItem {
             item: serde_json::json!({
@@ -359,15 +436,18 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
         }
 
         if want.contains("entities") {
-            enriched.entities = extract_basic_entities(&text).into_iter().filter_map(|v| {
-                Some(EntityInfo {
-                    name: v["name"].as_str()?.to_string(),
-                    entity_type: v["type"].as_str().unwrap_or("Unknown").to_string(),
-                    mentions: v["mentions"].as_u64().map(|n| n as u32),
-                    confidence: v["confidence"].as_f64(),
-                    normalized_id: None,
+            enriched.entities = extract_basic_entities(&text)
+                .into_iter()
+                .filter_map(|v| {
+                    Some(EntityInfo {
+                        name: v["name"].as_str()?.to_string(),
+                        entity_type: v["type"].as_str().unwrap_or("Unknown").to_string(),
+                        mentions: v["mentions"].as_u64().map(|n| n as u32),
+                        confidence: v["confidence"].as_f64(),
+                        normalized_id: None,
+                    })
                 })
-            }).collect();
+                .collect();
         }
 
         if want.contains("sentiment") {
@@ -375,37 +455,59 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
             enriched.sentiment = Some(SentimentResult {
                 score: sentiment_value["score"].as_f64().unwrap_or(0.0),
                 comparative: sentiment_value["comparative"].as_f64().unwrap_or(0.0),
-                label: sentiment_value["label"].as_str().unwrap_or("neutral").to_string(),
+                label: sentiment_value["label"]
+                    .as_str()
+                    .unwrap_or("neutral")
+                    .to_string(),
             });
         }
 
         if want.contains("summary") {
-            enriched.summary = item.content_snippet.as_deref()
-                .and_then(|s| s.split(['.', '!', '?'])
-                    .find(|s| !s.trim().is_empty())
-                    .map(|s| s.trim().to_string()))
+            enriched.summary = item
+                .content_snippet
+                .as_deref()
+                .and_then(|s| {
+                    s.split(['.', '!', '?'])
+                        .find(|s| !s.trim().is_empty())
+                        .map(|s| s.trim().to_string())
+                })
                 .or_else(|| Some(item.title.clone()));
         }
 
         if want.contains("diversity") {
-            let title_words: Vec<String> = item.title
+            let title_words: Vec<String> = item
+                .title
                 .to_lowercase()
                 .split_whitespace()
                 .filter(|w| w.len() > 3)
                 .map(|s| s.to_string())
                 .collect();
-            let same_source_count = input.items.iter().filter(|other| {
-                other.id != item.id && other.source_name != item.source_name
-                    && title_words.iter().any(|tw| {
-                        other.title.to_lowercase().split_whitespace().any(|ow| ow == tw)
-                    })
-            }).count();
-            let total_sources: usize = input.items.iter()
+            let same_source_count = input
+                .items
+                .iter()
+                .filter(|other| {
+                    other.id != item.id
+                        && other.source_name != item.source_name
+                        && title_words.iter().any(|tw| {
+                            other
+                                .title
+                                .to_lowercase()
+                                .split_whitespace()
+                                .any(|ow| ow == tw)
+                        })
+                })
+                .count();
+            let total_sources: usize = input
+                .items
+                .iter()
                 .map(|i| &i.source_name)
                 .collect::<std::collections::HashSet<_>>()
                 .len();
-            let diversity = if total_sources <= 1 { 0.0 }
-                else { (same_source_count as f64 / total_sources.max(1) as f64).min(1.0) };
+            let diversity = if total_sources <= 1 {
+                0.0
+            } else {
+                (same_source_count as f64 / total_sources.max(1) as f64).min(1.0)
+            };
             // diversity is not a field on EnrichedItem — keep as part of item value
             if let Some(obj) = enriched.item.as_object_mut() {
                 obj.insert("source_diversity".to_string(), serde_json::json!(diversity));

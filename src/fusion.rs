@@ -1,10 +1,11 @@
-use std::collections::HashMap;
 use crate::types::NewsItem;
+use std::collections::HashMap;
 
 /// Generate a dedup key from a NewsItem's title for RRF fusion.
 /// Uses normalized title words (lowercased, stripped of short words).
 fn dedup_key(item: &NewsItem) -> String {
-    let mut words: Vec<String> = item.title
+    let mut words: Vec<String> = item
+        .title
         .to_lowercase()
         .split_whitespace()
         .filter(|w| w.len() > 2)
@@ -28,10 +29,7 @@ fn dedup_key(item: &NewsItem) -> String {
 ///
 /// # Returns
 /// Items sorted by RRF score (highest first), deduplicated by title.
-pub fn weighted_rrf_fusion(
-    result_lists: Vec<(Vec<NewsItem>, f64)>,
-    k: usize,
-) -> Vec<NewsItem> {
+pub fn weighted_rrf_fusion(result_lists: Vec<(Vec<NewsItem>, f64)>, k: usize) -> Vec<NewsItem> {
     let mut scores: HashMap<String, f64> = HashMap::new();
     let mut item_map: HashMap<String, NewsItem> = HashMap::new();
 
@@ -51,7 +49,8 @@ pub fn weighted_rrf_fusion(
     let mut scored: Vec<(String, f64)> = scores.into_iter().collect();
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    scored.into_iter()
+    scored
+        .into_iter()
         .filter_map(|(key, _)| item_map.remove(&key))
         .collect()
 }
@@ -64,7 +63,8 @@ pub fn source_diversity(item: &NewsItem, all_sources: &[String]) -> f64 {
         return 0.0;
     }
     // Count how many sources mention the same keywords from the title
-    let title_words: Vec<String> = item.title
+    let title_words: Vec<String> = item
+        .title
         .to_lowercase()
         .split_whitespace()
         .filter(|w| w.len() > 3)
@@ -75,11 +75,15 @@ pub fn source_diversity(item: &NewsItem, all_sources: &[String]) -> f64 {
         return 0.0;
     }
 
-    let matching = all_sources.iter().filter(|source| {
-        source.to_lowercase().split_whitespace().any(|w| {
-            title_words.iter().any(|tw| tw == w)
+    let matching = all_sources
+        .iter()
+        .filter(|source| {
+            source
+                .to_lowercase()
+                .split_whitespace()
+                .any(|w| title_words.iter().any(|tw| tw == w))
         })
-    }).count();
+        .count();
 
     (matching as f64 / all_sources.len().max(1) as f64).min(1.0)
 }
@@ -135,10 +139,7 @@ mod tests {
     fn test_rrf_with_weights() {
         let source_a = vec![make_item("Story A", "blog")]; // low weight
         let source_b = vec![make_item("Story A", "reuters")]; // high weight
-        let result = weighted_rrf_fusion(vec![
-            (source_a, 0.3),
-            (source_b, 2.0),
-        ], 60);
+        let result = weighted_rrf_fusion(vec![(source_a, 0.3), (source_b, 2.0)], 60);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].title, "Story A");
     }

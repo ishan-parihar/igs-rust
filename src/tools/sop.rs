@@ -58,19 +58,28 @@ fn built_in_chains() -> Vec<SopChain> {
 pub fn sop_list() -> SopListOutput {
     let chains = built_in_chains();
     SopListOutput {
-        chains: chains.into_iter().map(|c| SopChainInfo {
-            name: c.name,
-            description: c.description,
-            step_count: c.steps.len(),
-        }).collect(),
+        chains: chains
+            .into_iter()
+            .map(|c| SopChainInfo {
+                name: c.name,
+                description: c.description,
+                step_count: c.steps.len(),
+            })
+            .collect(),
     }
 }
 
 pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
     let chains = built_in_chains();
-    let chain = chains.iter()
+    let chain = chains
+        .iter()
         .find(|c| c.name == input.chain_name)
-        .ok_or_else(|| format!("Unknown chain '{}'. Use sop.list to see available chains.", input.chain_name))?;
+        .ok_or_else(|| {
+            format!(
+                "Unknown chain '{}'. Use sop.list to see available chains.",
+                input.chain_name
+            )
+        })?;
 
     let mut results = Vec::new();
 
@@ -91,7 +100,10 @@ pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
                         step: i,
                         tool: step.tool.clone(),
                         status: "skipped".into(),
-                        output: format!("Dependency step {} did not complete ({})", dep, dep_result.status),
+                        output: format!(
+                            "Dependency step {} did not complete ({})",
+                            dep, dep_result.status
+                        ),
                     });
                     continue;
                 }
@@ -154,10 +166,18 @@ mod tests {
     #[test]
     fn test_dependency_validation() {
         let chains = built_in_chains();
-        let chain = chains.iter().find(|c| c.name == "deep-threat-intel").unwrap();
+        let chain = chains
+            .iter()
+            .find(|c| c.name == "deep-threat-intel")
+            .unwrap();
         for (i, step) in chain.steps.iter().enumerate() {
             if let Some(dep) = step.depends_on {
-                assert!(dep < i, "Step {} depends on step {} which is not before it", i, dep);
+                assert!(
+                    dep < i,
+                    "Step {} depends on step {} which is not before it",
+                    i,
+                    dep
+                );
             }
         }
     }

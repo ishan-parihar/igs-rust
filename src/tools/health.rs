@@ -1,7 +1,7 @@
-use crate::config;
-use crate::http::{self as http_mod, HttpClient};
 use super::helpers::urlencoding;
 use super::types::*;
+use crate::config;
+use crate::http::{self as http_mod, HttpClient};
 
 pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCdcOutput, String> {
     let client = reqwest::Client::new();
@@ -65,13 +65,15 @@ pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCd
 }
 
 pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
-    
+
     let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
-    
+
     let mut filters = Vec::new();
     if let Some(ref country) = input.country {
         filters.push(format!("SpatialDim eq '{}'", country));
@@ -79,27 +81,29 @@ pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, St
     if let Some(year) = input.year {
         filters.push(format!("TimeDim eq {}", year));
     }
-    
+
     let mut url = format!(
         "https://ghoapi.azureedge.net/api/{}?$top={}",
         indicator, limit
     );
-    
+
     if !filters.is_empty() {
         url = format!("{}&$filter={}", url, filters.join(" and "));
     }
-    
-    let outcome = http.fetch(&url, None, "bypass").await
+
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("WHO GHO API error: {}", e))?;
-    
+
     let resp = match outcome {
         http_mod::FetchOutcome::Response(r, _, _) => r,
         _ => return Err("WHO GHO returned cached response".into()),
     };
-    
-    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
-        .map_err(|e| format!("JSON parse error: ${e}"))?;
-    
+
+    let data: serde_json::Value =
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
+
     let mut observations = Vec::new();
     if let Some(results) = data["value"].as_array() {
         for r in results {
@@ -113,9 +117,13 @@ pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, St
             });
         }
     }
-    
+
     Ok(HealthWhoOutput {
-        query: format!("{} ({})", indicator, input.country.as_deref().unwrap_or("Global")),
+        query: format!(
+            "{} ({})",
+            indicator,
+            input.country.as_deref().unwrap_or("Global")
+        ),
         total: observations.len(),
         observations,
     })

@@ -48,22 +48,32 @@ struct RedditPost {
 
 /// Load Reddit cookie from settings
 async fn load_reddit_cookie() -> Result<String, String> {
-    let settings = config::load_settings().await
+    let settings = config::load_settings()
+        .await
         .map_err(|e| format!("Settings load failed: {}", e))?;
-    
-    settings.reddit
+
+    settings
+        .reddit
         .and_then(|r| r.cookie)
         .filter(|c| !c.is_empty())
-        .ok_or_else(|| "Reddit cookie not configured. Add reddit.cookie to settings.yml".to_string())
+        .ok_or_else(|| {
+            "Reddit cookie not configured. Add reddit.cookie to settings.yml".to_string()
+        })
 }
 
 /// Build a dedicated reqwest Client for Reddit with browser-like headers.
 fn build_reddit_client(cookie: &str) -> Client {
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_static(REDDIT_USER_AGENT));
-    headers.insert(COOKIE, HeaderValue::from_str(cookie).expect("Invalid cookie header"));
+    headers.insert(
+        COOKIE,
+        HeaderValue::from_str(cookie).expect("Invalid cookie header"),
+    );
     headers.insert("Accept", HeaderValue::from_static("application/json"));
-    headers.insert("Accept-Language", HeaderValue::from_static("en-US,en;q=0.9"));
+    headers.insert(
+        "Accept-Language",
+        HeaderValue::from_static("en-US,en;q=0.9"),
+    );
 
     Client::builder()
         .default_headers(headers)
@@ -80,7 +90,12 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
     for attempt in 0..=max_retries {
         if attempt > 0 {
             let delay = Duration::from_secs(2u64.pow(attempt as u32));
-            tracing::info!("Reddit: retry {} after {}s for {}", attempt, delay.as_secs(), url);
+            tracing::info!(
+                "Reddit: retry {} after {}s for {}",
+                attempt,
+                delay.as_secs(),
+                url
+            );
             tokio::time::sleep(delay).await;
         }
 
@@ -89,20 +104,28 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
                 let status = resp.status().as_u16();
 
                 if status == 429 {
-                    let retry_after = resp.headers()
+                    let retry_after = resp
+                        .headers()
                         .get("retry-after")
                         .and_then(|v| v.to_str().ok())
                         .and_then(|s| s.parse::<u64>().ok())
                         .unwrap_or(10);
 
-                    tracing::warn!("Reddit: 429 rate-limited for {}, Retry-After: {}s", url, retry_after);
+                    tracing::warn!(
+                        "Reddit: 429 rate-limited for {}, Retry-After: {}s",
+                        url,
+                        retry_after
+                    );
                     tokio::time::sleep(Duration::from_secs(retry_after)).await;
                     last_err = format!("429 rate-limited (Retry-After: {}s)", retry_after);
                     continue;
                 }
 
                 if status == 401 || status == 403 {
-                    return Err(format!("Reddit auth failed (HTTP {}). Check your cookie in settings.yml.", status));
+                    return Err(format!(
+                        "Reddit auth failed (HTTP {}). Check your cookie in settings.yml.",
+                        status
+                    ));
                 }
 
                 if status >= 400 {
@@ -113,12 +136,21 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
             }
             Err(e) => {
                 last_err = e.to_string();
-                tracing::warn!("Reddit: request error for {} (attempt {}): {}", url, attempt, e);
+                tracing::warn!(
+                    "Reddit: request error for {} (attempt {}): {}",
+                    url,
+                    attempt,
+                    e
+                );
             }
         }
     }
 
-    Err(format!("Failed after {} retries: {}", max_retries + 1, last_err))
+    Err(format!(
+        "Failed after {} retries: {}",
+        max_retries + 1,
+        last_err
+    ))
 }
 
 // ─── Reddit Search (JSON API) ─────────────────────────────────
@@ -127,7 +159,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
     if input.query.trim().is_empty() {
         return Err("Query cannot be empty".to_string());
     }
-    
+
     let sort = input.sort.as_deref().unwrap_or("relevance");
     let time = input.time.as_deref().unwrap_or("all");
     let limit = input.limit.unwrap_or(25).clamp(1, 100);
@@ -140,7 +172,10 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
     let search_urls = if subreddits.is_empty() {
         vec![format!(
             "https://www.reddit.com/search.json?q={}&sort={}&t={}&limit={}&raw_json=1",
-            urlencoding(&input.query), sort, time, limit
+            urlencoding(&input.query),
+            sort,
+            time,
+            limit
         )]
     } else {
         subreddits.iter().map(|sr| {
@@ -200,7 +235,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                 freshness_score: Some(parsers::calculate_freshness(
                     &chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
                         .map(|d| d.to_rfc3339())
-                        .unwrap_or_default()
+                        .unwrap_or_default(),
                 )),
             });
         }
@@ -234,7 +269,8 @@ pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, Str
 
         let url = format!(
             "https://www.reddit.com/r/{}/hot.json?limit={}&raw_json=1",
-            urlencoding(sub), limit
+            urlencoding(sub),
+            limit
         );
 
         let body = match reddit_get(&client, &url).await {
@@ -267,7 +303,8 @@ pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, Str
             };
             let content_snippet = content_snippet.chars().take(600).collect::<String>();
 
-            let item_id = parsers::make_item_id(&post.title, &link, &pub_date, &format!("reddit_{}", sub));
+            let item_id =
+                parsers::make_item_id(&post.title, &link, &pub_date, &format!("reddit_{}", sub));
 
             all_posts.push(NewsItem {
                 id: item_id,
@@ -283,7 +320,7 @@ pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, Str
                 freshness_score: Some(parsers::calculate_freshness(
                     &chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
                         .map(|d| d.to_rfc3339())
-                        .unwrap_or_default()
+                        .unwrap_or_default(),
                 )),
             });
         }

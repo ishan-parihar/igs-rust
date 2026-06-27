@@ -1,13 +1,15 @@
+use super::types::*;
 use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
-use super::types::*;
 
 pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
-    
+
     let query = urlencoding(&input.query);
     let congress = input.congress.unwrap_or(118);
 
@@ -16,7 +18,9 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
         query, congress
     );
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("Congress.gov API error: {}", e))?;
 
     let resp = match outcome {
@@ -24,9 +28,9 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
         _ => return Err("Congress.gov returned cached response".into()),
     };
 
-    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
-    
+    let data: serde_json::Value =
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {}", e))?;
+
     let mut bills = Vec::new();
     if let Some(bills_arr) = data["bills"].as_array() {
         for b in bills_arr {
@@ -39,10 +43,7 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
                     .and_then(|s| s["fullName"].as_str())
                     .unwrap_or("Unknown")
                     .to_string(),
-                introduced_date: b["introducedDate"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string(),
+                introduced_date: b["introducedDate"].as_str().unwrap_or("").to_string(),
                 latest_action: b["latestAction"].as_str().unwrap_or("").to_string(),
                 url: b["url"].as_str().unwrap_or("").to_string(),
             });
@@ -57,11 +58,15 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
     })
 }
 
-pub async fn govt_regulations(input: GovtRegulationsInput) -> Result<GovtRegulationsOutput, String> {
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+pub async fn govt_regulations(
+    input: GovtRegulationsInput,
+) -> Result<GovtRegulationsOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
-    
+
     let query = urlencoding(&input.query);
 
     let url = format!(
@@ -69,7 +74,9 @@ pub async fn govt_regulations(input: GovtRegulationsInput) -> Result<GovtRegulat
         query
     );
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("Federal Register API error: {}", e))?;
 
     let resp = match outcome {
@@ -77,23 +84,17 @@ pub async fn govt_regulations(input: GovtRegulationsInput) -> Result<GovtRegulat
         _ => return Err("Federal Register returned cached response".into()),
     };
 
-    let data: serde_json::Value = serde_json::from_str(&resp.body_text)
-        .map_err(|e| format!("JSON parse error: {}", e))?;
-    
+    let data: serde_json::Value =
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {}", e))?;
+
     let mut regulations = Vec::new();
     if let Some(results) = data["results"].as_array() {
         for r in results {
             regulations.push(RegulationEntry {
-                document_number: r["document_number"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string(),
+                document_number: r["document_number"].as_str().unwrap_or("").to_string(),
                 title: r["title"].as_str().unwrap_or("").to_string(),
                 abstract_text: r["abstract"].as_str().unwrap_or("").to_string(),
-                publication_date: r["publication_date"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string(),
+                publication_date: r["publication_date"].as_str().unwrap_or("").to_string(),
                 agency: r["agencies"]
                     .as_array()
                     .and_then(|a| a.first())

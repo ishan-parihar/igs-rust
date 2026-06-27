@@ -1,12 +1,13 @@
+use crate::types::Settings;
+use chrono::Datelike;
+use chrono::Utc;
 use std::fs;
 use std::path::PathBuf;
-use chrono::Utc;
-use chrono::Datelike;
-use crate::types::Settings;
 
 /// Sanitize a subject string for use in file paths
 fn sanitize_subject(subject: &str) -> String {
-    let sanitized: String = subject.chars()
+    let sanitized: String = subject
+        .chars()
         .map(|c| match c {
             '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\0' => '_',
             ' ' => '_',
@@ -18,7 +19,9 @@ fn sanitize_subject(subject: &str) -> String {
     while s.ends_with('.') || s.ends_with(' ') {
         s.pop();
     }
-    if s.is_empty() { s = "unnamed".to_string(); }
+    if s.is_empty() {
+        s = "unnamed".to_string();
+    }
     s
 }
 
@@ -64,7 +67,11 @@ pub fn maybe_dump(settings: &Settings, tool_name: &str, subject: &str, body: &st
 
     if let Some(parent) = file_path.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
-            tracing::warn!("Failed to create dump directory {}: {}", parent.display(), e);
+            tracing::warn!(
+                "Failed to create dump directory {}: {}",
+                parent.display(),
+                e
+            );
             return;
         }
     }

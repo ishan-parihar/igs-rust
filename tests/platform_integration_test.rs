@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod platform_tests {
+    use igs_rust_mcp::tools::reddit;
+    use igs_rust_mcp::tools::twitter;
     use igs_rust_mcp::tools::types::*;
     use igs_rust_mcp::tools::types_base::OutputOptions;
     use igs_rust_mcp::tools::youtube;
-    use igs_rust_mcp::tools::twitter;
-    use igs_rust_mcp::tools::reddit;
 
     #[tokio::test]
     async fn test_youtube_search_basic() {
@@ -23,7 +23,10 @@ mod platform_tests {
         let video = &output.videos[0];
         assert!(!video.id.is_empty(), "Video ID should not be empty");
         assert!(!video.title.is_empty(), "Video title should not be empty");
-        assert!(video.url.contains("youtube.com"), "URL should contain youtube.com");
+        assert!(
+            video.url.contains("youtube.com"),
+            "URL should contain youtube.com"
+        );
         assert!(!video.channel.is_empty(), "Channel should not be empty");
 
         println!("YouTube search: Found {} videos", output.count);
@@ -37,7 +40,11 @@ mod platform_tests {
         };
 
         let result = youtube::youtube_metadata(input).await;
-        assert!(result.is_ok(), "YouTube metadata failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "YouTube metadata failed: {:?}",
+            result.err()
+        );
 
         let output = result.unwrap();
         assert!(!output.title.is_empty(), "Title should not be empty");
@@ -60,14 +67,28 @@ mod platform_tests {
         };
 
         let result = youtube::youtube_subtitles(input).await;
-        assert!(result.is_ok(), "YouTube subtitles failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "YouTube subtitles failed: {:?}",
+            result.err()
+        );
 
         let output = result.unwrap();
-        assert!(!output.subtitles.is_empty(), "Subtitles should not be empty");
+        assert!(
+            !output.subtitles.is_empty(),
+            "Subtitles should not be empty"
+        );
         assert!(!output.language.is_empty(), "Language should not be empty");
 
-        println!("YouTube subtitles: {} chars in {}", output.subtitles.len(), output.language);
-        println!("  Preview: {}...", &output.subtitles[..200.min(output.subtitles.len())]);
+        println!(
+            "YouTube subtitles: {} chars in {}",
+            output.subtitles.len(),
+            output.language
+        );
+        println!(
+            "  Preview: {}...",
+            &output.subtitles[..200.min(output.subtitles.len())]
+        );
     }
 
     #[tokio::test]
@@ -119,8 +140,12 @@ mod platform_tests {
         assert!(result.is_err(), "Twitter read without cookie should fail");
         let err = result.unwrap_err();
         assert!(
-            err.contains("not configured") || err.contains("disabled") || err.contains("401") || err.contains("auth"),
-            "Error should mention authentication failure: {}", err
+            err.contains("not configured")
+                || err.contains("disabled")
+                || err.contains("401")
+                || err.contains("auth"),
+            "Error should mention authentication failure: {}",
+            err
         );
         println!("Twitter no-cookie error: {}", err);
     }
@@ -148,7 +173,10 @@ mod platform_tests {
             let post = &output.posts[0];
             assert!(!post.title.is_empty(), "Post title should not be empty");
             assert!(!post.link.is_empty(), "Post link should not be empty");
-            assert!(post.link.contains("reddit.com"), "URL should contain reddit.com");
+            assert!(
+                post.link.contains("reddit.com"),
+                "URL should contain reddit.com"
+            );
 
             println!("Reddit search: Found {} posts", output.count);
             println!("  First: {} ({})", post.title, post.link);

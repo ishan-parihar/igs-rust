@@ -2,19 +2,23 @@ use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
 
 pub async fn security_cve_search(input: CveSearchInput) -> Result<CveSearchOutput, String> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     let days_back = input.days_back.unwrap_or(30);
     let query_enc = urlencoding(&input.query);
 
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
     let now = Utc::now();
-    let start_date = (now - Duration::days(days_back as i64)).format("%Y-%m-%dT%H:%M:%S.000").to_string();
+    let start_date = (now - Duration::days(days_back as i64))
+        .format("%Y-%m-%dT%H:%M:%S.000")
+        .to_string();
     let end_date = now.format("%Y-%m-%dT%H:%M:%S.000").to_string();
 
     let mut url = format!(
@@ -47,7 +51,8 @@ pub async fn security_cve_search(input: CveSearchInput) -> Result<CveSearchOutpu
                             let description = cve["descriptions"]
                                 .as_array()
                                 .and_then(|descs| {
-                                    descs.iter()
+                                    descs
+                                        .iter()
                                         .find(|d| d["lang"].as_str() == Some("en"))
                                         .and_then(|d| d["value"].as_str())
                                         .map(|s| s.to_string())
@@ -164,10 +169,14 @@ fn extract_affected_products(cve: &serde_json::Value) -> Vec<String> {
     products
 }
 
-pub async fn security_advisories(input: SecurityAdvisoriesInput) -> Result<SecurityAdvisoriesOutput, String> {
+pub async fn security_advisories(
+    input: SecurityAdvisoriesInput,
+) -> Result<SecurityAdvisoriesOutput, String> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
-    let settings = config::load_settings().await.map_err(|e| format!("Settings: {}", e))?;
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
@@ -181,7 +190,10 @@ pub async fn security_advisories(input: SecurityAdvisoriesInput) -> Result<Secur
     }
 
     let mut headers = std::collections::HashMap::new();
-    headers.insert("Accept".to_string(), "application/vnd.github+json".to_string());
+    headers.insert(
+        "Accept".to_string(),
+        "application/vnd.github+json".to_string(),
+    );
 
     let mut advisories: Vec<SecurityAdvisory> = Vec::new();
 
@@ -202,7 +214,9 @@ pub async fn security_advisories(input: SecurityAdvisoriesInput) -> Result<Secur
                                 .as_array()
                                 .and_then(|vulns| {
                                     vulns.first().and_then(|v| {
-                                        v["vulnerable_version_range"].as_str().map(|s| s.to_string())
+                                        v["vulnerable_version_range"]
+                                            .as_str()
+                                            .map(|s| s.to_string())
                                     })
                                 })
                                 .unwrap_or_default();
@@ -212,7 +226,8 @@ pub async fn security_advisories(input: SecurityAdvisoriesInput) -> Result<Secur
                                 .and_then(|vulns| {
                                     vulns.first().and_then(|v| {
                                         let patches = v["patched_versions"].as_array()?;
-                                        let versions: Vec<&str> = patches.iter()
+                                        let versions: Vec<&str> = patches
+                                            .iter()
                                             .filter_map(|p| p["identifier"].as_str())
                                             .collect();
                                         if versions.is_empty() {

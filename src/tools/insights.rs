@@ -16,7 +16,12 @@ pub(crate) async fn insights_find_connections(
         // Specific entity lookup
         let connections = storage.find_inter_domain_connections(entity, min_domains);
         let count = connections.len();
-        Ok(InsightFindConnectionsOutput { connections, count, total_found: None, stats: None })
+        Ok(InsightFindConnectionsOutput {
+            connections,
+            count,
+            total_found: None,
+            stats: None,
+        })
     } else {
         // All cross-domain entities
         let all = storage.find_all_inter_domain_connections(min_domains);
@@ -25,7 +30,12 @@ pub(crate) async fn insights_find_connections(
         let connections: Vec<EntityConnection> = all.into_iter().take(limit).collect();
         let count = connections.len();
         let stats = storage.stats();
-        Ok(InsightFindConnectionsOutput { connections, count, total_found: Some(total_found), stats: Some(stats) })
+        Ok(InsightFindConnectionsOutput {
+            connections,
+            count,
+            total_found: Some(total_found),
+            stats: Some(stats),
+        })
     }
 }
 
@@ -43,7 +53,11 @@ pub(crate) async fn insights_trending(
     );
     let count = trending.len();
     let stats = storage.stats();
-    Ok(InsightTrendingOutput { trending, count, stats })
+    Ok(InsightTrendingOutput {
+        trending,
+        count,
+        stats,
+    })
 }
 
 /// Add articles to the insight engine for cross-article analysis
@@ -54,14 +68,18 @@ pub(crate) async fn insights_index(
     let mut storage = storage.lock().await;
     let indexed = input.articles.len();
 
-    let articles: Vec<ArticleInsight> = input.articles.iter().map(|a| ArticleInsight {
-        id: a.id.clone(),
-        title: a.title.clone(),
-        pub_date: a.pub_date.clone(),
-        source_name: a.source_name.clone(),
-        domains: a.domains.clone().unwrap_or_default(),
-        entities: a.entities.clone().unwrap_or_default(),
-    }).collect();
+    let articles: Vec<ArticleInsight> = input
+        .articles
+        .iter()
+        .map(|a| ArticleInsight {
+            id: a.id.clone(),
+            title: a.title.clone(),
+            pub_date: a.pub_date.clone(),
+            source_name: a.source_name.clone(),
+            domains: a.domains.clone().unwrap_or_default(),
+            entities: a.entities.clone().unwrap_or_default(),
+        })
+        .collect();
 
     storage.add_articles_batch(articles);
 
