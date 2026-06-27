@@ -1,32 +1,79 @@
+use crate::config;
 use crate::parsers;
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use crate::types::*;
-use feed_rs::parser as feed_parser;
+use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use reqwest::Client;
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::time::Duration;
 
 const REDDIT_USER_AGENT: &str =
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Brave/Chrome/145.0.0.0 Safari/537.36";
+
+// ─── Reddit API Response Types ─────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct RedditListingResponse {
+    data: RedditListingData,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedditListingData {
+    children: Vec<RedditChild>,
+    after: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedditChild {
+    data: RedditPost,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedditPost {
+    title: String,
+    permalink: String,
+    author: String,
+    subreddit: String,
+    score: i64,
+    num_comments: i64,
+    created_utc: f64,
+    selftext: Option<String>,
+    url: Option<String>,
+    thumbnail: Option<String>,
+    is_self: bool,
+}
+
+// ─── Cookie-based Authentication ──────────────────────────────
+
+/// Load Reddit cookie from settings
+async fn load_reddit_cookie() -> Result<String, String> {
+    let settings = config::load_settings().await
+        .map_err(|e| format!("Settings load failed: {}", e))?;
+    
+    settings.reddit
+        .and_then(|r| r.cookie)
+        .filter(|c| !c.is_empty())
+        .ok_or_else(|| "Reddit cookie not configured. Add reddit.cookie to settings.yml".to_string())
+}
 
 /// Build a dedicated reqwest Client for Reddit with browser-like headers.
-/// Uses a separate client because the shared HttpClient sets a bot UA (`IGS/...`)
-/// which Reddit blocks. reqwest merges client-level + request-level headers,
-/// so we need a clean client with only the browser UA.
-fn build_reddit_client() -> Client {
+fn build_reddit_client(cookie: &str) -> Client {
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static(REDDIT_USER_AGENT));
+    headers.insert(COOKIE, HeaderValue::from_str(cookie).expect("Invalid cookie header"));
+    headers.insert("Accept", HeaderValue::from_static("application/json"));
+    headers.insert("Accept-Language", HeaderValue::from_static("en-US,en;q=0.9"));
+
     Client::builder()
-        .user_agent(REDDIT_USER_AGENT)
+        .default_headers(headers)
         .timeout(Duration::from_secs(20))
         .build()
         .expect("Failed to build Reddit HTTP client")
 }
 
-async fn reddit_fetch(client: &Client, url: &str, accept: &str) -> Result<String, String> {
-    let mut headers = HashMap::new();
-    headers.insert("Accept", accept);
-    headers.insert("Accept-Language", "en-US,en;q=0.9");
-
+/// GET request via www.reddit.com with cookie auth
+async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
     let max_retries = 3;
     let mut last_err = String::new();
 
@@ -37,17 +84,12 @@ async fn reddit_fetch(client: &Client, url: &str, accept: &str) -> Result<String
             tokio::time::sleep(delay).await;
         }
 
-        let mut req = client.get(url);
-        for (k, v) in &headers {
-            req = req.header(*k, *v);
-        }
-
-        match req.send().await {
+        match client.get(url).send().await {
             Ok(resp) => {
                 let status = resp.status().as_u16();
 
                 if status == 429 {
-                let retry_after = resp.headers()
+                    let retry_after = resp.headers()
                         .get("retry-after")
                         .and_then(|v| v.to_str().ok())
                         .and_then(|s| s.parse::<u64>().ok())
@@ -57,6 +99,10 @@ async fn reddit_fetch(client: &Client, url: &str, accept: &str) -> Result<String
                     tokio::time::sleep(Duration::from_secs(retry_after)).await;
                     last_err = format!("429 rate-limited (Retry-After: {}s)", retry_after);
                     continue;
+                }
+
+                if status == 401 || status == 403 {
+                    return Err(format!("Reddit auth failed (HTTP {}). Check your cookie in settings.yml.", status));
                 }
 
                 if status >= 400 {
@@ -75,26 +121,32 @@ async fn reddit_fetch(client: &Client, url: &str, accept: &str) -> Result<String
     Err(format!("Failed after {} retries: {}", max_retries + 1, last_err))
 }
 
+// ─── Reddit Search (JSON API) ─────────────────────────────────
+
 pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutput, String> {
+    if input.query.trim().is_empty() {
+        return Err("Query cannot be empty".to_string());
+    }
+    
     let sort = input.sort.as_deref().unwrap_or("relevance");
     let time = input.time.as_deref().unwrap_or("all");
     let limit = input.limit.unwrap_or(25).clamp(1, 100);
 
-    let query_enc = urlencoding(&input.query);
-    let client = build_reddit_client();
+    let cookie = load_reddit_cookie().await?;
+    let client = build_reddit_client(&cookie);
     let mut posts = Vec::new();
 
     let subreddits = input.subreddits.clone().unwrap_or_default();
     let search_urls = if subreddits.is_empty() {
         vec![format!(
-            "https://old.reddit.com/search?q={}&sort={}&t={}&limit={}",
-            query_enc, sort, time, limit
+            "https://www.reddit.com/search.json?q={}&sort={}&t={}&limit={}&raw_json=1",
+            urlencoding(&input.query), sort, time, limit
         )]
     } else {
         subreddits.iter().map(|sr| {
             format!(
-                "https://old.reddit.com/r/{}/search?q={}&restrict_sr=on&sort={}&t={}&limit={}",
-                urlencoding(sr), query_enc, sort, time, limit
+                "https://www.reddit.com/r/{}/search.json?q={}&restrict_sr=on&sort={}&t={}&limit={}&raw_json=1",
+                urlencoding(sr), urlencoding(&input.query), sort, time, limit
             )
         }).collect()
     };
@@ -104,7 +156,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
 
-        let body = match reddit_fetch(&client, url, "text/html").await {
+        let body = match reddit_get(&client, url).await {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!("Reddit search failed for {}: {}", url, e);
@@ -112,85 +164,44 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
             }
         };
 
-        let document = scraper::Html::parse_document(&body);
-        let selector = scraper::Selector::parse("div.search-result.search-result-link")
-            .expect("valid CSS selector");
-
-        for result in document.select(&selector).take(limit as usize) {
-            let (title, link) = if let Some(a) = result.select(&scraper::Selector::parse("a.search-title")
-                .expect("valid CSS selector")).next() {
-                let title = parsers::strip_html_tags(&a.text().collect::<String>());
-                let href = a.value().attr("href").unwrap_or("");
-                let link = if href.starts_with("http") {
-                    href.to_string()
-                } else {
-                    format!("https://www.reddit.com{}", href)
-                };
-                (title, link)
-            } else {
+        let listing: RedditListingResponse = match serde_json::from_str(&body) {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::warn!("Reddit JSON parse failed for {}: {}", url, e);
                 continue;
-            };
+            }
+        };
 
-            let author = result.select(&scraper::Selector::parse("a.author")
-                .expect("valid CSS selector"))
-                .next()
-                .map(|a| format!("u/{}", a.text().collect::<String>()));
-
-            let score_text = result.select(&scraper::Selector::parse("span.search-score")
-                .expect("valid CSS selector"))
-                .next()
-                .map(|s| s.text().collect::<String>())
-                .unwrap_or_default();
-            let score_num: i64 = score_text.replace(',', "").chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect::<String>()
-                .parse()
-                .unwrap_or(0);
-
-            let comments_text = result.select(&scraper::Selector::parse("a.search-comments")
-                .expect("valid CSS selector"))
-                .next()
-                .map(|a| a.text().collect::<String>())
-                .unwrap_or_default();
-            let comments_num: i64 = comments_text.replace(',', "").chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect::<String>()
-                .parse()
-                .unwrap_or(0);
-
-            let pub_date = result.select(&scraper::Selector::parse("time")
-                .expect("valid CSS selector"))
-                .next()
-                .and_then(|t| t.value().attr("datetime"))
-                .map(|d| d.to_string())
+        for child in listing.data.children.into_iter().take(limit as usize) {
+            let post = child.data;
+            let link = format!("https://www.reddit.com{}", post.permalink);
+            let pub_date = chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
+                .map(|d| d.to_rfc3339())
                 .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
-            let subreddit = result.select(&scraper::Selector::parse("a.search-subreddit-link")
-                .expect("valid CSS selector"))
-                .next()
-                .map(|a| a.text().collect::<String>())
-                .map(|s| s.trim_start_matches("r/").to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-
             let item_id = parsers::make_item_id(
-                &title,
+                &post.title,
                 &link,
                 &pub_date,
-                &format!("reddit_{}", subreddit),
+                &format!("reddit_{}", post.subreddit),
             );
 
             posts.push(NewsItem {
                 id: item_id,
-                title,
+                title: post.title,
                 link,
-                pub_date: pub_date.clone(),
-                source_name: format!("Reddit r/{}", subreddit),
+                pub_date,
+                source_name: format!("Reddit r/{}", post.subreddit),
                 pool_id: "REDDIT".to_string(),
-                content_snippet: format!("Score: {} | Comments: {}", score_num, comments_num),
-                author,
+                content_snippet: format!("Score: {} | Comments: {}", post.score, post.num_comments),
+                author: Some(format!("u/{}", post.author)),
                 media_url: None,
                 date_confidence: Some("high".to_string()),
-                freshness_score: Some(crate::parsers::calculate_freshness(&pub_date)),
+                freshness_score: Some(parsers::calculate_freshness(
+                    &chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
+                        .map(|d| d.to_rfc3339())
+                        .unwrap_or_default()
+                )),
             });
         }
     }
@@ -207,87 +218,73 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
     })
 }
 
+// ─── Reddit Feed (JSON API) ───────────────────────────────────
+
 pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, String> {
     let limit = input.limit.unwrap_or(25).clamp(1, 100) as usize;
 
-    let client = build_reddit_client();
+    let cookie = load_reddit_cookie().await?;
+    let client = build_reddit_client(&cookie);
     let mut all_posts = Vec::new();
-
-    // Initial cooldown to avoid triggering Reddit's aggressive rate limiter
-    tokio::time::sleep(Duration::from_secs(10)).await;
 
     for (idx, sub) in input.subreddits.iter().enumerate() {
         if idx > 0 {
-            tokio::time::sleep(Duration::from_secs(15)).await;
+            tokio::time::sleep(Duration::from_secs(3)).await;
         }
 
-        let rss_url = format!("https://www.reddit.com/r/{}/.rss?limit={}", urlencoding(sub), limit);
+        let url = format!(
+            "https://www.reddit.com/r/{}/hot.json?limit={}&raw_json=1",
+            urlencoding(sub), limit
+        );
 
-        let body = match reddit_fetch(&client, &rss_url, "application/atom+xml,application/xml,text/xml").await {
+        let body = match reddit_get(&client, &url).await {
             Ok(b) => b,
             Err(e) => {
-                tracing::warn!("Reddit RSS fetch failed for r/{}: {}", sub, e);
+                tracing::warn!("Reddit feed failed for r/{}: {}", sub, e);
                 continue;
             }
         };
 
-        if body.is_empty() {
-            tracing::warn!("Reddit RSS: empty body for r/{}", sub);
-            continue;
-        }
-
-        let feed = match feed_parser::parse(body.as_bytes()) {
-            Ok(f) => f,
+        let listing: RedditListingResponse = match serde_json::from_str(&body) {
+            Ok(l) => l,
             Err(e) => {
-                tracing::warn!("Reddit RSS parse failed for r/{}: {} (body_len={}, first_200={})",
-                    sub, e, body.len(), &body.chars().take(200).collect::<String>());
+                tracing::warn!("Reddit JSON parse failed for r/{}: {}", sub, e);
                 continue;
             }
         };
 
-        let now = chrono::Utc::now().to_rfc3339();
+        for child in listing.data.children.into_iter().take(limit) {
+            let post = child.data;
+            let link = format!("https://www.reddit.com{}", post.permalink);
+            let pub_date = chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
-        for entry in feed.entries.iter().take(limit) {
-            let title = entry.title.as_ref()
-                .map(|t| t.content.clone())
-                .unwrap_or_else(|| "Untitled".to_string());
-
-            let link = entry.links.first()
-                .map(|l| l.href.clone())
-                .or_else(|| {
-                    let id = &entry.id;
-                    if id.starts_with("http") { Some(id.clone()) } else { None }
-                })
-                .unwrap_or_default();
-
-            let pub_date = entry.published.or(entry.updated)
-                .map(|d: chrono::DateTime<chrono::Utc>| d.to_rfc3339())
-                .unwrap_or_else(|| now.clone());
-
-            let content_snippet = entry.summary.as_ref()
-                .map(|s| s.content.clone())
-                .unwrap_or_default();
-            let content_snippet = parsers::strip_html_tags(&content_snippet);
+            let content_snippet = if post.is_self {
+                post.selftext.unwrap_or_default()
+            } else {
+                post.url.unwrap_or_default()
+            };
             let content_snippet = content_snippet.chars().take(600).collect::<String>();
 
-            let author = entry.authors.first()
-                .map(|a| a.name.clone())
-                .filter(|n| !n.is_empty());
-
-            let item_id = parsers::make_item_id(&title, &link, &pub_date, &format!("reddit_rss_{}", sub));
+            let item_id = parsers::make_item_id(&post.title, &link, &pub_date, &format!("reddit_{}", sub));
 
             all_posts.push(NewsItem {
                 id: item_id,
-                title: title.to_string(),
-                link: link.to_string(),
-                pub_date: pub_date.to_string(),
+                title: post.title,
+                link,
+                pub_date,
                 source_name: format!("Reddit r/{}", sub),
                 pool_id: "REDDIT".to_string(),
                 content_snippet,
-                author,
+                author: Some(format!("u/{}", post.author)),
                 media_url: None,
                 date_confidence: Some("high".to_string()),
-                freshness_score: Some(parsers::calculate_freshness(&pub_date)),
+                freshness_score: Some(parsers::calculate_freshness(
+                    &chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
+                        .map(|d| d.to_rfc3339())
+                        .unwrap_or_default()
+                )),
             });
         }
     }

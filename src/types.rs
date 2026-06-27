@@ -393,6 +393,14 @@ pub struct TwitterSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RedditSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cookie: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Settings {
     pub http: HttpSettings,
     pub cache: CacheSettings,
@@ -421,6 +429,8 @@ pub struct Settings {
     pub comtrade: Option<ComtradeSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub twitter: Option<TwitterSettings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reddit: Option<RedditSettings>,
 }
 
 // ─── News Types ─────────────────────────────────────────────────

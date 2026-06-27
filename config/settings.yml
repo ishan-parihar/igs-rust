@@ -98,7 +98,7 @@ output:
 
 # ─── Twitter/X Integration ───────────────────────────────────
 # Uses agent-twitter-client for cookie-based access to Twitter's internal APIs.
-# Set TWITTER_COOKIE env var with your browser cookie string.
+# Cookie extracted from Brave-Origin-Beta browser.
 twitter:
-  enabled: false
-  cookie: ${TWITTER_COOKIE}
+  enabled: true
+  cookie: "guest_id=v1%3A177910199735927032; auth_token=6713a2bae6fd0795213b1be68fab64fa0db77465; ct0=8d2f549c7cf852a378d5cfe9978d04f881600c43c474648fdb23840ac1bf5a90a8709cb5d9a8fd3e7855b12389b33582779feee0c2c82ceeb74539dd52934e3def7fbf14c2413494c983c8a831cb36cd; kdt=zqm7I0Q1M8VeqXYWVDm96TSF4bLDxtGkRnI0XWRX; twid=u%3D3301263462; cf_clearance=rDg1F456gYZNKuP7BmbTLNfvggGUQ1Q_Y7UbCMUxOYI-1782559760-1.2.1.1-cQUNPwXNtgW7AzfZncJ8He83LMbfnl6HYBjj7_m230OhxGJl3_rCTvkNvBaNdGoOTdk90tLIdoWzIXIiVMKICSsw0K4XzdzWy3Kpspp9ysMmHw3we7uqrX8LCUi08QEjYWW9OnszXAvZKYn3O9X7dpepzS2XNs7Be_OJiBl.1XmyzDfAj1I4JwAm.T3sBgociSExMKQ4QW56KonkXsQQTxRjikco0OFuObsufgEg6U3l8AkzOS_VhpGxup.VyAtuPI5XkDkgtlzYZ12zRQQM_WSS2VzDuU284Eb3YlDoE2po7z_1BZ79j6yNQmWYZuaSvI2OekE3cgyYGkcuuyhltw"
