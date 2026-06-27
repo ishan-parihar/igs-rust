@@ -27,7 +27,7 @@ serde_json = "1"
 serde_yaml = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
   "json",
-  "rustls-tls",
+  "native-tls",
   "gzip",
   "brotli",
   "deflate",
@@ -48,7 +48,6 @@ html-to-markdown-rs = "3.5"
 clap = { version = "4", features = ["derive", "env"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 unpdf = "0.7"
-wreq = { version = "6.0.0-rc.29", features = ["json"] }
-wreq-util = "3.0.0-rc.13"
 urlencoding = "2.1"
+openssl-sys = { version = "0.9.117", features = ["vendored"] }
 

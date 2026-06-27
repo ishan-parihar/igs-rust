@@ -3,11 +3,10 @@ use crate::parsers;
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use crate::types::*;
-use wreq::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
-use wreq::Client;
+use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
+use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
-use wreq_util::Emulation;
 
 const REDDIT_USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Brave/Chrome/145.0.0.0 Safari/537.36";
@@ -78,7 +77,6 @@ fn build_reddit_client(cookie: &str) -> Client {
 
     Client::builder()
         .default_headers(headers)
-        .emulation(Emulation::Chrome131)
         .timeout(Duration::from_secs(20))
         .build()
         .expect("Failed to build Reddit HTTP client")

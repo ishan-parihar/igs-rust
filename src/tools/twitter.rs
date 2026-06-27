@@ -1,13 +1,11 @@
 // ─── Twitter/X Integration ──────────────────────────────────
-// Cookie-based GraphQL API via wreq (Chrome TLS fingerprint emulation).
-// Ported from social-forge's XProvider with minimal surface area.
+// Cookie-based GraphQL API via reqwest with native-tls.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use wreq::header::{HeaderMap, HeaderValue};
-use wreq_util::Emulation;
+use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::config;
 use crate::tools::types::*;
@@ -83,7 +81,7 @@ fn ensure_ct0_matches(cookie_str: &str, ct0: &str) -> String {
 
 // ── HTTP Client ────────────────────────────────────────────
 
-fn build_client(cookie_str: &str) -> Result<wreq::Client, String> {
+fn build_client(cookie_str: &str) -> Result<reqwest::Client, String> {
     let cookies = parse_cookie_string(cookie_str);
     let ct0 = extract_ct0(&cookies).unwrap_or_default();
 
@@ -99,9 +97,8 @@ fn build_client(cookie_str: &str) -> Result<wreq::Client, String> {
     headers.insert("x-csrf-token", HeaderValue::from_str(&ct0).unwrap());
     headers.insert("cookie", HeaderValue::from_str(cookie_str).unwrap());
 
-    wreq::Client::builder()
+    reqwest::Client::builder()
         .default_headers(headers)
-        .emulation(Emulation::Chrome131)
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {e}"))
@@ -118,7 +115,7 @@ fn graphql_url(query_id: &str, operation: &str, variables: &serde_json::Value) -
 // ── GraphQL Request ────────────────────────────────────────
 
 async fn graphql_post(
-    client: &wreq::Client,
+    client: &reqwest::Client,
     query_id: &str,
     operation: &str,
     variables: &serde_json::Value,
