@@ -723,7 +723,7 @@ pub struct WebCrawlOutput {
 pub struct WebMapInput {
     /// Website URL
     pub url: String,
-    /// Provider: default or lightpanda
+    /// Provider: default or obscura
     pub provider: Option<String>,
     /// Max links (default: 100)
     pub limit: Option<i32>,
