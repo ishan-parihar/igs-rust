@@ -54,3 +54,4 @@ config/bin/.lightpanda_last_check
 SCRAPLING_INTEGRATION_PLAN.md
 UPGRADE_PLAN.md
 patches/agent-twitter-client/
+*.tar.gz
