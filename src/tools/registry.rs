@@ -176,6 +176,20 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "plugins",
+        description: "Plugin & extension system: webhook enrichment, script hooks, file export. Enables integration with external NLP/ML pipelines and data workflows.",
+        tools: &[
+            "plugin.webhook_enrich", "plugin.script_hook", "plugin.export",
+        ],
+    },
+    ToolGroup {
+        name: "osint",
+        description: "OSINT data sources: OpenAlex academic works, Shodan exposed services, HaveIBeenPwned breach data, ACLED conflict events.",
+        tools: &[
+            "research.openalex", "security.shodan", "security.hibp", "conflict.acled",
+        ],
+    },
+    ToolGroup {
         name: "youtube",
         description: "Search YouTube videos, extract metadata and subtitles. Uses yt-dlp for data extraction.",
         tools: &[
@@ -315,6 +329,13 @@ mod tests {
             "advanced.source_quality",
             "advanced.generate_report",
             "search.semantic",
+            "plugin.webhook_enrich",
+            "plugin.script_hook",
+            "plugin.export",
+            "research.openalex",
+            "security.shodan",
+            "security.hibp",
+            "conflict.acled",
             "youtube.search",
             "youtube.metadata",
             "youtube.subtitles",
