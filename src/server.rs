@@ -1387,6 +1387,65 @@ impl IgsMcpServer {
             .map(Json)
     }
 
+    // ── Intelligence Upgrade Tools (P1) ────────────────────────
+
+    #[tool(
+        name = "news.summarize",
+        description = "Generate an extractive summary of text using the TextRank algorithm. Pure Rust, no external API. Returns the top-N most important sentences."
+    )]
+    async fn news_summarize(
+        &self,
+        params: Parameters<SummarizeInput>,
+    ) -> Result<Json<SummarizeOutput>, String> {
+        let num = params.0.num_sentences.unwrap_or(3) as usize;
+        let result = crate::tools::summarize::summarize(&params.0.text, num);
+        Ok(Json(SummarizeOutput {
+            summary: result.summary,
+            sentence_count: result.sentence_count,
+            original_count: result.original_count,
+            top_sentences: result.top_sentences,
+        }))
+    }
+
+    #[tool(
+        name = "entities.resolve",
+        description = "Resolve entity names to canonical forms. Normalizes names, detects aliases (e.g., 'OAI' → 'OpenAI'), and generates deterministic normalized IDs for cross-article entity linking."
+    )]
+    async fn entities_resolve(
+        &self,
+        params: Parameters<EntityResolveInput>,
+    ) -> Result<Json<EntityResolveOutput>, String> {
+        let result = crate::tools::entity_resolution::resolve_entities(&params.0.names);
+        Ok(Json(EntityResolveOutput {
+            entities: result.entities,
+            count: result.count,
+        }))
+    }
+
+    #[tool(
+        name = "search.gdelt",
+        description = "Search the GDELT 2.0 database of 300M+ global events from 100K+ news sources. Free API, no key required. Returns articles matching the query with date, title, country, and URL."
+    )]
+    async fn search_gdelt(
+        &self,
+        params: Parameters<GdeltInput>,
+    ) -> Result<Json<GdeltOutput>, String> {
+        let result = crate::tools::gdelt::gdelt_search(crate::tools::gdelt::GdeltSearchInput {
+            query: params.0.query.clone(),
+            limit: params.0.limit,
+            start_date: params.0.start_date,
+            end_date: params.0.end_date,
+            limits: params.0.limits.clone(),
+            output: params.0.output.clone(),
+        })
+        .await?;
+        Ok(Json(GdeltOutput {
+            query: result.query,
+            total: result.total,
+            events: result.events,
+        }))
+    }
+
     // ── Monitor Tools ─────────────────────────────────────────
 
     #[tool(

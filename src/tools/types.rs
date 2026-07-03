@@ -1871,3 +1871,91 @@ pub struct MonitorPauseInput {
 pub struct MonitorPauseOutput {
     pub paused: bool,
 }
+
+// ─── Summarize Tool Types ─────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SummarizeInput {
+    /// Text to summarize
+    pub text: String,
+    /// Number of sentences in the summary (default: 3)
+    pub num_sentences: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SummarizeOutput {
+    pub summary: String,
+    pub sentence_count: usize,
+    pub original_count: usize,
+    pub top_sentences: Vec<String>,
+}
+
+// ─── Semantic Search Tool Types ───────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticSearchInput {
+    /// Search query
+    pub query: String,
+    /// Max results (default: 20)
+    pub limit: Option<u32>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticSearchResultItem {
+    pub article_id: String,
+    pub title: String,
+    pub link: String,
+    pub score: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SemanticSearchResultOutput {
+    pub query: String,
+    pub results: Vec<SemanticSearchResultItem>,
+    pub count: usize,
+}
+
+// ─── Entity Resolution Tool Types ─────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EntityResolveInput {
+    /// Entity names to resolve (JSON array of strings)
+    pub names: Vec<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EntityResolveOutput {
+    pub entities: Vec<crate::tools::entity_resolution::ResolvedEntity>,
+    pub count: usize,
+}
+
+// ─── GDELT Tool Types ─────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GdeltInput {
+    /// Search query
+    pub query: String,
+    /// Max results (default: 50, max: 250)
+    pub limit: Option<u32>,
+    /// Start date (YYYYMMDD format)
+    pub start_date: Option<String>,
+    /// End date (YYYYMMDD format)
+    pub end_date: Option<String>,
+    #[serde(flatten)]
+    pub limits: LimitInput,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GdeltOutput {
+    pub query: String,
+    pub total: usize,
+    pub events: Vec<crate::tools::gdelt::GdeltEvent>,
+}

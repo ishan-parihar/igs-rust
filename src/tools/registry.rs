@@ -160,6 +160,13 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "intelligence",
+        description: "Advanced intelligence capabilities: TextRank summarization, entity resolution with alias detection, GDELT global events database.",
+        tools: &[
+            "news.summarize", "entities.resolve", "search.gdelt",
+        ],
+    },
+    ToolGroup {
         name: "youtube",
         description: "Search YouTube videos, extract metadata and subtitles. Uses yt-dlp for data extraction.",
         tools: &[
@@ -290,6 +297,9 @@ mod tests {
             "monitor.delete",
             "monitor.pause",
             "monitor.resume",
+            "news.summarize",
+            "entities.resolve",
+            "search.gdelt",
             "youtube.search",
             "youtube.metadata",
             "youtube.subtitles",
