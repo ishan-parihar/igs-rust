@@ -53,6 +53,13 @@ fn mcp_tool_to_cli_path(tool_name: &str) -> Option<(&str, &str)> {
         "news.summarize" => return Some(("intelligence", "summarize")),
         "entities.resolve" => return Some(("intelligence", "resolve-entities")),
         "search.gdelt" => return Some(("intelligence", "gdelt")),
+        // Advanced tools (P2)
+        "advanced.temporal_analysis" => return Some(("advanced", "temporal-analysis")),
+        "advanced.extract_locations" => return Some(("advanced", "extract-locations")),
+        "advanced.detect_language" => return Some(("advanced", "detect-language")),
+        "advanced.source_quality" => return Some(("advanced", "source-quality")),
+        "advanced.generate_report" => return Some(("advanced", "generate-report")),
+        "search.semantic" => return Some(("advanced", "semantic-search")),
         // Monitor tools — handled via direct manager calls, not #[tool] macro
         "monitor.create" => return Some(("monitor", "create")),
         "monitor.list" => return Some(("monitor", "list")),

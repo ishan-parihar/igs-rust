@@ -1,5 +1,5 @@
 //! Tool registry with domain-based filtering for progressive discovery.
-//! AI agents load 5-12 tools at a time instead of all 41.
+//! AI agents load 5-12 tools at a time instead of all 76.
 
 /// Tool group definitions for progressive discovery.
 /// Each group is a bounded context with 5-12 tools.
@@ -167,6 +167,15 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "advanced",
+        description: "Advanced analysis: temporal anomaly detection, geospatial location extraction, language detection, source quality scoring, report generation, semantic search.",
+        tools: &[
+            "advanced.temporal_analysis", "advanced.extract_locations",
+            "advanced.detect_language", "advanced.source_quality",
+            "advanced.generate_report", "search.semantic",
+        ],
+    },
+    ToolGroup {
         name: "youtube",
         description: "Search YouTube videos, extract metadata and subtitles. Uses yt-dlp for data extraction.",
         tools: &[
@@ -300,6 +309,12 @@ mod tests {
             "news.summarize",
             "entities.resolve",
             "search.gdelt",
+            "advanced.temporal_analysis",
+            "advanced.extract_locations",
+            "advanced.detect_language",
+            "advanced.source_quality",
+            "advanced.generate_report",
+            "search.semantic",
             "youtube.search",
             "youtube.metadata",
             "youtube.subtitles",

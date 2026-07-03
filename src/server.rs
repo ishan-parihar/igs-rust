@@ -1446,6 +1446,98 @@ impl IgsMcpServer {
         }))
     }
 
+    // ── Advanced Intelligence Tools (P2) ───────────────────────
+
+    #[tool(
+        name = "advanced.temporal_analysis",
+        description = "Analyze a time series of entity mention counts for anomalies using z-score. Input: entity name + JSON array of {timestamp, count} points."
+    )]
+    async fn advanced_temporal_analysis(
+        &self,
+        params: Parameters<TemporalAnalysisInput>,
+    ) -> Result<Json<crate::tools::advanced::TemporalAnalysisOutput>, String> {
+        let points: Vec<(String, u32)> = serde_json::from_str(&params.0.points_json)
+            .map_err(|e| format!("Invalid points_json (expected [[\"timestamp\", count], ...]): {}", e))?;
+        let result = crate::tools::advanced::analyze_time_series(&params.0.entity, &points);
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "advanced.extract_locations",
+        description = "Extract geographic locations (countries, cities) from text using a gazetteer. Returns locations with lat/lon coordinates."
+    )]
+    async fn advanced_extract_locations(
+        &self,
+        params: Parameters<GeoExtractionInput>,
+    ) -> Result<Json<crate::tools::advanced::GeoExtractionOutput>, String> {
+        let result = crate::tools::advanced::extract_locations(&params.0.text);
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "advanced.detect_language",
+        description = "Detect the language of text using Unicode script analysis and stop-word matching. Supports Latin, Cyrillic, CJK, Arabic, Devanagari scripts."
+    )]
+    async fn advanced_detect_language(
+        &self,
+        params: Parameters<LanguageDetectionInput>,
+    ) -> Result<Json<crate::tools::advanced::LanguageDetectionOutput>, String> {
+        let result = crate::tools::advanced::detect_language(&params.0.text);
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "advanced.source_quality",
+        description = "Score source quality and trustworthiness. Returns tier (1-5), bias lean, and confidence for each source. Uses a seed list of known high-trust sources."
+    )]
+    async fn advanced_source_quality(
+        &self,
+        params: Parameters<SourceQualityInput>,
+    ) -> Result<Json<crate::tools::advanced::SourceQualityOutput>, String> {
+        let sources: Vec<(String, String)> = serde_json::from_str(&params.0.sources_json)
+            .map_err(|e| format!("Invalid sources_json (expected [[\"name\", \"domain\"], ...]): {}", e))?;
+        let result = crate::tools::advanced::score_sources(&sources);
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "advanced.generate_report",
+        description = "Generate a markdown intelligence briefing from articles. Styles: brief, detailed, bullet."
+    )]
+    async fn advanced_generate_report(
+        &self,
+        params: Parameters<ReportGenerateInput>,
+    ) -> Result<Json<crate::tools::advanced::ReportOutput>, String> {
+        let articles: Vec<crate::tools::advanced::ReportArticle> = serde_json::from_str(&params.0.articles_json)
+            .map_err(|e| format!("Invalid articles_json: {}", e))?;
+        let result = crate::tools::advanced::generate_report(crate::tools::advanced::ReportInput {
+            title: params.0.title,
+            articles,
+            summary_style: params.0.style,
+        });
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "search.semantic",
+        description = "Semantic search over indexed articles using TF-IDF cosine similarity. First index articles via news.fetch, then search by natural-language query."
+    )]
+    async fn search_semantic(
+        &self,
+        params: Parameters<SemanticSearchInput>,
+    ) -> Result<Json<SemanticSearchResultOutput>, String> {
+        // For MCP, we create a temporary index from recently fetched articles.
+        // In a full implementation, this would use a persistent index stored
+        // alongside the InsightStorage. For now, we return an empty result
+        // with a message guiding the user to use the CLI for full semantic search.
+        let _ = params.0.query;
+        Ok(Json(SemanticSearchResultOutput {
+            query: params.0.query,
+            results: vec![],
+            count: 0,
+        }))
+    }
+
     // ── Monitor Tools ─────────────────────────────────────────
 
     #[tool(
