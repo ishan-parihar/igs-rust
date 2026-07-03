@@ -341,6 +341,13 @@ enum ResearchAction {
         #[arg(long)]
         convert_to_markdown: bool,
     },
+    /// Search PubMed for medical research papers
+    PubMedSearch {
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "20")]
+        limit: i32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1090,6 +1097,15 @@ async fn main() -> anyhow::Result<()> {
                     output_path: out,
                     output: OutputOptions { format: None },
                     convert_to_markdown: Some(convert_to_markdown),
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+            ResearchAction::PubMedSearch { query, limit } => {
+                let result = r(research::research_pubmed_search(ResearchPubMedInput {
+                    query,
+                    limits: LimitInput { limit: Some(limit as u32) },
+                    output: OutputOptions { format: None },
                 })
                 .await)?;
                 output(fmt, &result);
