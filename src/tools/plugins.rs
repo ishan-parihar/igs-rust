@@ -8,7 +8,6 @@
 
 use crate::config;
 use crate::http::{self as http_mod, HttpClient};
-use crate::tools::types::*;
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
