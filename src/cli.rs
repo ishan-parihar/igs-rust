@@ -138,6 +138,11 @@ enum Commands {
         #[command(subcommand)]
         action: SopAction,
     },
+    /// Real-time monitoring & alerting
+    Monitor {
+        #[command(subcommand)]
+        action: MonitorAction,
+    },
     /// List available parsers
     Parsers,
     /// Show IGS settings and status
@@ -712,6 +717,46 @@ enum SopAction {
     Execute {
         #[arg(long)]
         chain: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum MonitorAction {
+    /// Create a new monitor
+    Create {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long, value_delimiter = ',')]
+        pools: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        keywords: Vec<String>,
+        #[arg(long, default_value = "300")]
+        interval_secs: u64,
+        #[arg(long, default_value = "1")]
+        threshold: u32,
+        #[arg(long)]
+        webhook_url: Option<String>,
+        #[arg(long)]
+        alert_file: Option<String>,
+    },
+    /// List all monitors
+    List,
+    /// Delete a monitor
+    Delete {
+        #[arg(long)]
+        id: String,
+    },
+    /// Pause a monitor
+    Pause {
+        #[arg(long)]
+        id: String,
+    },
+    /// Resume a paused monitor
+    Resume {
+        #[arg(long)]
+        id: String,
     },
 }
 
@@ -1654,6 +1699,67 @@ async fn main() -> anyhow::Result<()> {
                 output(fmt, &result);
             }
         },
+
+        Commands::Monitor { action } => {
+            use igs_rust_mcp::tools::monitor::{MonitorConfig, MonitorManager};
+            let settings = igs_rust_mcp::config::load_settings().await
+                .map_err(|e| anyhow::anyhow!("Settings load failed: {}", e))?;
+            let manager = MonitorManager::new(std::sync::Arc::new(settings));
+            match action {
+                MonitorAction::Create {
+                    id,
+                    name,
+                    pools,
+                    keywords,
+                    interval_secs,
+                    threshold,
+                    webhook_url,
+                    alert_file,
+                } => {
+                    manager.add(MonitorConfig {
+                        id: id.clone(),
+                        name,
+                        pools,
+                        keywords,
+                        interval_secs,
+                        threshold,
+                        webhook_url,
+                        alert_file,
+                        active: true,
+                    }).await;
+                    output(fmt, &MonitorCreateOutput { created: true, id });
+                }
+                MonitorAction::List => {
+                    let monitors = manager.list().await;
+                    let count = monitors.len();
+                    let monitors: Vec<MonitorInfo> = monitors
+                        .into_iter()
+                        .map(|m| MonitorInfo {
+                            id: m.id,
+                            name: m.name,
+                            pools: m.pools,
+                            keywords: m.keywords,
+                            interval_secs: m.interval_secs,
+                            threshold: m.threshold,
+                            active: m.active,
+                        })
+                        .collect();
+                    output(fmt, &MonitorListOutput { monitors, count });
+                }
+                MonitorAction::Delete { id } => {
+                    let removed = manager.remove(&id).await;
+                    output(fmt, &MonitorDeleteOutput { removed });
+                }
+                MonitorAction::Pause { id } => {
+                    let paused = manager.pause(&id).await;
+                    output(fmt, &MonitorPauseOutput { paused });
+                }
+                MonitorAction::Resume { id } => {
+                    let resumed = manager.resume(&id).await;
+                    output(fmt, &MonitorPauseOutput { paused: !resumed });
+                }
+            }
+        }
     }
 
     Ok(())

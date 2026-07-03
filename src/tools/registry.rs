@@ -152,6 +152,14 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         ],
     },
     ToolGroup {
+        name: "monitor",
+        description: "Real-time monitoring & alerting. Create monitors that poll news sources for keyword matches and trigger webhook/file alerts.",
+        tools: &[
+            "monitor.create", "monitor.list",
+            "monitor.delete", "monitor.pause", "monitor.resume",
+        ],
+    },
+    ToolGroup {
         name: "youtube",
         description: "Search YouTube videos, extract metadata and subtitles. Uses yt-dlp for data extraction.",
         tools: &[
@@ -277,6 +285,11 @@ mod tests {
             "browser.wait_for_selector",
             "sop.list",
             "sop.execute",
+            "monitor.create",
+            "monitor.list",
+            "monitor.delete",
+            "monitor.pause",
+            "monitor.resume",
             "youtube.search",
             "youtube.metadata",
             "youtube.subtitles",

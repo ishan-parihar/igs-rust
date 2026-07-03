@@ -452,6 +452,8 @@ pub struct IgsMcpServer {
     #[allow(dead_code)] // reserved for future tool use
     http_client: Arc<HttpClient>,
     settings: Arc<Settings>,
+    /// Real-time monitoring & alerting manager
+    monitor: Arc<crate::tools::monitor::MonitorManager>,
 }
 
 // ─── Tool Router ────────────────────────────────────────────────
@@ -501,12 +503,14 @@ impl IgsMcpServer {
         let settings = load_settings_sync().expect("Failed to load settings");
         let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
         let http_client = HttpClient::new(&settings.http, &cache_dir);
+        let monitor = Arc::new(crate::tools::monitor::MonitorManager::new(Arc::new(settings.clone())));
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
             tool_groups,
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
+            monitor,
         }
     }
 
@@ -1381,6 +1385,95 @@ impl IgsMcpServer {
         lp_mcp::lp_wait_for_selector(params.0)
             .await
             .map(Json)
+    }
+
+    // ── Monitor Tools ─────────────────────────────────────────
+
+    #[tool(
+        name = "monitor.create",
+        description = "Create a real-time monitor that polls news sources for keyword matches and triggers alerts. Alerts delivered via webhook (Slack/Discord) and/or file."
+    )]
+    async fn monitor_create(
+        &self,
+        params: Parameters<MonitorCreateInput>,
+    ) -> Result<Json<MonitorCreateOutput>, String> {
+        let monitor = crate::tools::monitor::MonitorConfig {
+            id: params.0.id.clone(),
+            name: params.0.name.clone(),
+            pools: params.0.pools.clone(),
+            keywords: params.0.keywords.clone(),
+            interval_secs: params.0.interval_secs.unwrap_or(300),
+            threshold: params.0.threshold.unwrap_or(1),
+            webhook_url: params.0.webhook_url.clone(),
+            alert_file: params.0.alert_file.clone(),
+            active: true,
+        };
+        self.monitor.add(monitor).await;
+        Ok(Json(MonitorCreateOutput {
+            created: true,
+            id: params.0.id,
+        }))
+    }
+
+    #[tool(
+        name = "monitor.list",
+        description = "List all configured monitors with their status."
+    )]
+    async fn monitor_list(
+        &self,
+        _params: Parameters<MonitorListInput>,
+    ) -> Result<Json<MonitorListOutput>, String> {
+        let monitors = self.monitor.list().await;
+        let count = monitors.len();
+        let monitors: Vec<MonitorInfo> = monitors
+            .into_iter()
+            .map(|m| MonitorInfo {
+                id: m.id,
+                name: m.name,
+                pools: m.pools,
+                keywords: m.keywords,
+                interval_secs: m.interval_secs,
+                threshold: m.threshold,
+                active: m.active,
+            })
+            .collect();
+        Ok(Json(MonitorListOutput { monitors, count }))
+    }
+
+    #[tool(
+        name = "monitor.delete",
+        description = "Delete a monitor by ID."
+    )]
+    async fn monitor_delete(
+        &self,
+        params: Parameters<MonitorDeleteInput>,
+    ) -> Result<Json<MonitorDeleteOutput>, String> {
+        let removed = self.monitor.remove(&params.0.id).await;
+        Ok(Json(MonitorDeleteOutput { removed }))
+    }
+
+    #[tool(
+        name = "monitor.pause",
+        description = "Pause a monitor (stops polling, keeps config)."
+    )]
+    async fn monitor_pause(
+        &self,
+        params: Parameters<MonitorPauseInput>,
+    ) -> Result<Json<MonitorPauseOutput>, String> {
+        let paused = self.monitor.pause(&params.0.id).await;
+        Ok(Json(MonitorPauseOutput { paused }))
+    }
+
+    #[tool(
+        name = "monitor.resume",
+        description = "Resume a paused monitor."
+    )]
+    async fn monitor_resume(
+        &self,
+        params: Parameters<MonitorPauseInput>,
+    ) -> Result<Json<MonitorPauseOutput>, String> {
+        let resumed = self.monitor.resume(&params.0.id).await;
+        Ok(Json(MonitorPauseOutput { paused: !resumed }))
     }
 
     // ── SOP Tools ─────────────────────────────────────────────
