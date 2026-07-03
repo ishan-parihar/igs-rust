@@ -135,24 +135,16 @@ impl HttpClient {
 
             match result {
                 Ok(outcome) => {
-                    // Cache successful responses
-                    if let FetchOutcome::Response(ref resp, ref _etag, ref _lm) = outcome {
-                        if resp.status >= 200 && resp.status < 400 {
-                            // Don't cache here — let the caller decide what to cache
-                        }
-                    }
+                    // 4xx responses are returned as Ok(FetchOutcome::Response) by
+                    // execute_request; only 5xx responses become Err. The previous
+                    // string-match heuristic (`err_str.contains("status") && err_str.contains("4")`)
+                    // was both dead code (4xx never reaches this branch) and buggy
+                    // (it false-matched URLs containing "4" like "/v4/"). 5xx errors
+                    // should always retry, so we just record and continue.
                     return Ok(outcome);
                 }
                 Err(e) => {
                     last_err = Some(e);
-                    // Don't retry on client errors (4xx) — only server errors and network failures
-                    if let Some(ref err) = last_err {
-                        let err_str = err.to_string().to_lowercase();
-                        // If it's a reqwest error that's not a server error, don't retry
-                        if err_str.contains("status") && err_str.contains("4") {
-                            break;
-                        }
-                    }
                 }
             }
         }
@@ -283,10 +275,6 @@ impl HttpClient {
             etag,
             last_modified,
         ))
-    }
-
-    pub fn cache(&self) -> &FeedCache {
-        &self.cache
     }
 
     pub async fn write_cache(

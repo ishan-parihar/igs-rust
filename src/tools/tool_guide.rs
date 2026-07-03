@@ -305,10 +305,6 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
                 name: "parsers.list".to_string(),
                 description: "List available parser types".to_string(),
             },
-            ToolGuideItem {
-                name: "tool.guide".to_string(),
-                description: "Decision tree for tool selection".to_string(),
-            },
         ],
     );
 
@@ -604,7 +600,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
         ],
     );
 
-    // Browser - all 12 tools
+    // Browser - 8 tools (4 always-fail stubs removed)
     categories.insert(
         "Browser".to_string(),
         vec![
@@ -625,18 +621,6 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
                 description: "Execute JavaScript".to_string(),
             },
             ToolGuideItem {
-                name: "browser.semantic_tree".to_string(),
-                description: "AI-friendly DOM tree".to_string(),
-            },
-            ToolGuideItem {
-                name: "browser.structured_data".to_string(),
-                description: "Extract JSON-LD, OpenGraph".to_string(),
-            },
-            ToolGuideItem {
-                name: "browser.detect_forms".to_string(),
-                description: "Find forms".to_string(),
-            },
-            ToolGuideItem {
                 name: "browser.click".to_string(),
                 description: "Click element".to_string(),
             },
@@ -651,10 +635,6 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
             ToolGuideItem {
                 name: "browser.wait_for_selector".to_string(),
                 description: "Wait for element".to_string(),
-            },
-            ToolGuideItem {
-                name: "browser.interactive_elements".to_string(),
-                description: "Find clickable items".to_string(),
             },
         ],
     );

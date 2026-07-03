@@ -165,7 +165,7 @@ pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearc
     }
 
     // Sort by year descending, limit
-    all_papers.sort_by(|a, b| b.year.unwrap_or(0).cmp(&a.year.unwrap_or(0)));
+    all_papers.sort_by_key(|p| std::cmp::Reverse(p.year.unwrap_or(0)));
     all_papers.truncate(limit as usize);
 
     let count = all_papers.len();
@@ -311,22 +311,20 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
             let url = format!("https://export.arxiv.org/api/query?id_list={}", id);
             match http.fetch(&url, None, "bypass").await {
                 Ok(outcome) => {
-                    if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                        if let Ok(feed) = feed_rs::parser::parse(resp.body_text.as_bytes()) {
-                            if let Some(entry) = feed.entries.first() {
-                                let t = entry.title.as_ref().map(|t| t.content.clone()).unwrap_or_default();
-                                let abs = entry.summary.as_ref().map(|s| s.content.clone()).unwrap_or_default();
-                                let auths: Vec<String> = entry.authors.iter().map(|a| a.name.clone()).collect();
-                                let yr = entry.published.map(|d| d.year());
-                                (t, auths, abs, yr, None::<i32>, None::<i32>, Some(format!("https://arxiv.org/pdf/{}.pdf", id)), None::<String>)
-                            } else {
-                                return Err("Paper not found".into());
-                            }
+                    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+                        else { unreachable!("bypass cache mode never returns Cached") };
+                    if let Ok(feed) = feed_rs::parser::parse(resp.body_text.as_bytes()) {
+                        if let Some(entry) = feed.entries.first() {
+                            let t = entry.title.as_ref().map(|t| t.content.clone()).unwrap_or_default();
+                            let abs = entry.summary.as_ref().map(|s| s.content.clone()).unwrap_or_default();
+                            let auths: Vec<String> = entry.authors.iter().map(|a| a.name.clone()).collect();
+                            let yr = entry.published.map(|d| d.year());
+                            (t, auths, abs, yr, None::<i32>, None::<i32>, Some(format!("https://arxiv.org/pdf/{}.pdf", id)), None::<String>)
                         } else {
-                            return Err("Failed to parse arXiv response".into());
+                            return Err("Paper not found".into());
                         }
                     } else {
-                        return Err("Cached response for paper fetch".into());
+                        return Err("Failed to parse arXiv response".into());
                     }
                 }
                 Err(e) => return Err(format!("arXiv fetch failed: {}", e)),
@@ -339,24 +337,22 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
             );
             match http.fetch(&url, None, "bypass").await {
                 Ok(outcome) => {
-                    if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                            let t = json["title"].as_str().unwrap_or("").to_string();
-                            let abs = json["abstract"].as_str().unwrap_or("").to_string();
-                            let auths: Vec<String> = json["authors"]
-                                .as_array()
-                                .map(|a| a.iter().filter_map(|author| author["name"].as_str().map(|n| n.to_string())).collect())
-                                .unwrap_or_default();
-                            let yr = json["year"].as_i64().map(|y| y as i32);
-                            let cites = json["citationCount"].as_i64().map(|c| c as i32);
-                            let refs = json["referenceCount"].as_i64().map(|r| r as i32);
-                            let pdf = json["openAccessPdf"]["url"].as_str().map(|s| s.to_string());
-                            (t, auths, abs, yr, cites, refs, pdf, None)
-                        } else {
-                            return Err("Failed to parse Semantic Scholar response".into());
-                        }
+                    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+                        else { unreachable!("bypass cache mode never returns Cached") };
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                        let t = json["title"].as_str().unwrap_or("").to_string();
+                        let abs = json["abstract"].as_str().unwrap_or("").to_string();
+                        let auths: Vec<String> = json["authors"]
+                            .as_array()
+                            .map(|a| a.iter().filter_map(|author| author["name"].as_str().map(|n| n.to_string())).collect())
+                            .unwrap_or_default();
+                        let yr = json["year"].as_i64().map(|y| y as i32);
+                        let cites = json["citationCount"].as_i64().map(|c| c as i32);
+                        let refs = json["referenceCount"].as_i64().map(|r| r as i32);
+                        let pdf = json["openAccessPdf"]["url"].as_str().map(|s| s.to_string());
+                        (t, auths, abs, yr, cites, refs, pdf, None)
                     } else {
-                        return Err("Cached response for paper fetch".into());
+                        return Err("Failed to parse Semantic Scholar response".into());
                     }
                 }
                 Err(e) => return Err(format!("Semantic Scholar fetch failed: {}", e)),
@@ -465,10 +461,8 @@ pub async fn research_pubmed_search(
         .await
         .map_err(|e| format!("PubMed search error: {}", e))?;
 
-    let search_resp = match search_outcome {
-        http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("PubMed returned cached response".into()),
-    };
+    let http_mod::FetchOutcome::Response(search_resp, _, _) = search_outcome
+        else { unreachable!("bypass cache mode never returns Cached") };
 
     let search_data: serde_json::Value = serde_json::from_str(&search_resp.body_text)
         .map_err(|e| format!("JSON parse error: ${e}"))?;
@@ -501,10 +495,8 @@ pub async fn research_pubmed_search(
         .await
         .map_err(|e| format!("PubMed detail error: {}", e))?;
 
-    let detail_resp = match detail_outcome {
-        http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("PubMed returned cached response".into()),
-    };
+    let http_mod::FetchOutcome::Response(detail_resp, _, _) = detail_outcome
+        else { unreachable!("bypass cache mode never returns Cached") };
 
     let detail_data: serde_json::Value = serde_json::from_str(&detail_resp.body_text)
         .map_err(|e| format!("JSON parse error: ${e}"))?;
@@ -564,17 +556,15 @@ pub async fn research_download(
         );
         match http.fetch(&url, None, "bypass").await {
             Ok(outcome) => {
-                if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                        json["openAccessPdf"]["url"]
-                            .as_str()
-                            .map(|s| s.to_string())
-                            .ok_or_else(|| "No PDF available for this paper".to_string())?
-                    } else {
-                        return Err("Failed to parse Semantic Scholar response".into());
-                    }
+                let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+                    else { unreachable!("bypass cache mode never returns Cached") };
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                    json["openAccessPdf"]["url"]
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .ok_or_else(|| "No PDF available for this paper".to_string())?
                 } else {
-                    return Err("Cached response for paper details".into());
+                    return Err("Failed to parse Semantic Scholar response".into());
                 }
             }
             Err(e) => return Err(format!("Failed to fetch paper details: {}", e)),

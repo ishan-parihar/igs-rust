@@ -1,9 +1,8 @@
 use crate::config;
 use crate::http::HttpClient;
-use crate::obscura::ObscuraManager;
 use crate::persistence;
 use crate::tools::{
-    climate, env, finance, govt, health, helpers::toon_encode, insights, legal, lp_mcp, news,
+    climate, env, finance, govt, health, helpers::{self, toon_encode}, insights, legal, lp_mcp, news,
     parsers as parsers_tools, patents, politics, pools, reddit, research, satellite, security, sop,
     sources, tool_guide, twitter, types::*, weather, web, youtube,
 };
@@ -125,6 +124,13 @@ impl InsightStorage {
 
     pub fn add_articles_batch(&mut self, articles: Vec<ArticleInsight>) {
         if let Some(ref conn) = self.db {
+            // SAFETY: `unchecked_transaction` bypasses rusqlite's compile-time
+            // borrow check. This is safe here because `InsightStorage` is always
+            // accessed behind a `tokio::sync::Mutex<InsightStorage>` — only one
+            // async task can hold the lock at a time, so the `Connection` is
+            // never shared across threads. If the storage is ever moved to a
+            // `std::sync::Mutex` or shared via `Arc`, this must be changed to
+            // `transaction()` or replaced with an `r2d2` connection pool.
             let tx = match conn.unchecked_transaction() {
                 Ok(tx) => tx,
                 Err(e) => {
@@ -205,17 +211,40 @@ impl InsightStorage {
         }
     }
 
-    pub fn find_inter_domain_connections(
+    /// Append `article`'s domains to `domain_map`, recording the article id and title
+    /// under each domain entry. Shared between `find_inter_domain_connections` and
+    /// `find_all_inter_domain_connections` to avoid the previously duplicated loop body.
+    fn add_article_domains_to_map(
+        article: &ArticleInsight,
+        domain_map: &mut std::collections::HashMap<String, DomainConnection>,
+    ) {
+        for d in &article.domains {
+            let entry = domain_map
+                .entry(d.domain.clone())
+                .or_insert_with(|| DomainConnection {
+                    domain: d.domain.clone(),
+                    article_ids: vec![],
+                    article_titles: vec![],
+                });
+            entry.article_ids.push(article.id.clone());
+            entry.article_titles.push(article.title.clone());
+        }
+    }
+
+    /// Build the (domain_map, entity_type) pair for a given entity key by
+    /// scanning both the primary `entity_index` lookup AND any articles where
+    /// the entity appears only via `normalized_id`. Returns None if the entity
+    /// is unknown to the index.
+    fn build_domain_map_for_entity(
         &self,
-        entity: &str,
-        min_domains: usize,
-    ) -> Vec<EntityConnection> {
-        let key = entity.to_lowercase();
+        key: &str,
+    ) -> (std::collections::HashMap<String, DomainConnection>, String) {
         let mut domain_map: std::collections::HashMap<String, DomainConnection> =
             std::collections::HashMap::new();
         let mut entity_type = String::new();
 
-        if let Some(indices) = self.entity_index.get(&key) {
+        // Primary index lookup: articles where the entity name matches `key`.
+        if let Some(indices) = self.entity_index.get(key) {
             for &idx in indices {
                 let article = &self.articles[idx];
                 if entity_type.is_empty() {
@@ -226,32 +255,21 @@ impl InsightStorage {
                         .map(|e| e.entity_type.clone())
                         .unwrap_or_default();
                 }
-                for d in &article.domains {
-                    let entry =
-                        domain_map
-                            .entry(d.domain.clone())
-                            .or_insert_with(|| DomainConnection {
-                                domain: d.domain.clone(),
-                                article_ids: vec![],
-                                article_titles: vec![],
-                            });
-                    entry.article_ids.push(article.id.clone());
-                    entry.article_titles.push(article.title.clone());
-                }
+                Self::add_article_domains_to_map(article, &mut domain_map);
             }
         }
 
+        // Alias sweep: articles where the entity appears only via normalized_id.
         for article in &self.articles {
             let matches_normalized = article.entities.iter().any(|e| {
                 e.normalized_id
                     .as_ref()
                     .is_some_and(|id| id.to_lowercase() == key)
-                    && !e.name.to_lowercase().eq(&key)
+                    && !e.name.to_lowercase().eq(key)
             });
             if !matches_normalized {
                 continue;
             }
-
             if entity_type.is_empty() {
                 entity_type = article
                     .entities
@@ -264,19 +282,19 @@ impl InsightStorage {
                     .map(|e| e.entity_type.clone())
                     .unwrap_or_default();
             }
-            for d in &article.domains {
-                let entry =
-                    domain_map
-                        .entry(d.domain.clone())
-                        .or_insert_with(|| DomainConnection {
-                            domain: d.domain.clone(),
-                            article_ids: vec![],
-                            article_titles: vec![],
-                        });
-                entry.article_ids.push(article.id.clone());
-                entry.article_titles.push(article.title.clone());
-            }
+            Self::add_article_domains_to_map(article, &mut domain_map);
         }
+
+        (domain_map, entity_type)
+    }
+
+    pub fn find_inter_domain_connections(
+        &self,
+        entity: &str,
+        min_domains: usize,
+    ) -> Vec<EntityConnection> {
+        let key = entity.to_lowercase();
+        let (domain_map, entity_type) = self.build_domain_map_for_entity(&key);
 
         let domains_vec: Vec<DomainConnection> = domain_map.into_values().collect();
         let ndomains = domains_vec.len();
@@ -295,35 +313,8 @@ impl InsightStorage {
     pub fn find_all_inter_domain_connections(&self, min_domains: usize) -> Vec<EntityConnection> {
         let mut results: Vec<EntityConnection> = Vec::new();
 
-        for (key, indices) in &self.entity_index {
-            let mut domain_map: std::collections::HashMap<String, DomainConnection> =
-                std::collections::HashMap::new();
-            let mut etype = String::new();
-
-            for &idx in indices {
-                let article = &self.articles[idx];
-                if etype.is_empty() {
-                    etype = article
-                        .entities
-                        .iter()
-                        .find(|e| e.name.to_lowercase() == key.as_str())
-                        .map(|e| e.entity_type.clone())
-                        .unwrap_or_default();
-                }
-                for d in &article.domains {
-                    let entry =
-                        domain_map
-                            .entry(d.domain.clone())
-                            .or_insert_with(|| DomainConnection {
-                                domain: d.domain.clone(),
-                                article_ids: vec![],
-                                article_titles: vec![],
-                            });
-                    entry.article_ids.push(article.id.clone());
-                    entry.article_titles.push(article.title.clone());
-                }
-            }
-
+        for key in self.entity_index.keys() {
+            let (domain_map, etype) = self.build_domain_map_for_entity(key);
             let nd = domain_map.len();
             if nd >= min_domains {
                 results.push(EntityConnection {
@@ -404,70 +395,6 @@ impl InsightStorage {
     }
 }
 
-// ─── Format Resolution Trait ─────────────────────────────────────
-
-/// Trait for input types that carry output format options.
-pub trait HasFormat {
-    /// Return a reference to the optional format string.
-    fn format(&self) -> &Option<String>;
-}
-
-macro_rules! impl_has_format {
-    ($($ty:ty),* $(,)?) => {
-        $(
-            impl HasFormat for $ty {
-                fn format(&self) -> &Option<String> { &self.output.format }
-            }
-        )*
-    };
-}
-
-impl_has_format!(
-    SourceListInput,
-    GeoListInput,
-    NewsFetchInput,
-    NewsTestInput,
-    NewsEnrichInput,
-    RedditSearchInput,
-    RedditFeedInput,
-    ResearchSearchInput,
-    ResearchDownloadInput,
-    ResearchPubMedInput,
-    WebSearchInput,
-    WebScrapeInput,
-    WebCrawlInput,
-    WebMapInput,
-    InsightFindConnectionsInput,
-    InsightTrendingInput,
-    WeatherForecastInput,
-    WeatherCurrentInput,
-    WeatherAlertsInput,
-    FinanceMarketInput,
-    FinanceCryptoInput,
-    FinanceTrendingInput,
-    CveSearchInput,
-    SecurityAdvisoriesInput,
-    GovtBillsInput,
-    GovtRegulationsInput,
-    PatentSearchInput,
-    PatentDetailsInput,
-    SopListInput,
-    SopExecuteInput,
-    HealthCdcInput,
-    HealthWhoInput,
-    PoliticsFecInput,
-    PoliticsFecCommitteesInput,
-    SatelliteFirmsInput,
-    ClimateNoaaInput,
-    ClimateNoaaStationsInput,
-    EnvEpaFacilitiesInput,
-    EnvEpaEmissionsInput,
-    LegalSearchInput,
-    LegalCaseDetailsInput,
-    TwitterSearchInput,
-    TwitterReadInput,
-);
-
 // ─── Sync Settings Loader ───────────────────────────────────────
 
 /// Load settings synchronously (for use in non-async constructors).
@@ -480,31 +407,8 @@ fn load_settings_sync() -> Result<Settings, String> {
     let raw = std::fs::read_to_string(&file)
         .map_err(|e| format!("Failed to read {}: {}", file.display(), e))?;
 
-    // Expand env vars (same logic as config::expand_env_vars)
-    let mut expanded = String::with_capacity(raw.len());
-    let mut chars = raw.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '$' && chars.peek() == Some(&'{') {
-            chars.next();
-            let mut var_name = String::new();
-            for ch in chars.by_ref() {
-                if ch == '}' {
-                    break;
-                }
-                var_name.push(ch);
-            }
-            match std::env::var(&var_name) {
-                Ok(val) => expanded.push_str(&val),
-                Err(_) => {
-                    expanded.push_str("${");
-                    expanded.push_str(&var_name);
-                    expanded.push('}');
-                }
-            }
-        } else {
-            expanded.push(c);
-        }
-    }
+    // Expand env vars via the shared helper in `config`.
+    let expanded = config::expand_env_vars(&raw);
 
     serde_yaml::from_str(&expanded)
         .map_err(|e| format!("Failed to parse {}: {}", file.display(), e))
@@ -514,12 +418,27 @@ fn load_settings_sync() -> Result<Settings, String> {
 
 /// Serialize a value to the requested format (TOON or JSON) and wrap in CallToolResult.
 fn format_output<T: Serialize>(value: &T, format: &str) -> CallToolResult {
-    let text = if format == "json" {
-        serde_json::to_string_pretty(value).unwrap_or_default()
-    } else {
-        toon_encode(value)
-    };
+    let text = helpers::format_text(value, format);
     CallToolResult::success(vec![Content::text(text)])
+}
+
+/// Paginate a list of items and wrap in a PaginatedOutput + CallToolResult.
+/// Shared by `sources_list`, `sources_countries`, `sources_cities`,
+/// `sources_domains`, and `parsers_list` to avoid 5 copies of the same
+/// paginate → PaginatedOutput → format_output pipeline.
+fn paginated_output<T: Serialize + Clone>(
+    items: &[T],
+    cursor: Option<String>,
+    page_size: u32,
+    format: &str,
+) -> CallToolResult {
+    let (page, next_cursor) = paginate(items, cursor, page_size);
+    let output = PaginatedOutput {
+        items: page,
+        next_cursor,
+        total: items.len(),
+    };
+    format_output(&output, format)
 }
 
 // ─── Server State ────────────────────────────────────────────────
@@ -528,7 +447,6 @@ fn format_output<T: Serialize>(value: &T, format: &str) -> CallToolResult {
 pub struct IgsMcpServer {
     tool_router: ToolRouter<IgsMcpServer>,
     insights: Arc<Mutex<InsightStorage>>,
-    obscura: Arc<Mutex<Option<ObscuraManager>>>,
     /// Tool groups for progressive discovery. Empty = all groups available.
     tool_groups: Vec<String>,
     #[allow(dead_code)] // reserved for future tool use
@@ -545,8 +463,8 @@ impl Default for IgsMcpServer {
 }
 
 impl IgsMcpServer {
-    pub fn resolve_format(params: &impl HasFormat) -> String {
-        params.format().as_deref().unwrap_or("toon").to_string()
+    pub fn resolve_format(output: &crate::tools::types_base::OutputOptions) -> String {
+        output.format.as_deref().unwrap_or("toon").to_string()
     }
 
     pub fn filtered_tool_names(&self, all_tools: Vec<String>) -> Vec<String> {
@@ -570,17 +488,7 @@ impl IgsMcpServer {
 #[tool_router(router = tool_router)]
 impl IgsMcpServer {
     pub fn new() -> Self {
-        let settings = load_settings_sync().expect("Failed to load settings");
-        let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
-        let http_client = HttpClient::new(&settings.http, &cache_dir);
-        Self {
-            tool_router: Self::tool_router(),
-            insights: Arc::new(Mutex::new(InsightStorage::new())),
-            obscura: Arc::new(Mutex::new(None)),
-            tool_groups: Vec::new(),
-            http_client: Arc::new(http_client),
-            settings: Arc::new(settings),
-        }
+        Self::new_with_groups(Vec::new())
     }
 
     pub fn new_with_groups(tool_groups: Vec<String>) -> Self {
@@ -590,11 +498,27 @@ impl IgsMcpServer {
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
-            obscura: Arc::new(Mutex::new(None)),
             tool_groups,
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
         }
+    }
+
+    /// Dump tool output as a markdown sidecar if dump is enabled in settings.
+    /// No-op when dump_enabled=false, when running under `cargo test`, or when
+    /// the toon encoding fails. The toon_encode is only computed when dumping
+    /// is actually enabled, avoiding redundant work in the hot path.
+    #[cfg(not(test))]
+    fn dump<T: Serialize>(&self, tool_name: &str, subject: &str, output: &T) {
+        if !self.settings.output.dump_enabled {
+            return;
+        }
+        crate::tools::dump::maybe_dump(&self.settings, tool_name, subject, &toon_encode(output));
+    }
+
+    #[cfg(test)]
+    fn dump<T: Serialize>(&self, _tool_name: &str, _subject: &str, _output: &T) {
+        // No-op under test to avoid touching the filesystem.
     }
 
     // ── Tool Guide ─────────────────────────────────────────────
@@ -646,17 +570,11 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_list(params.0).await?;
-        let (page, next_cursor) = paginate(&all_output.sources, cursor, page_size);
-        let output = PaginatedOutput {
-            items: page,
-            next_cursor,
-            total: all_output.sources.len(),
-        };
-        Ok(format_output(&output, &format))
+        Ok(paginated_output(&all_output.sources, cursor, page_size, &format))
     }
 
     #[tool(
@@ -711,17 +629,11 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GeoListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_countries().await?;
-        let (page, next_cursor) = paginate(&all_output.countries, cursor, page_size);
-        let output = PaginatedOutput {
-            items: page,
-            next_cursor,
-            total: all_output.countries.len(),
-        };
-        Ok(format_output(&output, &format))
+        Ok(paginated_output(&all_output.countries, cursor, page_size, &format))
     }
 
     #[tool(
@@ -732,17 +644,11 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GeoListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_cities().await?;
-        let (page, next_cursor) = paginate(&all_output.cities, cursor, page_size);
-        let output = PaginatedOutput {
-            items: page,
-            next_cursor,
-            total: all_output.cities.len(),
-        };
-        Ok(format_output(&output, &format))
+        Ok(paginated_output(&all_output.cities, cursor, page_size, &format))
     }
 
     #[tool(
@@ -753,17 +659,11 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GeoListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_domains().await?;
-        let (page, next_cursor) = paginate(&all_output.domains, cursor, page_size);
-        let output = PaginatedOutput {
-            items: page,
-            next_cursor,
-            total: all_output.domains.len(),
-        };
-        Ok(format_output(&output, &format))
+        Ok(paginated_output(&all_output.domains, cursor, page_size, &format))
     }
 
     // ── Parser Tools ────────────────────────────────────────────
@@ -779,13 +679,7 @@ impl IgsMcpServer {
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = parsers_tools::parsers_list().await?;
-        let (page, next_cursor) = paginate(&all_output.parsers, cursor, page_size);
-        let output = PaginatedOutput {
-            items: page,
-            next_cursor,
-            total: all_output.parsers.len(),
-        };
-        Ok(format_output(&output, "toon"))
+        Ok(paginated_output(&all_output.parsers, cursor, page_size, "toon"))
     }
 
     // ── News Tools ──────────────────────────────────────────────
@@ -798,7 +692,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<NewsFetchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let depth = params
             .0
             .depth_opts
@@ -819,15 +713,7 @@ impl IgsMcpServer {
                 .cloned()
                 .unwrap_or_else(|| "news".to_string());
             let output = news::news_fetch(params.0).await?;
-            #[cfg(not(test))]
-            {
-                crate::tools::dump::maybe_dump(
-                    &self.settings,
-                    "news.fetch",
-                    &_subject,
-                    &toon_encode(&output),
-                );
-            }
+            self.dump("news.fetch", &_subject, &output);
             Ok(format_output(&output, &format))
         }
     }
@@ -840,18 +726,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<NewsTestInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.id.clone();
         let output = news::news_test_source(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "news.test_source",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("news.test_source", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -863,18 +741,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<NewsEnrichInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = format!("enrich-{}", params.0.items.len());
         let output = news::news_enrich(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "news.enrich",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("news.enrich", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -888,7 +758,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WeatherForecastInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = weather::weather_forecast(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -901,7 +771,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WeatherCurrentInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = weather::weather_current(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -914,7 +784,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WeatherAlertsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = weather::weather_alerts(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -929,7 +799,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<RedditSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params
             .0
             .subreddits
@@ -938,15 +808,7 @@ impl IgsMcpServer {
             .cloned()
             .unwrap_or_else(|| params.0.query.clone());
         let output = reddit::reddit_search(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "reddit.search",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("reddit.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -958,18 +820,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<RedditFeedInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.subreddits.first().cloned().unwrap_or_default();
         let output = reddit::reddit_feed(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "reddit.feed",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("reddit.feed", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -983,18 +837,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ResearchSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = research::research_search(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "research.search",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("research.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1008,15 +854,7 @@ impl IgsMcpServer {
     ) -> Result<Json<ResearchPaperOutput>, String> {
         let _subject = params.0.paper_id.clone();
         let output = research::research_paper(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "research.paper",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("research.paper", &_subject, &output);
         Ok(Json(output))
     }
 
@@ -1039,7 +877,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ResearchPubMedInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = research::research_pubmed_search(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1054,18 +892,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<FinanceMarketInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.symbols.join(",");
         let output = finance::finance_market(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "finance.market",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("finance.market", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1077,18 +907,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<FinanceCryptoInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.symbols.join(",");
         let output = finance::finance_crypto(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "finance.crypto",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("finance.crypto", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1100,7 +922,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<FinanceTrendingInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = finance::finance_trending(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1115,18 +937,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<CveSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = security::security_cve_search(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "security.cve",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("security.cve", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1138,18 +952,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SecurityAdvisoriesInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.ecosystem.clone();
         let output = security::security_advisories(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "security.advisories",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("security.advisories", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1163,18 +969,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GovtBillsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = govt::govt_bills(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "govt.bills",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("govt.bills", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1186,18 +984,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GovtRegulationsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = govt::govt_regulations(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "govt.regulations",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("govt.regulations", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1211,7 +1001,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<PoliticsFecInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = politics::politics_fec_candidates(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1224,7 +1014,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<PoliticsFecCommitteesInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = politics::politics_fec_committees(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1239,18 +1029,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<PatentSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = patents::patents_search(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "patents.search",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("patents.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1264,15 +1046,7 @@ impl IgsMcpServer {
     ) -> Result<Json<PatentDetailsOutput>, String> {
         let _subject = params.0.patent_id.clone();
         let output = patents::patents_details(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "patents.details",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("patents.details", &_subject, &output);
         Ok(Json(output))
     }
 
@@ -1286,7 +1060,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SatelliteFirmsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = satellite::satellite_firms_fires(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1301,7 +1075,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<EnvEpaFacilitiesInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = env::env_epa_facilities(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1314,7 +1088,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<EnvEpaEmissionsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = env::env_epa_emissions(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1329,7 +1103,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LegalSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = legal::legal_search_cases(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1355,7 +1129,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<HealthCdcInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = health::health_cdc_leading_causes(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1368,7 +1142,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<HealthWhoInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = health::health_who_gho(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1383,7 +1157,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ClimateNoaaInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = climate::climate_noaa_observations(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1396,7 +1170,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ClimateNoaaStationsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = climate::climate_noaa_stations(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1411,18 +1185,10 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WebSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = web::web_search(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "web.search",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("web.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1434,20 +1200,12 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WebScrapeInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_scrape(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "web.scrape",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("web.scrape", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1456,20 +1214,12 @@ impl IgsMcpServer {
         description = "BFS crawl a website using Obscura headless browser. Returns pages with depth and status."
     )]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_crawl(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "web.crawl",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("web.crawl", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1478,20 +1228,12 @@ impl IgsMcpServer {
         description = "Discover URLs on a website by parsing sitemap.xml. Returns links array with url and title."
     )]
     async fn web_map(&self, params: Parameters<WebMapInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_map(params.0).await?;
-        #[cfg(not(test))]
-        {
-            crate::tools::dump::maybe_dump(
-                &self.settings,
-                "web.map",
-                &_subject,
-                &toon_encode(&output),
-            );
-        }
+        self.dump("web.map", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 
@@ -1518,7 +1260,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<InsightTrendingInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = insights::insights_trending(&self.insights, params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1559,7 +1301,7 @@ impl IgsMcpServer {
         description = "Navigate to URL. Renders JS, spawns session."
     )]
     async fn lp_goto(&self, params: Parameters<LpGotoInput>) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_goto(&self.obscura, params.0).await.map(Json)
+        lp_mcp::lp_goto(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1570,7 +1312,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpMarkdownInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_markdown(&self.obscura, params.0).await.map(Json)
+        lp_mcp::lp_markdown(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1581,7 +1323,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpLinksInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_links(&self.obscura, params.0).await.map(Json)
+        lp_mcp::lp_links(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1592,46 +1334,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpEvaluateInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_evaluate(&self.obscura, params.0).await.map(Json)
-    }
-
-    #[tool(
-        name = "browser.semantic_tree",
-        description = "Get semantic DOM tree of current page."
-    )]
-    async fn lp_semantic_tree(
-        &self,
-        params: Parameters<LpSemanticTreeInput>,
-    ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_semantic_tree(&self.obscura, params.0)
-            .await
-            .map(Json)
-    }
-
-    #[tool(
-        name = "browser.structured_data",
-        description = "Extract JSON-LD, OpenGraph, microdata from page."
-    )]
-    async fn lp_structured_data(
-        &self,
-        params: Parameters<LpStructuredDataInput>,
-    ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_structured_data(&self.obscura, params.0)
-            .await
-            .map(Json)
-    }
-
-    #[tool(
-        name = "browser.detect_forms",
-        description = "Detect forms: fields, actions, methods."
-    )]
-    async fn lp_detect_forms(
-        &self,
-        params: Parameters<LpDetectFormsInput>,
-    ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_detect_forms(&self.obscura, params.0)
-            .await
-            .map(Json)
+        lp_mcp::lp_evaluate(params.0).await.map(Json)
     }
 
     #[tool(name = "browser.click", description = "Click element by CSS selector.")]
@@ -1639,7 +1342,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpClickInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_click(&self.obscura, params.0).await.map(Json)
+        lp_mcp::lp_click(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1647,7 +1350,7 @@ impl IgsMcpServer {
         description = "Fill form field by CSS selector."
     )]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_fill(&self.obscura, params.0).await.map(Json)
+        lp_mcp::lp_fill(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1658,7 +1361,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpScrollInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_scroll(&self.obscura, params.0).await.map(Json)
+        lp_mcp::lp_scroll(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1669,20 +1372,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpWaitForSelectorInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_wait_for_selector(&self.obscura, params.0)
-            .await
-            .map(Json)
-    }
-
-    #[tool(
-        name = "browser.interactive_elements",
-        description = "Find clickable/fillable elements on page."
-    )]
-    async fn lp_interactive_elements(
-        &self,
-        params: Parameters<LpInteractiveElementsInput>,
-    ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_interactive_elements(&self.obscura, params.0)
+        lp_mcp::lp_wait_for_selector(params.0)
             .await
             .map(Json)
     }
@@ -1694,7 +1384,7 @@ impl IgsMcpServer {
         description = "List available SOP chains for composable multi-step intelligence workflows."
     )]
     async fn sop_list(&self, params: Parameters<SopListInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = sop::sop_list();
         Ok(format_output(&output, &format))
     }
@@ -1707,7 +1397,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SopExecuteInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = sop::sop_execute(params.0)?;
         Ok(format_output(&output, &format))
     }
@@ -1721,9 +1411,8 @@ impl IgsMcpServer {
     async fn youtube_search(
         &self,
         params: Parameters<YoutubeSearchInput>,
-    ) -> Result<CallToolResult, String> {
-        let output = youtube::youtube_search(params.0).await?;
-        Ok(format_output(&output, "json"))
+    ) -> Result<Json<YoutubeSearchOutput>, String> {
+        youtube::youtube_search(params.0).await.map(Json)
     }
 
     #[tool(
@@ -1758,7 +1447,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<TwitterSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = twitter::twitter_search(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1771,7 +1460,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<TwitterReadInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0);
+        let format = Self::resolve_format(&params.0.output);
         let output = twitter::twitter_read(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1783,7 +1472,7 @@ impl IgsMcpServer {
 impl rmcp::ServerHandler for IgsMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
-            .with_server_info(Implementation::new("igs-rust-mcp", "0.2.0"))
+            .with_server_info(Implementation::new("igs-rust-mcp", env!("CARGO_PKG_VERSION")))
             .with_instructions("Intelligence Gathering System MCP Server. Provides tools for RSS/HTTP source monitoring, news fetching, Reddit search, academic paper research, web search/scraping, and cross-article entity insight analysis.")
     }
 
@@ -1825,5 +1514,207 @@ impl rmcp::ServerHandler for IgsMcpServer {
                 None,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{ArticleInsight, DomainInfo, EntityInfo};
+
+    fn make_article(
+        id: &str,
+        title: &str,
+        pub_date: &str,
+        source_name: &str,
+        domains: Vec<&str>,
+        entities: Vec<(&str, &str, Option<&str>)>,
+    ) -> ArticleInsight {
+        ArticleInsight {
+            id: id.to_string(),
+            title: title.to_string(),
+            pub_date: pub_date.to_string(),
+            source_name: source_name.to_string(),
+            domains: domains
+                .iter()
+                .map(|d| DomainInfo {
+                    domain: d.to_string(),
+                    score: Some(1.0),
+                })
+                .collect(),
+            entities: entities
+                .iter()
+                .map(|(name, etype, norm_id)| EntityInfo {
+                    name: name.to_string(),
+                    entity_type: etype.to_string(),
+                    mentions: Some(1),
+                    confidence: Some(0.9),
+                    normalized_id: norm_id.map(|s| s.to_string()),
+                })
+                .collect(),
+        }
+    }
+
+    fn empty_storage() -> InsightStorage {
+        InsightStorage {
+            articles: vec![],
+            entity_index: std::collections::HashMap::new(),
+            domain_index: std::collections::HashMap::new(),
+            db: None,
+        }
+    }
+
+    #[test]
+    fn find_connections_returns_empty_for_unknown_entity() {
+        let s = empty_storage();
+        let result = s.find_inter_domain_connections("ghost", 2);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn find_connections_returns_empty_when_below_min_domains() {
+        let mut s = empty_storage();
+        s.add_article(make_article(
+            "a1",
+            "Article 1",
+            "2026-01-01T00:00:00Z",
+            "src1",
+            vec!["tech"],
+            vec![("OpenAI", "Organization", None)],
+        ));
+        let result = s.find_inter_domain_connections("openai", 2);
+        assert!(result.is_empty(), "expected empty (only 1 domain), got {:?}", result);
+    }
+
+    #[test]
+    fn find_connections_returns_connection_when_at_min_domains() {
+        let mut s = empty_storage();
+        s.add_article(make_article(
+            "a1",
+            "Article 1",
+            "2026-01-01T00:00:00Z",
+            "src1",
+            vec!["tech", "finance"],
+            vec![("OpenAI", "Organization", None)],
+        ));
+        let result = s.find_inter_domain_connections("openai", 2);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].entity, "openai");
+        assert_eq!(result[0].entity_type, "Organization");
+        assert_eq!(result[0].domains.len(), 2);
+        assert_eq!(result[0].connection_strength, 2.0);
+    }
+
+    #[test]
+    fn find_connections_picks_up_aliases_via_normalized_id() {
+        let mut s = empty_storage();
+        // Article 1: entity "OpenAI" by name, in domain "tech"
+        s.add_article(make_article(
+            "a1",
+            "Article 1",
+            "2026-01-01T00:00:00Z",
+            "src1",
+            vec!["tech"],
+            vec![("OpenAI", "Organization", None)],
+        ));
+        // Article 2: entity "OAI" (alias) with normalized_id="openai", in domain "finance"
+        s.add_article(make_article(
+            "a2",
+            "Article 2",
+            "2026-01-02T00:00:00Z",
+            "src2",
+            vec!["finance"],
+            vec![("OAI", "Organization", Some("openai"))],
+        ));
+        let result = s.find_inter_domain_connections("openai", 2);
+        assert_eq!(result.len(), 1, "alias sweep should find both articles");
+        assert_eq!(result[0].domains.len(), 2, "both tech and finance should be recorded");
+    }
+
+    #[test]
+    fn find_all_inter_domain_connections_returns_all_qualifying_entities() {
+        let mut s = empty_storage();
+        // "openai" appears in 2 domains
+        s.add_article(make_article(
+            "a1",
+            "A1",
+            "2026-01-01T00:00:00Z",
+            "src1",
+            vec!["tech", "finance"],
+            vec![("OpenAI", "Organization", None)],
+        ));
+        // "google" appears in 1 domain (below min_domains=2)
+        s.add_article(make_article(
+            "a2",
+            "A2",
+            "2026-01-02T00:00:00Z",
+            "src2",
+            vec!["tech"],
+            vec![("Google", "Organization", None)],
+        ));
+        let result = s.find_all_inter_domain_connections(2);
+        assert_eq!(result.len(), 1, "only openai should qualify");
+        assert_eq!(result[0].entity, "openai");
+    }
+
+    #[test]
+    fn add_article_domains_to_map_records_ids_and_titles() {
+        let article = make_article(
+            "a1",
+            "Hello World",
+            "2026-01-01T00:00:00Z",
+            "src1",
+            vec!["tech", "tech", "finance"],
+            vec![],
+        );
+        let mut map: std::collections::HashMap<String, DomainConnection> =
+            std::collections::HashMap::new();
+        InsightStorage::add_article_domains_to_map(&article, &mut map);
+        // Two distinct domains
+        assert_eq!(map.len(), 2);
+        assert!(map.contains_key("tech"));
+        assert!(map.contains_key("finance"));
+        // "tech" was added twice → 2 article_ids
+        assert_eq!(map["tech"].article_ids.len(), 2);
+        assert_eq!(map["tech"].article_titles, vec!["Hello World".to_string(), "Hello World".to_string()]);
+        assert_eq!(map["finance"].article_ids.len(), 1);
+    }
+
+    #[test]
+    fn stats_reports_zero_for_empty_storage() {
+        let s = empty_storage();
+        let stats = s.stats();
+        assert_eq!(stats.total_articles, 0);
+        assert_eq!(stats.total_entities, 0);
+        assert_eq!(stats.total_domains, 0);
+        assert_eq!(stats.avg_entities_per_article, 0.0);
+        assert_eq!(stats.avg_domains_per_article, 0.0);
+    }
+
+    #[test]
+    fn stats_computes_averages_correctly() {
+        let mut s = empty_storage();
+        s.add_article(make_article(
+            "a1",
+            "A1",
+            "2026-01-01T00:00:00Z",
+            "src1",
+            vec!["tech", "finance"],
+            vec![("OpenAI", "Organization", None), ("Sam", "Person", None)],
+        ));
+        s.add_article(make_article(
+            "a2",
+            "A2",
+            "2026-01-02T00:00:00Z",
+            "src2",
+            vec!["tech"],
+            vec![("Google", "Organization", None)],
+        ));
+        let stats = s.stats();
+        assert_eq!(stats.total_articles, 2);
+        assert_eq!(stats.total_entities, 3); // openai, sam, google
+        assert_eq!(stats.total_domains, 2); // tech, finance
+        assert_eq!(stats.avg_entities_per_article, 1.5); // (2+1)/2
+        assert_eq!(stats.avg_domains_per_article, 1.5); // (2+1)/2
     }
 }

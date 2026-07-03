@@ -50,7 +50,9 @@ async fn ensure_bootstrapped() -> Result<()> {
 
 /// Replace ${VAR_NAME} patterns with environment variable values.
 /// Leaves literal ${VAR} if env var is unset (graceful fallback).
-fn expand_env_vars(s: &str) -> String {
+/// Shared between `config::expand_env_vars` (async path) and
+/// `server::load_settings_sync` (sync path).
+pub fn expand_env_vars(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
@@ -112,16 +114,22 @@ async fn merge_missing_default_sources() -> Result<()> {
         user_doc.sources.iter().map(|s| s.id.clone()).collect();
 
     let mut merged = user_doc.sources.clone();
-    let mut changed = false;
+    let mut added: Vec<String> = Vec::new();
 
     for src in &default_doc.sources {
         if !user_ids.contains(&src.id) {
             merged.push(src.clone());
-            changed = true;
+            added.push(src.id.clone());
         }
     }
 
-    if changed {
+    if !added.is_empty() {
+        tracing::info!(
+            "Merging {} missing default source(s) into {}: {}",
+            added.len(),
+            user_file.display(),
+            added.join(", ")
+        );
         let merged_file = SourcesFile { sources: merged };
         write_yaml(&user_file, &merged_file).await?;
     }

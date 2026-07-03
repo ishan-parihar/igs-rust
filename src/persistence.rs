@@ -73,14 +73,6 @@ pub fn load_articles(conn: &Connection) -> Result<Vec<ArticleInsight>> {
     Ok(result)
 }
 
-/// Get article count
-pub fn article_count(conn: &Connection) -> Result<usize> {
-    let count: usize = conn
-        .query_row("SELECT COUNT(*) FROM articles", [], |row| row.get(0))
-        .context("Failed to count articles")?;
-    Ok(count)
-}
-
 /// Clear all articles
 pub fn clear_articles(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM articles", [])

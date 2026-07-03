@@ -37,10 +37,8 @@ pub async fn weather_forecast(
         .await
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
-    let resp = match outcome {
-        http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("OpenWeatherMap returned cached response".into()),
-    };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+        else { unreachable!("bypass cache mode never returns Cached") };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("Failed to parse OpenWeatherMap response: {}", e))?;
@@ -125,10 +123,8 @@ pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurren
         .await
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
-    let resp = match outcome {
-        http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("OpenWeatherMap returned cached response".into()),
-    };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+        else { unreachable!("bypass cache mode never returns Cached") };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("Failed to parse OpenWeatherMap response: {}", e))?;
@@ -197,10 +193,8 @@ pub async fn weather_alerts(input: WeatherAlertsInput) -> Result<WeatherAlertsOu
         .await
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
-    let resp = match outcome {
-        http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("OpenWeatherMap returned cached response".into()),
-    };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+        else { unreachable!("bypass cache mode never returns Cached") };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("Failed to parse OpenWeatherMap response: {}", e))?;

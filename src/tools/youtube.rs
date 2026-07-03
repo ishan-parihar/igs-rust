@@ -175,7 +175,7 @@ pub async fn youtube_subtitles(
         ));
     }
 
-    let subtitle_text = if let Some(entries) = std::fs::read_dir(&temp_dir).ok() {
+    let subtitle_text = if let Ok(entries) = std::fs::read_dir(&temp_dir) {
         let mut found = String::new();
         for entry in entries.flatten() {
             let name = entry.file_name();

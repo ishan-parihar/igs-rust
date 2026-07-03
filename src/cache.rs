@@ -1,7 +1,7 @@
-use crate::types::{FeedCacheEntry, NewsItem, QueryCacheEntry, QueryCacheMeta};
+use crate::types::{FeedCacheEntry, NewsItem};
 use anyhow::Result;
 use base64::Engine;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tokio::fs;
@@ -123,73 +123,5 @@ impl FeedCache {
                 let _ = std::fs::remove_file(self.dir.join(&name));
             }
         }
-    }
-}
-
-/// Query-level cache: caches aggregated query results keyed by a compound string.
-pub struct QueryCache {
-    dir: PathBuf,
-    ttl_ms: u64,
-}
-
-impl QueryCache {
-    pub fn new(dir: &Path, ttl_ms: u64) -> Self {
-        Self {
-            dir: dir.join("queries"),
-            ttl_ms,
-        }
-    }
-
-    fn file_for(&self, key: &str) -> PathBuf {
-        let k = b64_encode(key.as_bytes());
-        self.dir.join(format!("{}.json", k))
-    }
-
-    pub async fn read<T: serde::de::DeserializeOwned + Clone>(
-        &self,
-        key: &str,
-    ) -> Result<Option<(QueryCacheMeta, T)>> {
-        let file = self.file_for(key);
-        match fs::read_to_string(&file).await {
-            Ok(raw) => {
-                let entry: QueryCacheEntry<T> = serde_json::from_str(&raw)?;
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
-                if now - entry.meta.at > self.ttl_ms {
-                    return Ok(None);
-                }
-                Ok(Some((entry.meta, entry.data)))
-            }
-            Err(_) => Ok(None),
-        }
-    }
-
-    pub async fn write<T: serde::Serialize>(
-        &self,
-        key: &str,
-        deps: HashMap<String, u64>,
-        data: &T,
-    ) -> Result<()> {
-        let file = self.file_for(key);
-        if let Some(parent) = file.parent() {
-            fs::create_dir_all(parent).await?;
-        }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-        let entry = QueryCacheEntry {
-            meta: QueryCacheMeta {
-                key: key.to_string(),
-                at: now,
-                deps,
-            },
-            data,
-        };
-        let raw = serde_json::to_string(&entry)?;
-        fs::write(&file, raw.as_bytes()).await?;
-        Ok(())
     }
 }

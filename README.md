@@ -3,12 +3,12 @@
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
 
-MCP server + CLI for intelligence gathering. 68 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Lightpanda headless browser.
+MCP server + CLI for intelligence gathering. 64 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Obscura headless browser.
 
 | Metric | Value |
 |--------|-------|
-| Tools | 68 (56 core + 12 Lightpanda browser automation) |
-| Intelligence Domains | 16 (News, Research, Web, Weather, Finance, Security, Patents, Government, Politics, Health, Climate, Legal, Environment, SOP, Browser, Insights) |
+| Tools | 64 (56 core + 8 Obscura browser) |
+| Intelligence Domains | 20 (Discovery, News, Research, Web, Insights, Social, Twitter, Weather, Finance, Security, Patents, Government, Legal, Environment, Climate, Health, Politics, Browser, SOP, YouTube) |
 | Sources | 411 across 47 countries |
 | Pools | 14 (geopolitics, tech, India, defense, health, etc.) |
 | Binary | Single `igs` binary (~26 MB musl static) |
@@ -197,7 +197,7 @@ firecrawl:
   apiKey: ${FIRECRAWL_API_KEY}
 
 # Lightpanda headless browser (auto-downloads binary)
-lightpanda:
+browser:
   enabled: false
   auto_update: true
   obey_robots: true
@@ -267,7 +267,7 @@ courtlistener:
 | `sources.cities` | List cities with source counts |
 | `sources.domains` | List domains with source counts |
 | `parsers.list` | List available parser types |
-| `tool.guide` | Decision tree for tool selection |
+| `igs://tool-guide` (MCP resource) | Decision tree for tool selection |
 
 ### News (3 tools)
 
@@ -302,8 +302,8 @@ courtlistener:
 | `insights.find_connections` | Find cross-domain connections |
 | `insights.trending_entities` | Detect trending entities |
 | `insights.index_articles` | Index articles for analysis |
-| `insights.getStats` | Engine statistics |
-| `insights.clearIndex` | Clear all indexed articles |
+| `insights.get_stats` | Engine statistics |
+| `insights.clear_index` | Clear all indexed articles |
 
 ### Social (2 tools)
 
@@ -392,22 +392,22 @@ courtlistener:
 | `sop.list` | List available workflows |
 | `sop.execute` | Execute multi-step workflow |
 
-### Browser (12 tools)
+### Browser (8 tools)
 
 | Tool | Description |
 |------|-------------|
-| `lightpanda.goto` | Navigate to URL (JS rendering) |
-| `lightpanda.markdown` | Get page as markdown |
-| `lightpanda.links` | Extract links |
-| `lightpanda.evaluate` | Execute JavaScript |
-| `lightpanda.semantic_tree` | AI-friendly DOM tree |
-| `lightpanda.structured_data` | Extract JSON-LD, OpenGraph |
-| `lightpanda.detect_forms` | Find forms |
-| `lightpanda.click` | Click element |
-| `lightpanda.fill` | Fill form field |
-| `lightpanda.scroll` | Scroll page |
-| `lightpanda.wait_for_selector` | Wait for element |
-| `lightpanda.interactive_elements` | Find clickable items |
+| `browser.goto` | Navigate to URL (JS rendering) |
+| `browser.markdown` | Get page as markdown |
+| `browser.links` | Extract links |
+| `browser.evaluate` | Execute JavaScript |
+| `` | AI-friendly DOM tree |
+| `` | Extract JSON-LD, OpenGraph |
+| `` | Find forms |
+| `browser.click` | Click element |
+| `browser.fill` | Fill form field |
+| `browser.scroll` | Scroll page |
+| `browser.wait_for_selector` | Wait for element |
+| `` | Find clickable items |
 
 ---
 
@@ -493,8 +493,7 @@ pub async fn <domain>_<tool>(input: <Domain>Input) -> Result<Domain>Output, Stri
     
     let resp = match outcome {
         http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("API returned cached response".into()),
-    };
+        _ => return Err("API returned cached response".into())};
     
     let data: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("JSON parse error: {}", e))?;
@@ -518,11 +517,11 @@ src/
 ├── http.rs              HttpClient with retry, backoff, per-host concurrency
 ├── cache.rs             Dual-tier caching with LRU eviction
 ├── parsers.rs           11 parser types + filtering + dedup
-├── lightpanda.rs        Lightpanda binary manager
-├── lightpanda_mcp.rs    Lightpanda MCP client (JSON-RPC 2.0)
+├── obscura.rs        Obscura binary manager (download, update, fetch)
+├── lp_mcp.rs         Obscura MCP client (CLI subprocess invocation)
 ├── persistence.rs       SQLite persistence
 └── tools/
-    ├── types.rs         All tool I/O types (68 tools)
+    ├── types.rs         All tool I/O types (64 tools)
     ├── tool_guide.rs    Decision tree + categories + drill-down chains
     ├── helpers.rs       NLP, urlencoding, toon_encode
     ├── pools.rs         Pool CRUD

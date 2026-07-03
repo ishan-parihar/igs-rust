@@ -31,7 +31,7 @@ pub fn extract_topics(text: &str, max: usize) -> Vec<String> {
     }
 
     let mut topics: Vec<(&str, usize)> = freq.into_iter().collect();
-    topics.sort_by(|a, b| b.1.cmp(&a.1));
+    topics.sort_by_key(|&(_, c)| std::cmp::Reverse(c));
     topics
         .into_iter()
         .take(max)
@@ -228,6 +228,16 @@ pub fn find_feed_url(body: &str, base_url: &str) -> Option<String> {
 pub fn toon_encode<T: serde::Serialize>(value: &T) -> String {
     toon_format::encode_default(value)
         .unwrap_or_else(|_| serde_json::to_string(value).unwrap_or_default())
+}
+
+/// Serialize a value to the requested format ("toon" or "json") as a String.
+/// Shared by the CLI `output` helper and the server `format_output` helper.
+pub fn format_text<T: serde::Serialize>(value: &T, format: &str) -> String {
+    if format == "json" {
+        serde_json::to_string_pretty(value).unwrap_or_default()
+    } else {
+        toon_encode(value)
+    }
 }
 
 #[cfg(test)]
