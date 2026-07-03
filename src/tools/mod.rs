@@ -16,6 +16,7 @@ pub mod weather;
 pub mod web;
 
 pub mod climate;
+pub mod advanced;
 pub mod dump;
 pub mod entity_resolution;
 pub mod env;
