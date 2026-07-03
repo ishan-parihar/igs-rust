@@ -1630,7 +1630,8 @@ impl IgsMcpServer {
 impl rmcp::ServerHandler for IgsMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
-            .with_server_info(Implementation::new("igs-rust-mcp", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("igs-rust", "0.2.0"))
+
             .with_instructions("Intelligence Gathering System MCP Server. Provides tools for RSS/HTTP source monitoring, news fetching, Reddit search, academic paper research, web search/scraping, and cross-article entity insight analysis.")
     }
 

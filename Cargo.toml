@@ -1,12 +1,12 @@
 [package]
-name = "igs-rust-mcp"
+name = "igs-rust"
 version = "0.5.3"
 edition = "2021"
 description = "Intelligence Gathering System - RSS/HTTP source monitoring MCP server with NLP enrichment"
 authors = ["Ishan Parihar"]
 license = "MIT"
-repository = "https://github.com/ishan-parihar/igs-rust-mcp"
-homepage = "https://github.com/ishan-parihar/igs-rust-mcp"
+repository = "https://github.com/ishan-parihar/igs-rust"
+homepage = "https://github.com/ishan-parihar/igs-rust"
 keywords = ["mcp", "rss", "news", "intelligence", "scraper", "nlp"]
 categories = ["command-line-utilities", "web-programming::scraping"]
 

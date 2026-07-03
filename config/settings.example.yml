@@ -4,7 +4,8 @@
 
 # ─── HTTP Client ──────────────────────────────────────────────
 http:
-  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
+  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust)
+
   timeoutMs: 15000
   retries: 2
   backoffBaseMs: 500
