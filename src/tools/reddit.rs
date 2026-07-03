@@ -12,6 +12,10 @@ const REDDIT_USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Brave/Chrome/145.0.0.0 Safari/537.36";
 
 // ─── Reddit API Response Types ─────────────────────────────────
+// These mirror the Reddit JSON API shape. Some fields are deserialized for
+// schema completeness even though we don't currently read them — they're
+// marked `#[allow(dead_code)]` to silence the unused-field warning without
+// dropping them from the response model.
 
 #[derive(Debug, Deserialize)]
 struct RedditListingResponse {
@@ -21,6 +25,7 @@ struct RedditListingResponse {
 #[derive(Debug, Deserialize)]
 struct RedditListingData {
     children: Vec<RedditChild>,
+    #[allow(dead_code)]
     after: Option<String>,
 }
 
@@ -40,6 +45,7 @@ struct RedditPost {
     created_utc: f64,
     selftext: Option<String>,
     url: Option<String>,
+    #[allow(dead_code)]
     thumbnail: Option<String>,
     is_self: bool,
 }
@@ -86,9 +92,13 @@ fn build_reddit_client(cookie: &str) -> Client {
 async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
     let max_retries = 3;
     let mut last_err = String::new();
+    // Track whether the previous attempt already slept (e.g., via Retry-After
+    // on 429). If so, skip the exponential backoff sleep on the next iteration
+    // to avoid double-sleeping.
+    let mut already_slept = false;
 
     for attempt in 0..=max_retries {
-        if attempt > 0 {
+        if attempt > 0 && !already_slept {
             let delay = Duration::from_secs(2u64.pow(attempt as u32));
             tracing::info!(
                 "Reddit: retry {} after {}s for {}",
@@ -98,6 +108,7 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
             );
             tokio::time::sleep(delay).await;
         }
+        already_slept = false;
 
         match client.get(url).send().await {
             Ok(resp) => {
@@ -117,6 +128,9 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
                         retry_after
                     );
                     tokio::time::sleep(Duration::from_secs(retry_after)).await;
+                    // Mark that we already slept via Retry-After so the next
+                    // iteration skips the exponential backoff sleep.
+                    already_slept = true;
                     last_err = format!("429 rate-limited (Retry-After: {}s)", retry_after);
                     continue;
                 }
@@ -225,18 +239,14 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
                 id: item_id,
                 title: post.title,
                 link,
-                pub_date,
+                pub_date: pub_date.clone(),
                 source_name: format!("Reddit r/{}", post.subreddit),
                 pool_id: "REDDIT".to_string(),
                 content_snippet: format!("Score: {} | Comments: {}", post.score, post.num_comments),
                 author: Some(format!("u/{}", post.author)),
                 media_url: None,
                 date_confidence: Some("high".to_string()),
-                freshness_score: Some(parsers::calculate_freshness(
-                    &chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
-                        .map(|d| d.to_rfc3339())
-                        .unwrap_or_default(),
-                )),
+                freshness_score: Some(parsers::calculate_freshness(&pub_date)),
             });
         }
     }
@@ -310,18 +320,14 @@ pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, Str
                 id: item_id,
                 title: post.title,
                 link,
-                pub_date,
+                pub_date: pub_date.clone(),
                 source_name: format!("Reddit r/{}", sub),
                 pool_id: "REDDIT".to_string(),
                 content_snippet,
                 author: Some(format!("u/{}", post.author)),
                 media_url: None,
                 date_confidence: Some("high".to_string()),
-                freshness_score: Some(parsers::calculate_freshness(
-                    &chrono::DateTime::from_timestamp(post.created_utc as i64, 0)
-                        .map(|d| d.to_rfc3339())
-                        .unwrap_or_default(),
-                )),
+                freshness_score: Some(parsers::calculate_freshness(&pub_date)),
             });
         }
     }

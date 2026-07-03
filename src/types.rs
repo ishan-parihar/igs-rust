@@ -41,13 +41,6 @@ pub struct Selectors {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct RateLimit {
-    pub interval_seconds: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub batch_size: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Source {
     pub id: String,
     pub name: String,
@@ -72,16 +65,16 @@ pub struct Source {
     pub is_active: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tier: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rate_limit: Option<RateLimit>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_category: Option<String>,
+    /// Per-source weight for RRF fusion (default 1.0). Used by `fusion::weighted_rrf_fusion`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weight: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub trust_score: Option<f64>,
+    // Removed YAGNI fields (defined, deserialized, never read):
+    //   tier: Option<u32>            — never read by any code path
+    //   rate_limit: Option<RateLimit> — RateLimit struct deleted; HttpClient has its own per-host semaphore
+    //   source_category: Option<String> — never read
+    //   trust_score: Option<f64>     — never read
+    // These fields are still accepted in sources.yml (serde ignores unknown fields
+    // by default), so existing config files continue to work without modification.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -109,7 +102,10 @@ pub struct HttpSettings {
 }
 
 fn default_user_agent() -> String {
-    "IGS/0.3.2 (+https://github.com/ishan-parihar/igs-rust-mcp)".to_string()
+    format!(
+        "IGS/{} (+https://github.com/ishan-parihar/igs-rust-mcp)",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 fn default_timeout() -> u64 {
     15000
@@ -137,14 +133,12 @@ pub struct CacheSettings {
     pub enabled: bool,
     #[serde(default = "default_cache_dir")]
     pub dir: String,
-    #[serde(default = "default_honor_etags")]
-    pub honor_etags: bool,
     #[serde(default = "default_ttl_ms")]
     pub ttl_ms: u64,
-    #[serde(default = "default_query_ttl_ms")]
-    pub query_ttl_ms: u64,
-    #[serde(default = "default_max_items")]
-    pub max_items_per_source: u32,
+    // Removed YAGNI fields (defined, deserialized, never read):
+    //   honor_etags: bool          — http.rs doesn't check this; etags are always honored when present
+    //   query_ttl_ms: u64          — QueryCache was deleted; this was its TTL
+    //   max_items_per_source: u32  — FeedCache hardcodes max_items=1000; this was never wired through
 }
 
 fn default_cache_enabled() -> bool {
@@ -153,28 +147,12 @@ fn default_cache_enabled() -> bool {
 fn default_cache_dir() -> String {
     "cache".to_string()
 }
-fn default_honor_etags() -> bool {
-    true
-}
 fn default_ttl_ms() -> u64 {
     1_800_000
 }
-fn default_query_ttl_ms() -> u64 {
-    600_000
-}
-fn default_max_items() -> u32 {
-    300
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct TimeSettings {
-    #[serde(default = "default_timezone")]
-    pub timezone: String,
-}
-
-fn default_timezone() -> String {
-    "local".to_string()
-}
+// TimeSettings struct removed — `timezone` field was defined, deserialized, but never
+// read by any code path. The `time:` section in settings.yml is silently ignored.
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -292,26 +270,8 @@ fn default_max_topics() -> usize {
 fn default_max_entities() -> usize {
     20
 }
-fn default_min_entity_length() -> usize {
-    2
-}
-fn default_dedup_threshold() -> f64 {
-    0.3
-}
-fn default_pipeline_pool() -> String {
-    "GLOBAL_TECH_CYBER".to_string()
-}
-fn default_pipeline_limit() -> i32 {
-    50
-}
 fn default_output_format() -> String {
     "toon".to_string()
-}
-fn default_toon_indent() -> usize {
-    2
-}
-fn default_max_items_per_response() -> i32 {
-    500
 }
 fn default_dump_enabled() -> bool {
     false
@@ -329,10 +289,9 @@ pub struct NlpSettings {
     pub max_topics: usize,
     #[serde(default = "default_max_entities")]
     pub max_entities: usize,
-    #[serde(default = "default_min_entity_length")]
-    pub min_entity_length: usize,
-    #[serde(default = "default_dedup_threshold")]
-    pub dedup_threshold: f64,
+    // Removed YAGNI fields (defined, deserialized, never read):
+    //   min_entity_length: usize — never read by any code path
+    //   dedup_threshold: f64    — never read (batch_similar uses hardcoded 0.3)
 }
 
 impl Default for NlpSettings {
@@ -341,57 +300,32 @@ impl Default for NlpSettings {
             enabled: true,
             max_topics: 8,
             max_entities: 20,
-            min_entity_length: 2,
-            dedup_threshold: 0.3,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PipelineSettings {
-    #[serde(default = "default_pipeline_pool")]
-    pub default_pool: String,
-    #[serde(default = "default_pipeline_limit")]
-    pub default_limit: i32,
-    #[serde(default = "default_true")]
-    pub auto_index: bool,
-    #[serde(default = "default_true")]
-    pub persist_insights: bool,
-}
-
-impl Default for PipelineSettings {
-    fn default() -> Self {
-        Self {
-            default_pool: "GLOBAL_TECH_CYBER".to_string(),
-            default_limit: 50,
-            auto_index: true,
-            persist_insights: true,
-        }
-    }
-}
+// PipelineSettings struct removed — all 4 fields (default_pool, default_limit,
+// auto_index, persist_insights) were defined, deserialized, but never read by any
+// code path. The `pipeline:` section in settings.yml is silently ignored.
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputSettings {
     #[serde(default = "default_output_format")]
     pub default_format: String,
-    #[serde(default = "default_toon_indent")]
-    pub toon_indent: usize,
-    #[serde(default = "default_max_items_per_response")]
-    pub max_items_per_response: i32,
     #[serde(default = "default_dump_enabled")]
     pub dump_enabled: bool,
     #[serde(default = "default_dump_dir")]
     pub dump_dir: String,
+    // Removed YAGNI fields (defined, deserialized, never read):
+    //   toon_indent: usize           — never read (toon_format uses its own default)
+    //   max_items_per_response: i32  — never read (limits are hardcoded per-tool)
 }
 
 impl Default for OutputSettings {
     fn default() -> Self {
         Self {
             default_format: "toon".to_string(),
-            toon_indent: 2,
-            max_items_per_response: 500,
             dump_enabled: false,
             dump_dir: "~/Documents/IGS".to_string(),
         }
@@ -431,7 +365,7 @@ pub struct RedditSettings {
 pub struct Settings {
     pub http: HttpSettings,
     pub cache: CacheSettings,
-    pub time: TimeSettings,
+    // Removed YAGNI field: time: TimeSettings — `timezone` was never read
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tavily: Option<TavilySettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -440,8 +374,7 @@ pub struct Settings {
     pub obscura: ObscuraSettings,
     #[serde(default)]
     pub nlp: NlpSettings,
-    #[serde(default)]
-    pub pipeline: PipelineSettings,
+    // Removed YAGNI field: pipeline: PipelineSettings — all fields were never read
     #[serde(default)]
     pub output: OutputSettings,
     #[serde(default)]
@@ -494,19 +427,6 @@ pub struct FeedCacheEntry {
     pub last_modified: Option<String>,
     pub fetched_at: u64,
     pub items: Vec<NewsItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryCacheEntry<T: Clone> {
-    pub meta: QueryCacheMeta,
-    pub data: T,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryCacheMeta {
-    pub key: String,
-    pub at: u64,
-    pub deps: std::collections::HashMap<String, u64>,
 }
 
 // ─── Research Types ─────────────────────────────────────────────

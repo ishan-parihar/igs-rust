@@ -11,12 +11,34 @@ use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Return (max_sources, max_results) for a given depth string.
+/// - "quick"   → (10, 20)   — fast, few sources, few results
+/// - "deep"    → (200, 500) — full pipeline, many sources, many results
+/// - "default" (or any other value, including the unwrap_or when depth is None)
+///   → (100, 100) — balanced default
 fn depth_limits(depth: &str) -> (usize, usize) {
     match depth.to_lowercase().as_str() {
         "quick" => (10, 20),
         "deep" => (200, 500),
         _ => (100, 100),
     }
+}
+
+/// Serialize a NewsItem's core fields into a JSON object for the EnrichedItem.item field.
+/// Shared between `fetch_news_intelligent` (skip_enrich path) and `news_enrich` to avoid
+/// duplicating the 9-field `serde_json::json!({...})` block.
+fn news_item_to_json(item: &NewsItem) -> serde_json::Value {
+    serde_json::json!({
+        "id": item.id,
+        "title": item.title,
+        "link": item.link,
+        "pub_date": item.pub_date,
+        "source_name": item.source_name,
+        "pool_id": item.pool_id,
+        "content_snippet": item.content_snippet,
+        "date_confidence": item.date_confidence,
+        "freshness_score": item.freshness_score,
+    })
 }
 
 /// Fetch normalized news items from configured sources
@@ -92,6 +114,17 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
 
     sources.truncate(max_sources);
 
+    // Partition out reddit/twitter-platform sources — these are fetched via
+    // dedicated `reddit.search`/`reddit.feed` and `twitter.search`/`twitter.read`
+    // tools, not via `news.fetch`. Previously they were sent to `parse_by_source`
+    // which silently returned `vec![]` for them, but they were counted as
+    // "succeeded" in the meta, inflating the success metric.
+    let short_circuited = sources
+        .iter()
+        .filter(|s| matches!(s.platform.as_deref(), Some("reddit") | Some("twitter")))
+        .count();
+    sources.retain(|s| !matches!(s.platform.as_deref(), Some("reddit") | Some("twitter")));
+
     let mut all_items = Vec::new();
     let mut source_groups: Vec<(Vec<NewsItem>, f64)> = Vec::new();
     let mut succeeded = 0usize;
@@ -100,7 +133,7 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
     let sem = Arc::new(tokio::sync::Semaphore::new(
         settings.http.concurrency as usize,
     ));
-    let total = sources.len();
+    let total = sources.len() + short_circuited;
 
     let mut handles = Vec::new();
     for src in sources.into_iter() {
@@ -198,6 +231,7 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
         sources_queried: total,
         sources_succeeded: succeeded,
         sources_failed: failed,
+        sources_short_circuited: short_circuited,
         total_sources: total,
         pool_ids: input.filters.pools.unwrap_or_default(),
         keywords: keyword_vec,
@@ -262,17 +296,7 @@ pub async fn fetch_news_intelligent(
             .items
             .iter()
             .map(|item| EnrichedItem {
-                item: serde_json::json!({
-                    "id": item.id,
-                    "title": item.title,
-                    "link": item.link,
-                    "pub_date": item.pub_date,
-                    "source_name": item.source_name,
-                    "pool_id": item.pool_id,
-                    "content_snippet": item.content_snippet,
-                    "date_confidence": item.date_confidence,
-                    "freshness_score": item.freshness_score,
-                }),
+                item: news_item_to_json(item),
                 topics: Vec::new(),
                 entities: Vec::new(),
                 sentiment: None,
@@ -413,18 +437,25 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
             item.content_snippet.as_deref().unwrap_or("")
         );
 
+        // Construct a temporary NewsItem to reuse news_item_to_json.
+        // author and media_url are not part of the enriched output schema,
+        // so they're set to None.
+        let news_item = NewsItem {
+            id: item.id.clone(),
+            title: item.title.clone(),
+            link: item.link.clone(),
+            pub_date: item.pub_date.clone(),
+            source_name: item.source_name.clone(),
+            pool_id: item.pool_id.clone(),
+            content_snippet: item.content_snippet.clone().unwrap_or_default(),
+            author: None,
+            media_url: None,
+            date_confidence: item.date_confidence.clone(),
+            freshness_score: item.freshness_score,
+        };
+
         let mut enriched = EnrichedItem {
-            item: serde_json::json!({
-                "id": item.id,
-                "title": item.title,
-                "link": item.link,
-                "pub_date": item.pub_date,
-                "source_name": item.source_name,
-                "pool_id": item.pool_id,
-                "content_snippet": item.content_snippet,
-                "date_confidence": item.date_confidence,
-                "freshness_score": item.freshness_score,
-            }),
+            item: news_item_to_json(&news_item),
             topics: Vec::new(),
             entities: Vec::new(),
             sentiment: None,
@@ -463,6 +494,12 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
         }
 
         if want.contains("summary") {
+            // "summary" is the first non-empty sentence of the content snippet,
+            // falling back to the title if no snippet is available. This is a
+            // naive heuristic — for production summarization, integrate an LLM.
+            // The field is named "summary" in the output schema for forward
+            // compatibility (a future LLM-based summary would populate the
+            // same field without breaking clients).
             enriched.summary = item
                 .content_snippet
                 .as_deref()
@@ -471,6 +508,7 @@ pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, Str
                         .find(|s| !s.trim().is_empty())
                         .map(|s| s.trim().to_string())
                 })
+                .filter(|s| !s.is_empty())
                 .or_else(|| Some(item.title.clone()));
         }
 

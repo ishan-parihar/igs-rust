@@ -1,25 +1,48 @@
 use crate::tools::types::*;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use std::sync::OnceLock;
 
 static CURRENT_URL: OnceLock<Mutex<String>> = OnceLock::new();
 
-fn current_url() -> String {
-    CURRENT_URL
-        .get_or_init(|| Mutex::new("about:blank".to_string()))
-        .try_lock()
-        .map(|g| g.clone())
-        .unwrap_or_else(|_| "about:blank".to_string())
+/// Get the current browser URL. Awaits the mutex to avoid the silent
+/// "about:blank" fallback that the previous `try_lock()` implementation
+/// produced under concurrent MCP calls.
+async fn current_url() -> String {
+    let m = CURRENT_URL.get_or_init(|| Mutex::new("about:blank".to_string()));
+    m.lock().await.clone()
 }
 
+/// Set the current browser URL. Awaits the mutex.
 async fn set_current_url(url: &str) {
-    if let Some(m) = CURRENT_URL.get() {
-        if let Ok(mut guard) = m.try_lock() {
-            *guard = url.to_string();
+    let m = CURRENT_URL.get_or_init(|| Mutex::new("about:blank".to_string()));
+    *m.lock().await = url.to_string();
+}
+
+/// Escape a string for safe interpolation inside a single-quoted JavaScript
+/// string literal. Escapes backslash, single-quote, double-quote, newline,
+/// carriage return, tab, backspace, form-feed, and the </script> closing
+/// sequence. Without this, a user-supplied CSS selector like `</script><script>`
+/// or a value containing `'` could inject arbitrary JS into the headless
+/// browser evaluation context.
+fn js_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\'' => out.push_str("\\'"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            _ => out.push(c),
         }
     }
+    // Defend against `</script>` HTML/JS context confusion when the JS is
+    // later embedded in an HTML page by the headless browser.
+    out.replace("</script>", "<\\/script>")
 }
 
 async fn run_obscura_cli(args: &[&str], stdin_js: Option<&str>) -> Result<LpToolOutput, String> {
@@ -66,7 +89,6 @@ async fn run_obscura_cli(args: &[&str], stdin_js: Option<&str>) -> Result<LpTool
 }
 
 pub async fn lp_goto(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpGotoInput,
 ) -> Result<LpToolOutput, String> {
     let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
@@ -75,15 +97,19 @@ pub async fn lp_goto(
     let mut output = run_obscura_cli(&args, None).await?;
     output.meta.url = input.url.clone();
     output.meta.operation = "goto".to_string();
-    set_current_url(&input.url).await;
+    // Only update the session URL on successful fetch. Previously, a failed
+    // goto (e.g., DNS error, 5xx) would still set current_url, causing
+    // subsequent lp_markdown/lp_links calls to re-fetch the failed URL.
+    if output.success {
+        set_current_url(&input.url).await;
+    }
     Ok(output)
 }
 
 pub async fn lp_markdown(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpMarkdownInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let mut args = vec![url.as_str(), "--dump", "markdown", "--stealth"];
     if let Some(ref sm) = input.strip_mode {
         args.push("--strip-mode");
@@ -96,10 +122,9 @@ pub async fn lp_markdown(
 }
 
 pub async fn lp_links(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     _input: LpLinksInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let args = vec![url.as_str(), "--dump", "links", "--stealth"];
     let mut output = run_obscura_cli(&args, None).await?;
     output.meta.url = url;
@@ -108,10 +133,9 @@ pub async fn lp_links(
 }
 
 pub async fn lp_evaluate(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpEvaluateInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let args = vec![url.as_str(), "--stealth"];
     let mut output = run_obscura_cli(&args, Some(&input.expression)).await?;
     output.meta.url = url;
@@ -119,62 +143,13 @@ pub async fn lp_evaluate(
     Ok(output)
 }
 
-pub async fn lp_semantic_tree(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
-    _input: LpSemanticTreeInput,
-) -> Result<LpToolOutput, String> {
-    Ok(LpToolOutput {
-        success: false,
-        content: "Obscura CLI does not support semantic_tree. Use evaluate with custom JS or call obscura directly with --dump semantic_tree.".to_string(),
-        meta: BrowserMeta {
-            url: String::new(),
-            title: None,
-            operation: "semantic_tree".to_string(),
-            elapsed_ms: 0,
-        },
-    })
-}
-
-pub async fn lp_structured_data(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
-    _input: LpStructuredDataInput,
-) -> Result<LpToolOutput, String> {
-    Ok(LpToolOutput {
-        success: false,
-        content: "Obscura CLI does not support structured_data extraction. Use evaluate with custom JS to extract JSON-LD, OpenGraph, or microdata.".to_string(),
-        meta: BrowserMeta {
-            url: String::new(),
-            title: None,
-            operation: "structured_data".to_string(),
-            elapsed_ms: 0,
-        },
-    })
-}
-
-pub async fn lp_detect_forms(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
-    _input: LpDetectFormsInput,
-) -> Result<LpToolOutput, String> {
-    Ok(LpToolOutput {
-        success: false,
-        content: "Obscura CLI does not support detect_forms. Use evaluate with custom JS to enumerate form elements.".to_string(),
-        meta: BrowserMeta {
-            url: String::new(),
-            title: None,
-            operation: "detect_forms".to_string(),
-            elapsed_ms: 0,
-        },
-    })
-}
-
 pub async fn lp_click(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpClickInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let js = format!(
         "document.querySelector('{}')?.click(); 'clicked'",
-        input.selector.replace('\'', "\\'")
+        js_escape(&input.selector)
     );
     let args = vec![url.as_str(), "--stealth"];
     let mut output = run_obscura_cli(&args, Some(&js)).await?;
@@ -184,14 +159,13 @@ pub async fn lp_click(
 }
 
 pub async fn lp_fill(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpFillInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let js = format!(
         "const el = document.querySelector('{}'); if(el) {{ el.value = '{}'; el.dispatchEvent(new Event('input', {{bubbles:true}})); }} 'filled'",
-        input.selector.replace('\'', "\\'"),
-        input.value.replace('\'', "\\'")
+        js_escape(&input.selector),
+        js_escape(&input.value)
     );
     let args = vec![url.as_str(), "--stealth"];
     let mut output = run_obscura_cli(&args, Some(&js)).await?;
@@ -201,10 +175,9 @@ pub async fn lp_fill(
 }
 
 pub async fn lp_scroll(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpScrollInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let direction = input.direction.as_deref().unwrap_or("down");
     let pixels = input.pixels.unwrap_or(500);
 
@@ -224,10 +197,9 @@ pub async fn lp_scroll(
 }
 
 pub async fn lp_wait_for_selector(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
     input: LpWaitForSelectorInput,
 ) -> Result<LpToolOutput, String> {
-    let url = current_url();
+    let url = current_url().await;
     let args = vec![
         url.as_str(),
         "--stealth",
@@ -240,18 +212,49 @@ pub async fn lp_wait_for_selector(
     Ok(output)
 }
 
-pub async fn lp_interactive_elements(
-    _manager: &Arc<Mutex<Option<crate::obscura::ObscuraManager>>>,
-    _input: LpInteractiveElementsInput,
-) -> Result<LpToolOutput, String> {
-    Ok(LpToolOutput {
-        success: false,
-        content: "Obscura CLI does not support interactive_elements detection. Use evaluate with custom JS to find buttons, links, and inputs.".to_string(),
-        meta: BrowserMeta {
-            url: String::new(),
-            title: None,
-            operation: "interactive_elements".to_string(),
-            elapsed_ms: 0,
-        },
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn js_escape_handles_single_quote() {
+        assert_eq!(js_escape("foo'bar"), "foo\\'bar");
+    }
+
+    #[test]
+    fn js_escape_handles_double_quote() {
+        assert_eq!(js_escape("foo\"bar"), "foo\\\"bar");
+    }
+
+    #[test]
+    fn js_escape_handles_backslash() {
+        assert_eq!(js_escape("foo\\bar"), "foo\\\\bar");
+    }
+
+    #[test]
+    fn js_escape_handles_newline_and_tab() {
+        assert_eq!(js_escape("foo\nbar\tbaz"), "foo\\nbar\\tbaz");
+    }
+
+    #[test]
+    fn js_escape_handles_script_close_tag() {
+        // </script> must not appear literally in the escaped output
+        let escaped = js_escape("</script>");
+        assert!(!escaped.contains("</script>"));
+        assert!(escaped.contains("<\\/script>"));
+    }
+
+    #[test]
+    fn js_escape_preserves_safe_chars() {
+        assert_eq!(js_escape("hello world"), "hello world");
+        assert_eq!(js_escape("div#id.class"), "div#id.class");
+        assert_eq!(js_escape("input[type='text']"), "input[type=\\'text\\']");
+    }
+
+    #[test]
+    fn js_escape_empty_string() {
+        assert_eq!(js_escape(""), "");
+    }
 }
+
+

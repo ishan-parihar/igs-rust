@@ -48,6 +48,5 @@ html-to-markdown-rs = "3.5"
 clap = { version = "4", features = ["derive", "env"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 unpdf = "0.7"
-urlencoding = "2.1"
 openssl-sys = { version = "0.9.117", features = ["vendored"] }
 

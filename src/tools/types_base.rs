@@ -54,11 +54,3 @@ pub struct DepthOptions {
     /// Crawl depth
     pub depth: Option<String>,
 }
-
-pub fn resolve_format(opts: &OutputOptions) -> String {
-    opts.format.as_deref().unwrap_or("toon").to_string()
-}
-
-pub fn resolve_format_opt(format: &Option<String>) -> String {
-    format.as_deref().unwrap_or("toon").to_string()
-}

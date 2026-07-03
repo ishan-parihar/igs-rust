@@ -291,6 +291,11 @@ pub struct NewsFetchMeta {
     pub sources_queried: usize,
     pub sources_succeeded: usize,
     pub sources_failed: usize,
+    /// Number of sources that were skipped because their `platform` is
+    /// "reddit" or "twitter" — these are fetched via dedicated `reddit.*`
+    /// and `twitter.*` tools, not via `news.fetch`. Previously counted as
+    /// "succeeded", which inflated the success metric.
+    pub sources_short_circuited: usize,
     pub total_sources: usize,
     pub pool_ids: Vec<String>,
     pub keywords: Vec<String>,
@@ -941,28 +946,6 @@ pub struct LpEvaluateInput {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct LpSemanticTreeInput {
-    /// Include text
-    pub include_text: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct LpStructuredDataInput {
-    /// Extract JSON-LD
-    pub jsonld: Option<bool>,
-    /// Extract OpenGraph
-    pub opengraph: Option<bool>,
-    /// Extract microdata
-    pub microdata: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct LpDetectFormsInput {
-    /// Selector
-    pub selector: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct LpClickInput {
     /// Selector
     pub selector: String,
@@ -992,12 +975,6 @@ pub struct LpWaitForSelectorInput {
     pub selector: String,
     /// Timeout (ms)
     pub timeout_ms: Option<u64>,
-}
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct LpInteractiveElementsInput {
-    /// Selector
-    pub selector: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

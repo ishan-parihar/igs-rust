@@ -44,9 +44,13 @@ pub fn parse_date_with_confidence(raw: &str) -> (String, String) {
             return (ndt.and_utc().to_rfc3339(), "medium".to_string());
         }
     }
-    for fmt in &["%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y", "%Y-%m-%d"] {
-        if let Ok(dt) = NaiveDateTime::parse_from_str(raw, fmt) {
-            return (dt.and_utc().to_rfc3339(), "medium".to_string());
+    // Date-only named-month formats. Use NaiveDate (not NaiveDateTime) because
+    // these formats have no time component.
+    for fmt in &["%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y"] {
+        if let Ok(d) = NaiveDate::parse_from_str(raw, fmt) {
+            if let Some(ndt) = d.and_hms_opt(0, 0, 0) {
+                return (ndt.and_utc().to_rfc3339(), "medium".to_string());
+            }
         }
     }
     (raw.to_string(), "low".to_string())
@@ -675,11 +679,9 @@ fn find_date_prefix(text: &str) -> Option<String> {
             let chunk = &text[pos..text.len().min(pos + 50)];
             if let Some(end) = chunk.find(" - ") {
                 let date_str = chunk[..end].trim();
-                if let Ok(d) = chrono::NaiveDate::parse_from_str(date_str, "%B %d, %Y") {
-                    return d.and_hms_opt(0, 0, 0).map(|ndt| ndt.and_utc().to_rfc3339());
-                }
-                if let Ok(d) = chrono::NaiveDate::parse_from_str(date_str, "%b %d, %Y") {
-                    return d.and_hms_opt(0, 0, 0).map(|ndt| ndt.and_utc().to_rfc3339());
+                let (parsed, confidence) = parse_date_with_confidence(date_str);
+                if confidence != "low" {
+                    return Some(parsed);
                 }
             }
         }
@@ -1375,11 +1377,7 @@ mod tests {
             domains: vec![],
             is_active: Some(true),
             platform: None,
-            tier: None,
-            rate_limit: None,
-            source_category: None,
             weight: None,
-            trust_score: None,
         }
     }
 
@@ -1485,13 +1483,26 @@ mod tests {
     }
 
     #[test]
-    fn parse_named_date_without_time_falls_to_low() {
-        // NaiveDateTime::parse_from_str requires time components, so "January 15, 2024"
-        // falls through to "low" despite being a valid date string.
-        let input = "January 15, 2024";
-        let (parsed, confidence) = parse_date_with_confidence(input);
-        assert_eq!(parsed, input);
-        assert_eq!(confidence, "low");
+    fn parse_named_date_without_time_returns_medium() {
+        // After the fix: NaiveDate::parse_from_str handles date-only formats like
+        // "January 15, 2024" correctly, returning "medium" confidence.
+        let (parsed, confidence) = parse_date_with_confidence("January 15, 2024");
+        assert!(parsed.starts_with("2024-01-15"), "parsed={}", parsed);
+        assert_eq!(confidence, "medium");
+    }
+
+    #[test]
+    fn parse_abbrev_month_date_without_time_returns_medium() {
+        let (parsed, confidence) = parse_date_with_confidence("Jan 15, 2024");
+        assert!(parsed.starts_with("2024-01-15"), "parsed={}", parsed);
+        assert_eq!(confidence, "medium");
+    }
+
+    #[test]
+    fn parse_european_named_date_returns_medium() {
+        let (parsed, confidence) = parse_date_with_confidence("15 January 2024");
+        assert!(parsed.starts_with("2024-01-15"), "parsed={}", parsed);
+        assert_eq!(confidence, "medium");
     }
 
     #[test]

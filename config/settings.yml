@@ -4,7 +4,7 @@
 
 # ─── HTTP Client ──────────────────────────────────────────────
 http:
-  userAgent: IGS/0.3.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
+  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
   timeoutMs: 15000           # Per-request timeout in ms
   retries: 2                 # Number of retries on failure
   backoffBaseMs: 500         # Base delay for exponential backoff
@@ -16,14 +16,9 @@ http:
 cache:
   enabled: true
   dir: cache                 # Relative to config dir, or absolute path
-  honorEtags: true           # Use ETag/Last-Modified conditional requests
   ttlMs: 1800000             # Feed cache TTL: 30 minutes
-  queryTtlMs: 600000         # Query cache TTL: 10 minutes
-  maxItemsPerSource: 300     # Max items stored per source
-
-# ─── Time ─────────────────────────────────────────────────────
-time:
-  timezone: local            # "local" or IANA tz like "America/New_York"
+  # Removed (YAGNI): honorEtags, queryTtlMs, maxItemsPerSource
+  # These are accepted for backward compat but no longer read.
 
 # ─── Web Search Providers ─────────────────────────────────────
 
@@ -66,31 +61,14 @@ nlp:
   enabled: true
   max_topics: 8              # Max topics to extract per article
   max_entities: 20           # Max entities to extract per article
-  min_entity_length: 2       # Min character length for entity detection
-  dedup_threshold: 0.3       # Jaccard similarity threshold for deduplication
-  # stop_words_language: en  # Future: multi-language support
-
-# ─── Intelligence Pipeline ───────────────────────────────────
-pipeline:
-  default_pool: GLOBAL_TECH_CYBER  # Default pool for intelligence.collect
-  default_limit: 50                # Default max items to fetch
-  auto_index: true                 # Automatically index articles after enrich
-  persist_insights: true           # Persist insight engine to disk (SQLite)
-
-# ─── Monitoring (Future) ─────────────────────────────────────
-# Scheduled polling and alerts — not yet implemented
-# monitoring:
-#   enabled: false
-#   poll_interval_ms: 300000   # 5 minutes
-#   alert_threshold: 5         # Min entity mentions to trigger alert
+  # Removed (YAGNI): min_entity_length, dedup_threshold
 
 # ─── Output Format ────────────────────────────────────────────
 output:
   default_format: toon       # "toon" (token-efficient) or "json"
-  toon_indent: 2             # TOON indentation spaces
-  max_items_per_response: 500  # Truncate results beyond this
   dump_enabled: false        # Enable markdown dump of tool outputs to disk
   dump_dir: "~/Documents/IGS"  # Root directory for dump files
+  # Removed (YAGNI): toon_indent, max_items_per_response
 
 # ─── Tool Groups ───────────────────────────────────────────────
 # Restrict available tools to specific groups (for focused sessions)

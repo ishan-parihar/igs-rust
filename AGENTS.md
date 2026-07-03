@@ -18,15 +18,15 @@ Guide for AI agents using IGS as an intelligence gathering tool.
 
 ### Tool Discovery (Progressive Loading)
 
-Tools are organized into 16 domain groups. Load only the groups you need to conserve context.
+Tools are organized into 20 domain groups. Load only the groups you need to conserve context.
 
 | Group | Tools | Context Est. | When to Load |
 |-------|-------|-------------|--------------|
-| **Discovery** | `pools.*`, `sources.*`, `parsers.list`, `tool.guide` | ~6% | Initial setup, exploring available sources |
+| **Discovery** | `pools.*`, `sources.*`, `parsers.list`, `igs://tool-guide` (MCP resource) | ~6% | Initial setup, exploring available sources |
 | **News** | `news.fetch`, `news.test_source`, `news.enrich` | ~3% | Fetching and enriching news articles |
 | **Research** | `research.search`, `research.paper`, `research.download`, `research.pubmed_search` | ~4% | Academic and medical paper search |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` | ~4% | Web search, scraping, crawling |
-| **Insights** | `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.getStats`, `insights.clearIndex` | ~4% | Cross-article entity analysis |
+| **Insights** | `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.get_stats`, `insights.clear_index` | ~4% | Cross-article entity analysis |
 | **Social** | `reddit.search`, `reddit.feed` | ~1% | Search Reddit posts and follow subreddit feeds |
 | **Weather** | `weather.forecast`, `weather.current`, `weather.alerts` | ~3% | Weather forecasts and alerts |
 | **Finance** | `finance.market`, `finance.crypto`, `finance.trending` | ~3% | Stock and cryptocurrency data |
@@ -40,7 +40,7 @@ Tools are organized into 16 domain groups. Load only the groups you need to cons
 | **Environment** | `env.epa_facilities`, `env.epa_emissions`, `satellite.firms_fires` | ~2% | EPA facility and emissions data + NASA FIRMS fire detection |
 
 | **SOP** | `sop.list`, `sop.execute` | ~2% | Multi-step intelligence workflows |
-| **Browser** | `lightpanda.*` (12 tools) | ~8% | JS-rendered browsing, form interaction |
+| **Browser** | `browser.*` (8 tools) | ~5% | JS-rendered browsing, form interaction (stateless per-call) |
 
 **Recommended loading patterns:**
 
@@ -54,11 +54,11 @@ Tools are organized into 16 domain groups. Load only the groups you need to cons
 
 | Group | Tools |
 |-------|-------|
-| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enable_generic_scraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`, `tool.guide` |
+| **Discovery** | `pools.list`, `pools.upsert`, `pools.delete`, `sources.list`, `sources.upsert`, `sources.delete`, `sources.autodiscover`, `sources.enable_generic_scraper`, `sources.countries`, `sources.cities`, `sources.domains`, `parsers.list`, `igs://tool-guide` (MCP resource) |
 | **News** | `news.fetch`, `news.test_source`, `news.enrich` |
 | **Research** | `research.search`, `research.paper`, `research.download`, `research.pubmed_search` |
 | **Web** | `web.search`, `web.scrape`, `web.crawl`, `web.map` |
-| **Insights** | `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.getStats`, `insights.clearIndex` |
+| **Insights** | `insights.find_connections`, `insights.trending_entities`, `insights.index_articles`, `insights.get_stats`, `insights.clear_index` |
 | **Social** | `reddit.search`, `reddit.feed` |
 | **Weather** | `weather.forecast`, `weather.current`, `weather.alerts` |
 | **Finance** | `finance.market`, `finance.crypto`, `finance.trending` |
@@ -72,7 +72,7 @@ Tools are organized into 16 domain groups. Load only the groups you need to cons
 | **Environment** | `env.epa_facilities`, `env.epa_emissions`, `satellite.firms_fires` |
 
 | **SOP** | `sop.list`, `sop.execute` |
-| **Browser** | `lightpanda.goto`, `lightpanda.markdown`, `lightpanda.links`, `lightpanda.evaluate`, `lightpanda.semantic_tree`, `lightpanda.structured_data`, `lightpanda.detect_forms`, `lightpanda.click`, `lightpanda.fill`, `lightpanda.scroll`, `lightpanda.wait_for_selector`, `lightpanda.interactive_elements` |
+| **Browser** | `browser.goto`, `browser.markdown`, `browser.links`, `browser.evaluate`, ``, ``, ``, `browser.click`, `browser.fill`, `browser.scroll`, `browser.wait_for_selector`, `` |
 
 ## Recommended Workflows
 
@@ -108,7 +108,7 @@ insights.index_articles(articles=<enriched items>)
 web.search(query="quantum computing breakthroughs", max_results=10)
 → Returns web search results
 
-web.scrape(url=<interesting_url>, provider="lightpanda")
+web.scrape(url=<interesting_url>, provider="browser")
 → Returns structured markdown with metadata
 
 web.crawl(url=<site>, max_depth=3, max_pages=50)
@@ -144,25 +144,25 @@ news.fetch(cities=["Delhi","Mumbai"], limit=10)
 ### 6. Browser Automation (Lightpanda MCP)
 
 ```
-lightpanda.goto(url="https://example.com", wait_until="networkidle")
+browser.goto(url="https://example.com", wait_until="networkidle")
 → Navigate to page, render JavaScript
 
-lightpanda.structured_data()
+()
 → Extract JSON-LD, OpenGraph, microdata
 
-lightpanda.detect_forms()
+()
 → Find forms on the page
 
-lightpanda.fill(selector="input[name=email]", value="user@example.com")
+browser.fill(selector="input[name=email]", value="user@example.com")
 → Fill form field
 
-lightpanda.click(selector="button[type=submit]", wait_for_navigation=true)
+browser.click(selector="button[type=submit]", wait_for_navigation=true)
 → Click submit button
 
-lightpanda.markdown()
+browser.markdown()
 → Get page content as structured markdown
 
-lightpanda.evaluate(expression="document.title")
+browser.evaluate(expression="document.title")
 → Execute JavaScript and get result
 ```
 
@@ -189,7 +189,7 @@ Available pools: `GLOBAL_BREAKING`, `GLOBAL_GEOECON`, `GLOBAL_LAW_REG`, `GLOBAL_
 | Provider | Tool | Requires |
 |----------|------|----------|
 | `default` | `web.scrape` | HTTP + html-to-markdown-rs |
-| `lightpanda` | `web.scrape`, `web.crawl` | `lightpanda.enabled=true` in settings |
+| `browser` | `web.scrape`, `web.crawl` | `browser.enabled=true` in settings |
 | `tavily` | `web.search` | `tavily.enabled=true` + API key |
 | `firecrawl` | `web.search` | `firecrawl.enabled=true` + API key |
 
@@ -210,7 +210,7 @@ Available pools: `GLOBAL_BREAKING`, `GLOBAL_GEOECON`, `GLOBAL_LAW_REG`, `GLOBAL_
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `provider` | "default" | "default" (HTTP) or "lightpanda" (JS rendering) |
+| `provider` | "default" | "default" (HTTP) or "browser" (JS rendering) |
 | `wait_selector` | — | CSS selector to wait for (Lightpanda only) |
 | `strip_mode` | — | Strip content (Lightpanda only) |
 | `wait_until` | "networkidle" | When to capture (Lightpanda only) |
@@ -218,22 +218,22 @@ Available pools: `GLOBAL_BREAKING`, `GLOBAL_GEOECON`, `GLOBAL_LAW_REG`, `GLOBAL_
 
 ### Lightpanda MCP Browser Tools
 
-These tools use a persistent browser session via `lightpanda mcp`. The page stays loaded between calls — navigate first, then interact.
+These tools use a persistent browser session via `browser mcp`. The page stays loaded between calls — navigate first, then interact.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `lightpanda.goto` | `url`, `wait_until?` | Navigate to URL. Renders JavaScript. |
-| `lightpanda.markdown` | `strip_mode?` | Get current page as markdown. |
-| `lightpanda.links` | `selector?` | Extract links from current page. |
-| `lightpanda.evaluate` | `expression` | Execute JavaScript. Returns result. |
-| `lightpanda.semantic_tree` | `include_text?` | Get AI-friendly DOM tree. |
-| `lightpanda.structured_data` | `jsonld?`, `opengraph?`, `microdata?` | Extract JSON-LD, OpenGraph, microdata. |
-| `lightpanda.detect_forms` | `selector?` | Find forms on current page. |
-| `lightpanda.click` | `selector`, `wait_for_navigation?` | Click element by CSS selector. |
-| `lightpanda.fill` | `selector`, `value` | Fill form field. |
-| `lightpanda.scroll` | `direction?`, `pixels?` | Scroll page (up/down/left/right). |
-| `lightpanda.wait_for_selector` | `selector`, `timeout_ms?` | Wait for element to appear. |
-| `lightpanda.interactive_elements` | `selector?` | Find clickable/fillable elements. |
+| `browser.goto` | `url`, `wait_until?` | Navigate to URL. Renders JavaScript. |
+| `browser.markdown` | `strip_mode?` | Get current page as markdown. |
+| `browser.links` | `selector?` | Extract links from current page. |
+| `browser.evaluate` | `expression` | Execute JavaScript. Returns result. |
+| `` | `include_text?` | Get AI-friendly DOM tree. |
+| `` | `jsonld?`, `opengraph?`, `microdata?` | Extract JSON-LD, OpenGraph, microdata. |
+| `` | `selector?` | Find forms on current page. |
+| `browser.click` | `selector`, `wait_for_navigation?` | Click element by CSS selector. |
+| `browser.fill` | `selector`, `value` | Fill form field. |
+| `browser.scroll` | `direction?`, `pixels?` | Scroll page (up/down/left/right). |
+| `browser.wait_for_selector` | `selector`, `timeout_ms?` | Wait for element to appear. |
+| `` | `selector?` | Find clickable/fillable elements. |
 
 ### NLP Enrichment
 
@@ -254,8 +254,8 @@ After indexing articles via `insights.index_articles` or `news.fetch` with `dept
 |------|---------|
 | `insights.find_connections(entity?, min_domains?, limit?)` | Find cross-domain connections. Entity optional — omit for all connections. |
 | `insights.trending_entities(time_window_hours, min_growth, min_current_mentions)` | Detect entity mention trends |
-| `insights.getStats` | Engine statistics (total_articles, total_entities, total_domains) |
-| `insights.clearIndex` | Clear all indexed articles |
+| `insights.get_stats` | Engine statistics (total_articles, total_entities, total_domains) |
+| `insights.clear_index` | Clear all indexed articles |
 
 The insight engine persists to SQLite at `~/.config/igs-mcp/insights.db`.
 
@@ -265,7 +265,7 @@ IGS provides actionable error messages:
 
 | Pattern | Example |
 |---------|---------|
-| Prerequisite | "Lightpanda is not enabled. Set lightpanda.enabled=true in settings.yml" |
+| Prerequisite | "Lightpanda is not enabled. Set browser.enabled=true in settings.yml" |
 | Configuration | "No web search provider available. Configure Tavily or Firecrawl in settings.yml." |
 | Input validation | "Invalid URL 'not-a-url': relative URL without a base" |
 | HTTP errors | "HTTP 404 for URL: https://example.com/missing" |
@@ -277,7 +277,7 @@ Edit `~/.config/igs-mcp/settings.yml`:
 
 ```yaml
 # Enable Lightpanda for JS-rendered crawling
-lightpanda:
+browser:
   enabled: true
   auto_update: true
   obey_robots: true

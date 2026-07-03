@@ -55,39 +55,6 @@ pub fn weighted_rrf_fusion(result_lists: Vec<(Vec<NewsItem>, f64)>, k: usize) ->
         .collect()
 }
 
-/// Compute source diversity score for an item based on how many sources
-/// report the same story. Returns a value between 0.0 (single source)
-/// and 1.0 (many sources).
-pub fn source_diversity(item: &NewsItem, all_sources: &[String]) -> f64 {
-    if all_sources.len() <= 1 {
-        return 0.0;
-    }
-    // Count how many sources mention the same keywords from the title
-    let title_words: Vec<String> = item
-        .title
-        .to_lowercase()
-        .split_whitespace()
-        .filter(|w| w.len() > 3)
-        .map(|s| s.to_string())
-        .collect();
-
-    if title_words.is_empty() {
-        return 0.0;
-    }
-
-    let matching = all_sources
-        .iter()
-        .filter(|source| {
-            source
-                .to_lowercase()
-                .split_whitespace()
-                .any(|w| title_words.iter().any(|tw| tw == w))
-        })
-        .count();
-
-    (matching as f64 / all_sources.len().max(1) as f64).min(1.0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

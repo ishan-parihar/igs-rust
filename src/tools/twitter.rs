@@ -65,20 +65,6 @@ fn extract_ct0(cookies: &HashMap<String, String>) -> Option<String> {
     cookies.get("ct0").cloned()
 }
 
-fn ensure_ct0_matches(cookie_str: &str, ct0: &str) -> String {
-    let parts: Vec<String> = cookie_str
-        .split(';')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.starts_with("ct0=") && !s.is_empty())
-        .collect();
-    let mut result = parts.join("; ");
-    if !result.is_empty() {
-        result.push_str("; ");
-    }
-    result.push_str(&format!("ct0={ct0}"));
-    result
-}
-
 // ── HTTP Client ────────────────────────────────────────────
 
 fn build_client(cookie_str: &str) -> Result<reqwest::Client, String> {
@@ -108,14 +94,6 @@ fn build_client(cookie_str: &str) -> Result<reqwest::Client, String> {
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {e}"))
-}
-
-fn graphql_url(query_id: &str, operation: &str, variables: &serde_json::Value) -> String {
-    let features = GRAPHQL_FEATURES.to_string();
-    let vars = variables.to_string();
-    let params = format!("variables={vars}&features={features}");
-    let encoded = urlencoding::encode(&params);
-    format!("https://x.com/i/api/graphql/{query_id}/{operation}?{encoded}")
 }
 
 // ── GraphQL Request ────────────────────────────────────────

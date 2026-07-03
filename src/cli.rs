@@ -5,12 +5,10 @@ use igs_rust_mcp::tools::types_base::{
     DepthOptions, DiscoveryFilters, KeywordFilter, OutputOptions,
 };
 use igs_rust_mcp::tools::{
-    helpers::toon_encode, news, parsers as parsers_tools, pools, reddit, registry, research,
+    helpers, news, parsers as parsers_tools, pools, reddit, registry, research,
     sources, twitter, web, youtube,
 };
 use rmcp::ServiceExt;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -151,7 +149,7 @@ enum NewsAction {
         limit: i32,
         #[arg(long, default_value = "prefer")]
         cache_mode: String,
-        /// Fetch depth: "quick" (direct RSS), "deep" (source site crawl), "full" (multi-source enrichment)
+        /// Fetch depth: "quick" (10 sources, 20 results), "deep" (200 sources, 500 results), or omit for default (100 sources, 100 results)
         #[arg(long)]
         depth: Option<String>,
     },
@@ -353,18 +351,6 @@ enum BrowserAction {
         #[arg(long)]
         expression: String,
     },
-    /// Get semantic DOM tree
-    SemanticTree {
-        #[arg(long)]
-        include_text: bool,
-    },
-    /// Extract structured data (JSON-LD, OpenGraph)
-    StructuredData,
-    /// Detect forms on current page
-    DetectForms {
-        #[arg(long)]
-        selector: Option<String>,
-    },
     /// Click an element
     Click {
         #[arg(long)]
@@ -393,11 +379,6 @@ enum BrowserAction {
         #[arg(long, default_value = "5000")]
         timeout_ms: u64,
     },
-    /// Find interactive elements
-    InteractiveElements {
-        #[arg(long)]
-        selector: Option<String>,
-    },
 }
 
 /// Convert Result<T, String> to anyhow::Result<T>
@@ -406,11 +387,7 @@ fn r<T>(result: Result<T, String>) -> anyhow::Result<T> {
 }
 
 fn output<T: serde::Serialize>(format: &str, value: &T) {
-    let text = if format == "json" {
-        serde_json::to_string_pretty(value).unwrap_or_default()
-    } else {
-        toon_encode(value)
-    };
+    let text = helpers::format_text(value, format);
     println!("{}", text);
 }
 
@@ -858,12 +835,9 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Browser { action } => {
-            let _settings = igs_rust_mcp::config::load_settings().await?;
-
             match action {
                 BrowserAction::Goto { url, wait_until } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(
-                        &Arc::new(Mutex::new(None)),
                         LpGotoInput {
                             url,
                             wait_until: Some(wait_until),
@@ -874,7 +848,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 BrowserAction::Markdown { strip_mode } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_markdown(
-                        &Arc::new(Mutex::new(None)),
                         LpMarkdownInput { strip_mode },
                     )
                     .await)?;
@@ -882,7 +855,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 BrowserAction::Links { selector } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_links(
-                        &Arc::new(Mutex::new(None)),
                         LpLinksInput { selector },
                     )
                     .await)?;
@@ -890,38 +862,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 BrowserAction::Evaluate { expression } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_evaluate(
-                        &Arc::new(Mutex::new(None)),
                         LpEvaluateInput { expression },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::SemanticTree { include_text } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_semantic_tree(
-                        &Arc::new(Mutex::new(None)),
-                        LpSemanticTreeInput {
-                            include_text: Some(include_text),
-                        },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::StructuredData => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_structured_data(
-                        &Arc::new(Mutex::new(None)),
-                        LpStructuredDataInput {
-                            jsonld: None,
-                            opengraph: None,
-                            microdata: None,
-                        },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::DetectForms { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_detect_forms(
-                        &Arc::new(Mutex::new(None)),
-                        LpDetectFormsInput { selector },
                     )
                     .await)?;
                     output(fmt, &result);
@@ -931,7 +872,6 @@ async fn main() -> anyhow::Result<()> {
                     wait_for_navigation,
                 } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(
-                        &Arc::new(Mutex::new(None)),
                         LpClickInput {
                             selector,
                             wait_for_navigation: Some(wait_for_navigation),
@@ -942,7 +882,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 BrowserAction::Fill { selector, value } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_fill(
-                        &Arc::new(Mutex::new(None)),
                         LpFillInput { selector, value },
                     )
                     .await)?;
@@ -950,7 +889,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 BrowserAction::Scroll { direction, pixels } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(
-                        &Arc::new(Mutex::new(None)),
                         LpScrollInput {
                             direction: Some(direction),
                             pixels: Some(pixels),
@@ -964,19 +902,10 @@ async fn main() -> anyhow::Result<()> {
                     timeout_ms,
                 } => {
                     let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(
-                        &Arc::new(Mutex::new(None)),
                         LpWaitForSelectorInput {
                             selector,
                             timeout_ms: Some(timeout_ms),
                         },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::InteractiveElements { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_interactive_elements(
-                        &Arc::new(Mutex::new(None)),
-                        LpInteractiveElementsInput { selector },
                     )
                     .await)?;
                     output(fmt, &result);

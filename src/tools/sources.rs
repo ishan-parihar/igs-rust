@@ -46,11 +46,7 @@ pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutp
                 domains: input.domains.unwrap_or_default(),
                 is_active: input.is_active,
                 platform: None,
-                tier: None,
-                rate_limit: None,
-                source_category: None,
                 weight: None,
-                trust_score: None,
             };
             if let Some(idx) = sf.sources.iter().position(|s| s.id == id) {
                 sf.sources[idx] = src;
@@ -90,12 +86,9 @@ pub async fn sources_autodiscover(input: AutodiscoverInput) -> Result<Autodiscov
             let http = HttpClient::new(&settings.http, &cache_dir);
             match http.fetch(&input.url, None, "bypass").await {
                 Ok(outcome) => {
-                    let body = match outcome {
-                        http_mod::FetchOutcome::Cached(_) => {
-                            return Err("Unexpected cache hit".into())
-                        }
-                        http_mod::FetchOutcome::Response(resp, _, _) => resp.body_text,
-                    };
+                    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+                        else { unreachable!("bypass cache mode never returns Cached") };
+                    let body = resp.body_text;
                     let feed_url = find_feed_url(&body, &input.url);
 
                     if let Some(feed) = feed_url {
@@ -216,7 +209,7 @@ pub async fn sources_cities() -> Result<CitiesOutput, String> {
             source_count: count,
         })
         .collect();
-    cities.sort_by(|a, b| b.source_count.cmp(&a.source_count));
+    cities.sort_by_key(|c| std::cmp::Reverse(c.source_count));
     Ok(CitiesOutput { cities })
 }
 
@@ -240,6 +233,6 @@ pub async fn sources_domains() -> Result<DomainsOutput, String> {
             source_count: count,
         })
         .collect();
-    domains.sort_by(|a, b| b.source_count.cmp(&a.source_count));
+    domains.sort_by_key(|d| std::cmp::Reverse(d.source_count));
     Ok(DomainsOutput { domains })
 }

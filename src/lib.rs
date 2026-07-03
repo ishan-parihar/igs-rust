@@ -1,12 +1,15 @@
-pub mod cache;
-pub mod clustering;
+// Public API surface: `server` (IgsMcpServer), `config` (load_settings),
+// `tools` (tool implementations + types). Everything else is pub(crate)
+// to lock down the internal implementation from external consumers.
 pub mod config;
-pub mod fusion;
-pub mod http;
-
-pub mod obscura;
-pub mod parsers;
-pub mod persistence;
 pub mod server;
 pub mod tools;
-pub mod types;
+
+pub(crate) mod cache;
+pub(crate) mod clustering;
+pub(crate) mod fusion;
+pub(crate) mod http;
+pub(crate) mod obscura;
+pub(crate) mod parsers;
+pub(crate) mod persistence;
+pub(crate) mod types;

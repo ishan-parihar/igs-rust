@@ -32,10 +32,8 @@ pub async fn satellite_firms_fires(
         .await
         .map_err(|e| format!("NASA FIRMS API error: {}", e))?;
 
-    let resp = match outcome {
-        http_mod::FetchOutcome::Response(r, _, _) => r,
-        _ => return Err("NASA FIRMS returned cached response".into()),
-    };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+        else { unreachable!("bypass cache mode never returns Cached") };
 
     // Parse CSV response
     let lines: Vec<&str> = resp.body_text.lines().collect();

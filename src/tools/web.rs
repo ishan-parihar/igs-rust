@@ -75,44 +75,59 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                     {
                         Ok(outcome) => {
                             if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                                if let Ok(json) =
-                                    serde_json::from_str::<serde_json::Value>(&resp.body_text)
-                                {
-                                    let results: Vec<WebSearchResult> = json["results"]
-                                        .as_array()
-                                        .map(|arr| {
-                                            arr.iter()
-                                                .map(|r| WebSearchResult {
-                                                    title: r["title"]
-                                                        .as_str()
-                                                        .unwrap_or("")
-                                                        .to_string(),
-                                                    url: r["url"]
-                                                        .as_str()
-                                                        .unwrap_or("")
-                                                        .to_string(),
-                                                    content: r["content"]
-                                                        .as_str()
-                                                        .map(|s| s.to_string()),
-                                                    score: r["score"].as_f64(),
-                                                    raw_content: r["raw_content"]
-                                                        .as_str()
-                                                        .map(|s| s.to_string()),
-                                                })
-                                                .collect()
-                                        })
-                                        .unwrap_or_default();
-                                    let answer = json["answer"].as_str().map(|s| s.to_string());
-                                    let count = results.len();
-                                    return Ok(WebSearchOutput {
-                                        count,
-                                        results,
-                                        answer,
-                                        meta: WebSearchMeta {
-                                            provider: "tavily".into(),
-                                            query: input.query,
-                                        },
-                                    });
+                                match serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                                    Ok(json) => {
+                                        let results: Vec<WebSearchResult> = json["results"]
+                                            .as_array()
+                                            .map(|arr| {
+                                                arr.iter()
+                                                    .map(|r| WebSearchResult {
+                                                        title: r["title"]
+                                                            .as_str()
+                                                            .unwrap_or("")
+                                                            .to_string(),
+                                                        url: r["url"]
+                                                            .as_str()
+                                                            .unwrap_or("")
+                                                            .to_string(),
+                                                        content: r["content"]
+                                                            .as_str()
+                                                            .map(|s| s.to_string()),
+                                                        score: r["score"].as_f64(),
+                                                        raw_content: r["raw_content"]
+                                                            .as_str()
+                                                            .map(|s| s.to_string()),
+                                                    })
+                                                    .collect()
+                                            })
+                                            .unwrap_or_default();
+                                        let answer =
+                                            json["answer"].as_str().map(|s| s.to_string());
+                                        let count = results.len();
+                                        return Ok(WebSearchOutput {
+                                            count,
+                                            results,
+                                            answer,
+                                            meta: WebSearchMeta {
+                                                provider: "tavily".into(),
+                                                query: input.query,
+                                            },
+                                        });
+                                    }
+                                    Err(parse_err) => {
+                                        // Tavily returned a non-JSON body (e.g.,
+                                        // HTML error page, empty response, or a
+                                        // misconfigured API key redirect).
+                                        // Log at WARN so users can diagnose
+                                        // misconfigured keys instead of silently
+                                        // falling through to Firecrawl.
+                                        tracing::warn!(
+                                            "Tavily response parse failed (status={}, body_len={}): {}. Falling through to Firecrawl.",
+                                            resp.status,
+                                            resp.body_text.len(),
+                                            parse_err
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -220,20 +235,14 @@ async fn web_scrape_default(
     let http = HttpClient::new(&settings.http, &cache_dir);
 
     let body = match http.fetch(&input.url, None, "bypass").await {
-        Ok(outcome) => match outcome {
-            http_mod::FetchOutcome::Response(resp, _, _) => {
-                if resp.status < 200 || resp.status >= 400 {
-                    return Err(format!("HTTP {} for URL: {}", resp.status, input.url));
-                }
-                resp.body_text
+        Ok(outcome) => {
+            let http_mod::FetchOutcome::Response(resp, _, _) = outcome
+                else { unreachable!("bypass cache mode never returns Cached") };
+            if resp.status < 200 || resp.status >= 400 {
+                return Err(format!("HTTP {} for URL: {}", resp.status, input.url));
             }
-            http_mod::FetchOutcome::Cached(_) => {
-                return Err(format!(
-                    "Server returned 304 Not Modified for URL: {}. Try again later.",
-                    input.url
-                ));
-            }
-        },
+            resp.body_text
+        }
         Err(e) => return Err(format!("Scrape failed: {}", e)),
     };
 
@@ -356,12 +365,7 @@ pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
     let settings = config::load_settings()
         .await
         .map_err(|e| format!("Settings: {}", e))?;
-    let provider = input.provider.as_deref().unwrap_or("obscura");
-
-    match provider {
-        "obscura" => web_crawl_obscura(&input, &settings).await,
-        _ => web_crawl_obscura(&input, &settings).await,
-    }
+    web_crawl_obscura(&input, &settings).await
 }
 
 async fn web_crawl_obscura(
@@ -385,11 +389,6 @@ async fn web_crawl_obscura(
     let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
     let include_frames = input.include_frames.unwrap_or(false);
     let wait_selector = input.wait_selector.as_deref();
-
-    let _binary = obscura
-        .ensure_ready()
-        .await
-        .map_err(|e| format!("Obscura not ready: {}", e))?;
 
     let content = obscura
         .fetch_with_all_options(
@@ -529,42 +528,37 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
     let sitemap_url = format!("{}/sitemap.xml", base_url);
 
     let mut links: Vec<WebMapLink> = Vec::new();
+    let mut sitemap_fetched = false;
+
     // Try sitemap.xml
     if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) =
         http.fetch(&sitemap_url, None, "bypass").await
     {
-        let doc = scraper::Html::parse_document(&resp.body_text);
-        // Try to extract <loc> elements from sitemap XML
-        for line in resp.body_text.lines() {
-            if line.contains("<loc>") {
-                if let Some(start) = line.find("<loc>") {
-                    let rest = &line[start + 5..];
-                    if let Some(end) = rest.find("</loc>") {
-                        let url = &rest[..end];
-                        links.push(WebMapLink {
-                            url: url.to_string(),
-                            title: None,
-                        });
-                    }
-                }
-            }
-        }
-        // Also get <url> elements
-        if let Ok(sel) = scraper::Selector::parse("url") {
-            for el in doc.select(&sel) {
-                if let Ok(loc_sel) = scraper::Selector::parse("loc") {
-                    if let Some(loc) = el.select(&loc_sel).next() {
-                        let url_str = loc.text().collect::<String>().trim().to_string();
-                        if !url_str.is_empty() && !links.iter().any(|l| l.url == url_str) {
-                            let title = scraper::Selector::parse("news\\:title")
-                                .or_else(|_| scraper::Selector::parse("title"))
-                                .ok()
-                                .and_then(|ts| el.select(&ts).next())
-                                .map(|t| t.text().collect::<String>());
-                            links.push(WebMapLink {
-                                url: url_str,
-                                title,
-                            });
+        // Only treat as fetched if the response is a real sitemap (HTTP 200
+        // and body contains <urlset> or <sitemapindex>). A 404 or HTML error
+        // page would otherwise silently produce an empty-but-"success" result.
+        if resp.status >= 200 && resp.status < 400 {
+            let body = &resp.body_text;
+            if body.contains("<urlset") || body.contains("<sitemapindex") {
+                sitemap_fetched = true;
+                let doc = scraper::Html::parse_document(body);
+                if let Ok(sel) = scraper::Selector::parse("url") {
+                    for el in doc.select(&sel) {
+                        if let Ok(loc_sel) = scraper::Selector::parse("loc") {
+                            if let Some(loc) = el.select(&loc_sel).next() {
+                                let url_str = loc.text().collect::<String>().trim().to_string();
+                                if !url_str.is_empty() && !links.iter().any(|l| l.url == url_str) {
+                                    let title = scraper::Selector::parse("news\\:title")
+                                        .or_else(|_| scraper::Selector::parse("title"))
+                                        .ok()
+                                        .and_then(|ts| el.select(&ts).next())
+                                        .map(|t| t.text().collect::<String>());
+                                    links.push(WebMapLink {
+                                        url: url_str,
+                                        title,
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -589,7 +583,7 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
     let count = links.len();
 
     Ok(WebMapOutput {
-        success: true,
+        success: sitemap_fetched,
         url: input.url,
         count,
         links,

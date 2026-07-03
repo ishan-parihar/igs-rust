@@ -136,13 +136,12 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
     },
     ToolGroup {
         name: "browser",
-        description: "Persistent browser session for JavaScript-rendered pages. Navigate with browser.goto first, then interact with other tools.",
+        description: "Stateless per-call browser fetch via Obscura CLI. Each tool invocation re-renders the page (no persistent session). Use browser.goto first to set the current URL, then browser.markdown/browser.links/etc. will fetch that URL.",
         tools: &[
             "browser.goto", "browser.markdown", "browser.links",
-            "browser.evaluate", "browser.semantic_tree",
-            "browser.structured_data", "browser.detect_forms",
+            "browser.evaluate",
             "browser.click", "browser.fill", "browser.scroll",
-            "browser.wait_for_selector", "browser.interactive_elements",
+            "browser.wait_for_selector",
         ],
     },
     ToolGroup {
@@ -175,18 +174,6 @@ pub fn list_groups() -> Vec<(&'static str, &'static str)> {
         .iter()
         .map(|g| (g.name, g.description))
         .collect()
-}
-
-/// Filter a list of tool names to only those in the specified group.
-pub fn filter_tools_by_group(tool_names: &[String], group: &str) -> Vec<String> {
-    match get_group_tools(group) {
-        Some(allowed) => tool_names
-            .iter()
-            .filter(|t| allowed.contains(&t.as_str()))
-            .cloned()
-            .collect(),
-        None => tool_names.to_vec(), // Unknown group = return all
-    }
 }
 
 /// Get total count of tools across all groups.
@@ -284,14 +271,10 @@ mod tests {
             "browser.markdown",
             "browser.links",
             "browser.evaluate",
-            "browser.semantic_tree",
-            "browser.structured_data",
-            "browser.detect_forms",
             "browser.click",
             "browser.fill",
             "browser.scroll",
             "browser.wait_for_selector",
-            "browser.interactive_elements",
             "sop.list",
             "sop.execute",
             "youtube.search",
