@@ -102,10 +102,8 @@ pub struct HttpSettings {
 }
 
 fn default_user_agent() -> String {
-    format!(
-        "IGS/{} (+https://github.com/ishan-parihar/igs-rust-mcp)",
-        env!("CARGO_PKG_VERSION")
-    )
+    "IGS/0.3.2 (+https://github.com/ishan-parihar/igs-rust)".to_string()
+
 }
 fn default_timeout() -> u64 {
     15000

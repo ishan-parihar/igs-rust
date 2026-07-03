@@ -4,7 +4,7 @@ set -euo pipefail
 # IGS MCP Server — Install Script
 # Downloads the latest release binary and sets up config.
 
-REPO="ishan-parihar/igs-rust-mcp"
+REPO="ishan-parihar/igs-rust"
 INSTALL_DIR="${IGS_INSTALL_DIR:-$HOME/.local/bin}"
 CONFIG_DIR="${IGS_CONFIG_DIR:-$HOME/.config/igs-mcp}"
 

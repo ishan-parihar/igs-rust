@@ -1,7 +1,7 @@
 # IGS — Intelligence Gathering System
 
-[![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust--mcp-181717?logo=github)](https://github.com/ishan-parihar/igs-rust-mcp)
-[![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust--mcp-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust-mcp)
+[![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust-181717?logo=github)](https://github.com/ishan-parihar/igs-rust)
+[![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust)
 
 MCP server + CLI for intelligence gathering. 64 tools, 411 sources, 47 countries, [TOON](https://toonformat.dev) token-efficient output, Obscura headless browser.
 
@@ -23,12 +23,12 @@ MCP server + CLI for intelligence gathering. 64 tools, 411 sources, 47 countries
 Detects your platform, downloads the latest release, and installs to `~/.local/bin`:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ishan-parihar/igs-rust-mcp/master/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/ishan-parihar/igs-rust/master/scripts/install.sh | bash
 ```
 
 ### Option 2: Manual Download
 
-Download the tarball for your platform from the [latest release](https://github.com/ishan-parihar/igs-rust-mcp/releases/latest), then:
+Download the tarball for your platform from the [latest release](https://github.com/ishan-parihar/igs-rust/releases/latest), then:
 
 ```bash
 tar -xzf igs-*.tar.gz
@@ -44,8 +44,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup target add x86_64-unknown-linux-musl
 
 # Clone and build
-git clone https://github.com/ishan-parihar/igs-rust-mcp.git
-cd igs-rust-mcp
+git clone https://github.com/ishan-parihar/igs-rust.git
+cd igs-rust
 cargo build --release --target x86_64-unknown-linux-musl
 
 # Install
