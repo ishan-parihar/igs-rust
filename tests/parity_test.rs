@@ -60,6 +60,15 @@ fn mcp_tool_to_cli_path(tool_name: &str) -> Option<(&str, &str)> {
         "advanced.source_quality" => return Some(("advanced", "source-quality")),
         "advanced.generate_report" => return Some(("advanced", "generate-report")),
         "search.semantic" => return Some(("advanced", "semantic-search")),
+        // Plugin tools (P3)
+        "plugin.webhook_enrich" => return Some(("plugins", "webhook-enrich")),
+        "plugin.script_hook" => return Some(("plugins", "script-hook")),
+        "plugin.export" => return Some(("plugins", "export")),
+        // OSINT data source tools (P4)
+        "research.openalex" => return Some(("osint", "open-alex")),
+        "security.shodan" => return Some(("osint", "shodan")),
+        "security.hibp" => return Some(("osint", "hibp")),
+        "conflict.acled" => return Some(("osint", "acled")),
         // Monitor tools — handled via direct manager calls, not #[tool] macro
         "monitor.create" => return Some(("monitor", "create")),
         "monitor.list" => return Some(("monitor", "list")),

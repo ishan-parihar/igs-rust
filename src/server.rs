@@ -1538,6 +1538,94 @@ impl IgsMcpServer {
         }))
     }
 
+    // ── Plugin & Extension Tools (P3) ──────────────────────────
+
+    #[tool(
+        name = "plugin.webhook_enrich",
+        description = "POST articles to an external webhook for enrichment (e.g., LLM service, custom NLP pipeline). Returns the enriched response."
+    )]
+    async fn plugin_webhook_enrich(
+        &self,
+        params: Parameters<crate::tools::plugins::WebhookEnrichInput>,
+    ) -> Result<Json<crate::tools::plugins::WebhookEnrichOutput>, String> {
+        let result = crate::tools::plugins::webhook_enrich(params.0).await?;
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "plugin.script_hook",
+        description = "Pipe text through an external script (Python, Node, Bash). Script receives text on stdin, outputs result on stdout. Enables integration with external NLP/ML pipelines."
+    )]
+    async fn plugin_script_hook(
+        &self,
+        params: Parameters<crate::tools::plugins::ScriptHookInput>,
+    ) -> Result<Json<crate::tools::plugins::ScriptHookOutput>, String> {
+        let result = crate::tools::plugins::script_hook(params.0).await?;
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "plugin.export",
+        description = "Export data to a file in JSON, TOON, or Markdown format."
+    )]
+    async fn plugin_export(
+        &self,
+        params: Parameters<crate::tools::plugins::ExportInput>,
+    ) -> Result<Json<crate::tools::plugins::ExportOutput>, String> {
+        let result = crate::tools::plugins::export_data(params.0).await?;
+        Ok(Json(result))
+    }
+
+    // ── Data Source Expansion Tools (P4) ───────────────────────
+
+    #[tool(
+        name = "research.openalex",
+        description = "Search OpenAlex for 250M+ academic works. Free API, no key required. Broader coverage than Semantic Scholar."
+    )]
+    async fn research_openalex(
+        &self,
+        params: Parameters<crate::tools::data_sources::OpenAlexSearchInput>,
+    ) -> Result<Json<crate::tools::data_sources::OpenAlexSearchOutput>, String> {
+        let result = crate::tools::data_sources::openalex_search(params.0).await?;
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "security.shodan",
+        description = "Search Shodan for exposed services, ports, and vulnerabilities. Requires Shodan API key."
+    )]
+    async fn security_shodan(
+        &self,
+        params: Parameters<crate::tools::data_sources::ShodanSearchInput>,
+    ) -> Result<Json<crate::tools::data_sources::ShodanSearchOutput>, String> {
+        let result = crate::tools::data_sources::shodan_search(params.0).await?;
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "security.hibp",
+        description = "Check if an email address has appeared in known data breaches via HaveIBeenPwned. Requires HIBP API key."
+    )]
+    async fn security_hibp(
+        &self,
+        params: Parameters<crate::tools::data_sources::HibpBreachInput>,
+    ) -> Result<Json<crate::tools::data_sources::HibpBreachOutput>, String> {
+        let result = crate::tools::data_sources::hibp_check(params.0).await?;
+        Ok(Json(result))
+    }
+
+    #[tool(
+        name = "conflict.acled",
+        description = "Search ACLED (Armed Conflict Location & Event Data) for conflict events worldwide. Requires free API key + email from acleddata.com."
+    )]
+    async fn conflict_acled(
+        &self,
+        params: Parameters<crate::tools::data_sources::AcledSearchInput>,
+    ) -> Result<Json<crate::tools::data_sources::AcledSearchOutput>, String> {
+        let result = crate::tools::data_sources::acled_search(params.0).await?;
+        Ok(Json(result))
+    }
+
     // ── Monitor Tools ─────────────────────────────────────────
 
     #[tool(

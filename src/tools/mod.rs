@@ -17,6 +17,7 @@ pub mod web;
 
 pub mod climate;
 pub mod advanced;
+pub mod data_sources;
 pub mod dump;
 pub mod entity_resolution;
 pub mod env;
@@ -26,6 +27,7 @@ pub mod govt;
 pub mod health;
 pub mod legal;
 pub mod patents;
+pub mod plugins;
 pub mod politics;
 pub mod registry;
 pub mod satellite;

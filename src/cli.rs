@@ -153,6 +153,16 @@ enum Commands {
         #[command(subcommand)]
         action: AdvancedAction,
     },
+    /// Plugin system: webhook enrichment, script hooks, export
+    Plugins {
+        #[command(subcommand)]
+        action: PluginsAction,
+    },
+    /// OSINT data sources: OpenAlex, Shodan, HIBP, ACLED
+    Osint {
+        #[command(subcommand)]
+        action: OsintAction,
+    },
     /// List available parsers
     Parsers,
     /// Show IGS settings and status
@@ -807,6 +817,77 @@ enum AdvancedAction {
         articles: String,
         #[arg(long, default_value = "20")]
         limit: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum PluginsAction {
+    /// Enrich articles via an external webhook
+    WebhookEnrich {
+        #[arg(long)]
+        url: String,
+        /// JSON array of articles, or - for stdin
+        #[arg(long)]
+        articles: String,
+    },
+    /// Pipe text through an external script
+    ScriptHook {
+        /// Script command (e.g., "python3 enrich.py")
+        #[arg(long)]
+        command: String,
+        /// Text to pipe, or - for stdin
+        #[arg(long)]
+        text: String,
+    },
+    /// Export data to a file
+    Export {
+        /// JSON data to export, or - for stdin
+        #[arg(long)]
+        data: String,
+        #[arg(long)]
+        file: String,
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum OsintAction {
+    /// Search OpenAlex for academic works
+    OpenAlex {
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "25")]
+        limit: u32,
+    },
+    /// Search Shodan for exposed services
+    Shodan {
+        #[arg(long)]
+        query: String,
+        #[arg(long)]
+        api_key: String,
+    },
+    /// Check email against HaveIBeenPwned
+    Hibp {
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        api_key: String,
+    },
+    /// Search ACLED for conflict events
+    Acled {
+        #[arg(long)]
+        country: Option<String>,
+        #[arg(long)]
+        event_type: Option<String>,
+        #[arg(long)]
+        start_date: Option<String>,
+        #[arg(long)]
+        end_date: Option<String>,
+        #[arg(long)]
+        api_key: String,
+        #[arg(long)]
+        email: String,
     },
 }
 
@@ -1976,6 +2057,111 @@ async fn main() -> anyhow::Result<()> {
                     results,
                     count,
                 });
+            }
+        },
+
+        Commands::Plugins { action } => match action {
+            PluginsAction::WebhookEnrich { url, articles } => {
+                let articles_str = if articles == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    articles
+                };
+                let result = r(igs_rust_mcp::tools::plugins::webhook_enrich(
+                    igs_rust_mcp::tools::plugins::WebhookEnrichInput {
+                        webhook_url: url,
+                        articles_json: articles_str,
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+            PluginsAction::ScriptHook { command, text } => {
+                let text = if text == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    text
+                };
+                let result = r(igs_rust_mcp::tools::plugins::script_hook(
+                    igs_rust_mcp::tools::plugins::ScriptHookInput {
+                        command,
+                        text,
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+            PluginsAction::Export { data, file, format } => {
+                let data_str = if data == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    data
+                };
+                let result = r(igs_rust_mcp::tools::plugins::export_data(
+                    igs_rust_mcp::tools::plugins::ExportInput {
+                        data_json: data_str,
+                        file_path: file,
+                        format: Some(format),
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+        },
+
+        Commands::Osint { action } => match action {
+            OsintAction::OpenAlex { query, limit } => {
+                let result = r(igs_rust_mcp::tools::data_sources::openalex_search(
+                    igs_rust_mcp::tools::data_sources::OpenAlexSearchInput {
+                        query,
+                        limit: Some(limit),
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+            OsintAction::Shodan { query, api_key } => {
+                let result = r(igs_rust_mcp::tools::data_sources::shodan_search(
+                    igs_rust_mcp::tools::data_sources::ShodanSearchInput {
+                        query,
+                        api_key,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+            OsintAction::Hibp { email, api_key } => {
+                let result = r(igs_rust_mcp::tools::data_sources::hibp_check(
+                    igs_rust_mcp::tools::data_sources::HibpBreachInput {
+                        email,
+                        api_key,
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+            OsintAction::Acled { country, event_type, start_date, end_date, api_key, email } => {
+                let result = r(igs_rust_mcp::tools::data_sources::acled_search(
+                    igs_rust_mcp::tools::data_sources::AcledSearchInput {
+                        country,
+                        event_type,
+                        start_date,
+                        end_date,
+                        api_key,
+                        email,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
             }
         },
     }
