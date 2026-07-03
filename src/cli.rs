@@ -148,6 +148,11 @@ enum Commands {
         #[command(subcommand)]
         action: IntelligenceAction,
     },
+    /// Advanced analysis: temporal, geo, language, source quality, reports, semantic search
+    Advanced {
+        #[command(subcommand)]
+        action: AdvancedAction,
+    },
     /// List available parsers
     Parsers,
     /// Show IGS settings and status
@@ -752,6 +757,56 @@ enum IntelligenceAction {
         start_date: Option<String>,
         #[arg(long)]
         end_date: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdvancedAction {
+    /// Analyze time series for anomalies
+    TemporalAnalysis {
+        #[arg(long)]
+        entity: String,
+        /// JSON array of [timestamp, count] pairs, or - for stdin
+        #[arg(long)]
+        points: String,
+    },
+    /// Extract geographic locations from text
+    ExtractLocations {
+        /// Text to analyze, or - for stdin
+        #[arg(long)]
+        text: String,
+    },
+    /// Detect the language of text
+    DetectLanguage {
+        /// Text to analyze, or - for stdin
+        #[arg(long)]
+        text: String,
+    },
+    /// Score source quality and trustworthiness
+    SourceQuality {
+        /// JSON array of [name, domain] pairs, or - for stdin
+        #[arg(long)]
+        sources: String,
+    },
+    /// Generate a markdown intelligence report
+    GenerateReport {
+        #[arg(long)]
+        title: String,
+        /// JSON array of articles, or - for stdin
+        #[arg(long)]
+        articles: String,
+        #[arg(long, default_value = "brief")]
+        style: String,
+    },
+    /// Semantic search over articles using TF-IDF
+    SemanticSearch {
+        #[arg(long)]
+        query: String,
+        /// JSON array of articles to search, or - for stdin
+        #[arg(long)]
+        articles: String,
+        #[arg(long, default_value = "20")]
+        limit: u32,
     },
 }
 
@@ -1830,6 +1885,97 @@ async fn main() -> anyhow::Result<()> {
                     },
                 ).await)?;
                 output(fmt, &result);
+            }
+        },
+
+        Commands::Advanced { action } => match action {
+            AdvancedAction::TemporalAnalysis { entity, points } => {
+                let points_str = if points == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    points
+                };
+                let pts: Vec<(String, u32)> = serde_json::from_str(&points_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid points JSON: {}", e))?;
+                let result = igs_rust_mcp::tools::advanced::analyze_time_series(&entity, &pts);
+                output(fmt, &result);
+            }
+            AdvancedAction::ExtractLocations { text } => {
+                let text = if text == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    text
+                };
+                let result = igs_rust_mcp::tools::advanced::extract_locations(&text);
+                output(fmt, &result);
+            }
+            AdvancedAction::DetectLanguage { text } => {
+                let text = if text == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    text
+                };
+                let result = igs_rust_mcp::tools::advanced::detect_language(&text);
+                output(fmt, &result);
+            }
+            AdvancedAction::SourceQuality { sources } => {
+                let sources_str = if sources == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    sources
+                };
+                let srcs: Vec<(String, String)> = serde_json::from_str(&sources_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid sources JSON: {}", e))?;
+                let result = igs_rust_mcp::tools::advanced::score_sources(&srcs);
+                output(fmt, &result);
+            }
+            AdvancedAction::GenerateReport { title, articles, style } => {
+                let articles_str = if articles == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    articles
+                };
+                let arts: Vec<igs_rust_mcp::tools::advanced::ReportArticle> = serde_json::from_str(&articles_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid articles JSON: {}", e))?;
+                let result = igs_rust_mcp::tools::advanced::generate_report(
+                    igs_rust_mcp::tools::advanced::ReportInput {
+                        title,
+                        articles: arts,
+                        summary_style: Some(style),
+                    },
+                );
+                output(fmt, &result);
+            }
+            AdvancedAction::SemanticSearch { query, articles, limit } => {
+                let articles_str = if articles == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    articles
+                };
+                // Parse articles as Vec of (id, title, link, text) tuples
+                let article_tuples: Vec<(String, String, String, String)> = serde_json::from_str(&articles_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid articles JSON: {}", e))?;
+                let mut index = igs_rust_mcp::tools::semantic::SemanticIndex::new();
+                index.add_batch(&article_tuples);
+                let results = index.search(&query, limit as usize);
+                let count = results.len();
+                output(fmt, &igs_rust_mcp::tools::semantic::SemanticSearchOutput {
+                    query,
+                    results,
+                    count,
+                });
             }
         },
     }

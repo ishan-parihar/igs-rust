@@ -1959,3 +1959,51 @@ pub struct GdeltOutput {
     pub total: usize,
     pub events: Vec<crate::tools::gdelt::GdeltEvent>,
 }
+
+// ─── Advanced Intelligence Tool Types (P2) ────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct TemporalAnalysisInput {
+    /// Entity name to analyze
+    pub entity: String,
+    /// Time-series points as JSON: [{"timestamp":"2026-01-01","count":10}, ...]
+    pub points_json: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct GeoExtractionInput {
+    /// Text to extract locations from
+    pub text: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct LanguageDetectionInput {
+    /// Text to detect language of
+    pub text: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SourceQualityInput {
+    /// Sources as JSON: [{"name":"Reuters","domain":"reuters.com"}, ...]
+    pub sources_json: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ReportGenerateInput {
+    /// Report title
+    pub title: String,
+    /// Articles as JSON array
+    pub articles_json: String,
+    /// Summary style: "brief", "detailed", or "bullet"
+    pub style: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
