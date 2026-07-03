@@ -49,6 +49,16 @@ fn mcp_tool_to_cli_path(tool_name: &str) -> Option<(&str, &str)> {
         "youtube.metadata" => return Some(("youtube", "metadata")),
         "youtube.subtitles" => return Some(("youtube", "subtitles")),
         "parsers.list" => return Some(("parsers", "")), // top-level command, no subcommand
+        // Intelligence tools (P1)
+        "news.summarize" => return Some(("intelligence", "summarize")),
+        "entities.resolve" => return Some(("intelligence", "resolve-entities")),
+        "search.gdelt" => return Some(("intelligence", "gdelt")),
+        // Monitor tools — handled via direct manager calls, not #[tool] macro
+        "monitor.create" => return Some(("monitor", "create")),
+        "monitor.list" => return Some(("monitor", "list")),
+        "monitor.delete" => return Some(("monitor", "delete")),
+        "monitor.pause" => return Some(("monitor", "pause")),
+        "monitor.resume" => return Some(("monitor", "resume")),
         _ => {}
     }
 

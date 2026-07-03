@@ -143,6 +143,11 @@ enum Commands {
         #[command(subcommand)]
         action: MonitorAction,
     },
+    /// Advanced intelligence: TextRank summarization, entity resolution, GDELT
+    Intelligence {
+        #[command(subcommand)]
+        action: IntelligenceAction,
+    },
     /// List available parsers
     Parsers,
     /// Show IGS settings and status
@@ -717,6 +722,36 @@ enum SopAction {
     Execute {
         #[arg(long)]
         chain: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum IntelligenceAction {
+    /// Summarize text using TextRank
+    Summarize {
+        /// Text to summarize, or - for stdin
+        #[arg(long)]
+        text: String,
+        /// Number of sentences (default: 3)
+        #[arg(long)]
+        num_sentences: Option<u32>,
+    },
+    /// Resolve entity names to canonical forms
+    ResolveEntities {
+        /// Comma-separated entity names
+        #[arg(long, value_delimiter = ',')]
+        names: Vec<String>,
+    },
+    /// Search GDELT global events database
+    Gdelt {
+        #[arg(long)]
+        query: String,
+        #[arg(long)]
+        limit: Option<u32>,
+        #[arg(long)]
+        start_date: Option<String>,
+        #[arg(long)]
+        end_date: Option<String>,
     },
 }
 
@@ -1760,6 +1795,43 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+
+        Commands::Intelligence { action } => match action {
+            IntelligenceAction::Summarize { text, num_sentences } => {
+                let text = if text == "-" {
+                    let mut buf = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                    buf
+                } else {
+                    text
+                };
+                let num = num_sentences.unwrap_or(3) as usize;
+                let result = igs_rust_mcp::tools::summarize::summarize(&text, num);
+                output(fmt, &SummarizeOutput {
+                    summary: result.summary,
+                    sentence_count: result.sentence_count,
+                    original_count: result.original_count,
+                    top_sentences: result.top_sentences,
+                });
+            }
+            IntelligenceAction::ResolveEntities { names } => {
+                let result = igs_rust_mcp::tools::entity_resolution::resolve_entities(&names);
+                output(fmt, &result);
+            }
+            IntelligenceAction::Gdelt { query, limit, start_date, end_date } => {
+                let result = r(igs_rust_mcp::tools::gdelt::gdelt_search(
+                    igs_rust_mcp::tools::gdelt::GdeltSearchInput {
+                        query,
+                        limit,
+                        start_date,
+                        end_date,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                ).await)?;
+                output(fmt, &result);
+            }
+        },
     }
 
     Ok(())
