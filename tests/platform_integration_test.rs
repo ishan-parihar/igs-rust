@@ -140,8 +140,13 @@ mod platform_tests {
         assert!(result.is_err(), "Twitter read without cookie should fail");
         let err = result.unwrap_err();
         assert!(
-            err.contains("not configured") || err.contains("disabled") || err.contains("401") || err.contains("auth") || err.contains("Tweet not found"),
-            "Error should mention authentication failure: {}", err
+            err.contains("not configured")
+                || err.contains("disabled")
+                || err.contains("401")
+                || err.contains("auth")
+                || err.contains("Tweet not found"),
+            "Error should mention authentication failure: {}",
+            err
         );
         println!("Twitter no-cookie error: {}", err);
     }

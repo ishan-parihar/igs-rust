@@ -814,11 +814,7 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Twitter { action } => match action {
-            TwitterAction::Search {
-                query,
-                limit,
-                mode,
-            } => {
+            TwitterAction::Search { query, limit, mode } => {
                 let result = r(twitter::twitter_search(TwitterSearchInput {
                     query,
                     limit: Some(limit as u32),
@@ -848,10 +844,7 @@ async fn main() -> anyhow::Result<()> {
                 output(fmt, &result);
             }
             YoutubeAction::Metadata { url } => {
-                let result = r(youtube::youtube_metadata(YoutubeMetadataInput {
-                    url,
-                })
-                .await)?;
+                let result = r(youtube::youtube_metadata(YoutubeMetadataInput { url }).await)?;
                 output(fmt, &result);
             }
             YoutubeAction::Subtitles { url, lang } => {
