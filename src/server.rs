@@ -454,6 +454,8 @@ pub struct IgsMcpServer {
     settings: Arc<Settings>,
     /// Real-time monitoring & alerting manager
     monitor: Arc<crate::tools::monitor::MonitorManager>,
+    /// Semantic search index — populated by news.fetch depth=deep, searched by search.semantic
+    semantic_index: Arc<Mutex<crate::tools::semantic::SemanticIndex>>,
 }
 
 // ─── Tool Router ────────────────────────────────────────────────
@@ -504,6 +506,9 @@ impl IgsMcpServer {
         let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
         let http_client = HttpClient::new(&settings.http, &cache_dir);
         let monitor = Arc::new(crate::tools::monitor::MonitorManager::new(Arc::new(settings.clone())));
+        let semantic_index = Arc::new(Mutex::new(crate::tools::semantic::SemanticIndex::new()));
+        // Start the monitoring poll loop in the background
+        monitor.start_all();
         Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
@@ -511,6 +516,7 @@ impl IgsMcpServer {
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
             monitor,
+            semantic_index,
         }
     }
 
@@ -712,6 +718,19 @@ impl IgsMcpServer {
 
         if depth == "deep" {
             let output = news::fetch_news_intelligent(params.0, &self.insights).await?;
+            // Index fetched articles into the semantic search index
+            if let Some(items) = output.get("fetched_items").and_then(|v| v.as_array()) {
+                let mut idx = self.semantic_index.lock().await;
+                for item in items {
+                    let id = item["id"].as_str().unwrap_or("").to_string();
+                    let title = item["title"].as_str().unwrap_or("").to_string();
+                    let link = item["link"].as_str().unwrap_or("").to_string();
+                    let text = item["content_snippet"].as_str().unwrap_or("").to_string();
+                    if !id.is_empty() {
+                        idx.add(&id, &title, &link, &text);
+                    }
+                }
+            }
             Ok(format_output(&output, &format))
         } else {
             let _subject = params
@@ -723,6 +742,13 @@ impl IgsMcpServer {
                 .cloned()
                 .unwrap_or_else(|| "news".to_string());
             let output = news::news_fetch(params.0).await?;
+            // Index fetched articles into the semantic search index
+            {
+                let mut idx = self.semantic_index.lock().await;
+                for item in &output.items {
+                    idx.add(&item.id, &item.title, &item.link, &item.content_snippet);
+                }
+            }
             self.dump("news.fetch", &_subject, &output);
             Ok(format_output(&output, &format))
         }
@@ -1520,21 +1546,29 @@ impl IgsMcpServer {
 
     #[tool(
         name = "search.semantic",
-        description = "Semantic search over indexed articles using TF-IDF cosine similarity. First index articles via news.fetch, then search by natural-language query."
+        description = "Semantic search over indexed articles using TF-IDF cosine similarity. Articles are indexed automatically when news.fetch is called with depth=deep. Search by natural-language query."
     )]
     async fn search_semantic(
         &self,
         params: Parameters<SemanticSearchInput>,
     ) -> Result<Json<SemanticSearchResultOutput>, String> {
-        // For MCP, we create a temporary index from recently fetched articles.
-        // In a full implementation, this would use a persistent index stored
-        // alongside the InsightStorage. For now, we return an empty result
-        // with a message guiding the user to use the CLI for full semantic search.
-        let _ = params.0.query;
+        let limit = params.0.limit.unwrap_or(20) as usize;
+        let index = self.semantic_index.lock().await;
+        let results = index.search(&params.0.query, limit);
+        let count = results.len();
+        let results: Vec<SemanticSearchResultItem> = results
+            .into_iter()
+            .map(|r| SemanticSearchResultItem {
+                article_id: r.article_id,
+                title: r.title,
+                link: r.link,
+                score: r.score,
+            })
+            .collect();
         Ok(Json(SemanticSearchResultOutput {
             query: params.0.query,
-            results: vec![],
-            count: 0,
+            results,
+            count,
         }))
     }
 

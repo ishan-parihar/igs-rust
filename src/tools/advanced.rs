@@ -173,37 +173,55 @@ fn city_lookup() -> std::collections::HashMap<&'static str, (&'static str, f64, 
 }
 
 /// Extract location entities from text using a gazetteer-based approach.
-/// Detects country names, city names, and capitalized place-like words.
+/// Detects country names, city names using word-boundary matching to avoid
+/// false positives (e.g., "China" won't match "machinations").
 pub fn extract_locations(text: &str) -> GeoExtractionOutput {
     let countries = country_lookup();
     let cities = city_lookup();
     let lower = text.to_lowercase();
+    // Tokenize into words for boundary matching (split on any non-alphanumeric)
+    let words: std::collections::HashSet<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
     let mut locations: Vec<GeoEntity> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // Check for country names
-    for (name, (code, lat, lon)) in &countries {
-        if lower.contains(name) && !seen.contains(&name.to_string()) {
+    // Check for country names (word-boundary match)
+    for (&name, &(code, lat, lon)) in &countries {
+        // For multi-word names like "united states", check if all words are present
+        // in sequence. For single-word names, check word-boundary match.
+        let name_found = if name.contains(' ') {
+            lower.contains(name)
+        } else {
+            words.contains(name)
+        };
+        if name_found && !seen.contains(name) {
             locations.push(GeoEntity {
                 name: title_case(name),
                 entity_type: "GPE".into(),
                 country_code: Some(code.to_string()),
-                latitude: Some(*lat),
-                longitude: Some(*lon),
+                latitude: Some(lat),
+                longitude: Some(lon),
             });
             seen.insert(name.to_string());
         }
     }
 
-    // Check for city names
-    for (name, (code, lat, lon)) in &cities {
-        if lower.contains(name) && !seen.contains(&name.to_string()) {
+    // Check for city names (word-boundary match)
+    for (&name, &(code, lat, lon)) in &cities {
+        let name_found = if name.contains(' ') {
+            lower.contains(name)
+        } else {
+            words.contains(name)
+        };
+        if name_found && !seen.contains(name) {
             locations.push(GeoEntity {
                 name: title_case(name),
                 entity_type: "LOC".into(),
                 country_code: Some(code.to_string()),
-                latitude: Some(*lat),
-                longitude: Some(*lon),
+                latitude: Some(lat),
+                longitude: Some(lon),
             });
             seen.insert(name.to_string());
         }
@@ -298,7 +316,7 @@ fn detect_latin_language(text: &str) -> String {
 
     let max = en_count.max(es_count).max(fr_count).max(de_count);
     if max == 0 {
-        return "en".into(); // default
+        return "unknown".into(); // no stop words matched — can't determine
     }
     if max == en_count { "en" }
     else if max == es_count { "es" }

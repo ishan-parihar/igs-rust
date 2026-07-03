@@ -81,6 +81,10 @@ pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
             )
         })?;
 
+    let query = input.query.unwrap_or_default();
+    let target_url = input.target_url.unwrap_or_default();
+    let country = input.country.unwrap_or_default();
+
     let mut results = Vec::new();
 
     for (i, step) in chain.steps.iter().enumerate() {
@@ -110,13 +114,22 @@ pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
             }
         }
 
+        // Substitute placeholders in params
         let params_str = serde_json::to_string(&step.params).unwrap_or_default();
+        let params_substituted = params_str
+            .replace("$QUERY", &query)
+            .replace("$TARGET_URL", &target_url)
+            .replace("$COUNTRY", &country);
+        let params_json: serde_json::Value = serde_json::from_str(&params_substituted)
+            .unwrap_or(step.params.clone());
+
+        let params_display = serde_json::to_string(&params_json).unwrap_or_default();
 
         results.push(SopStepResult {
             step: i,
             tool: step.tool.clone(),
-            status: "pending_dispatch".into(),
-            output: format!("Ready to dispatch: {}({})", step.tool, params_str),
+            status: "ready".into(),
+            output: format!("Ready to dispatch: {}({})", step.tool, params_display),
         });
     }
 
@@ -143,20 +156,29 @@ mod tests {
     fn test_sop_execute_valid_chain() {
         let input = SopExecuteInput {
             chain_name: "deep-threat-intel".into(),
-            overrides: None,
+            query: Some("CVE-2026-1234".into()),
+            target_url: None,
+            country: None,
             output: OutputOptions { format: None },
         };
         let result = sop_execute(input).unwrap();
         assert_eq!(result.chain_name, "deep-threat-intel");
         assert_eq!(result.results.len(), 4);
-        assert_eq!(result.steps_completed, 0);
+        // Step 0 has no dependencies and should be "ready"
+        assert_eq!(result.results[0].status, "ready");
+        // Step 0's params should have $QUERY substituted
+        assert!(result.results[0].output.contains("CVE-2026-1234"));
+        // Steps with unmet dependencies should be "skipped"
+        assert!(result.results.iter().any(|r| r.status == "skipped"));
     }
 
     #[test]
     fn test_sop_execute_unknown_chain() {
         let input = SopExecuteInput {
             chain_name: "nonexistent".into(),
-            overrides: None,
+            query: None,
+            target_url: None,
+            country: None,
             output: OutputOptions { format: None },
         };
         let result = sop_execute(input);
