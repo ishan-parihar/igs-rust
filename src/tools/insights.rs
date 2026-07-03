@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Unified connection finder: specific entity OR all cross-domain entities
-pub(crate) async fn insights_find_connections(
+pub async fn insights_find_connections(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightFindConnectionsInput,
 ) -> Result<InsightFindConnectionsOutput, String> {
@@ -40,7 +40,7 @@ pub(crate) async fn insights_find_connections(
 }
 
 /// Detect entities with increasing mention frequency
-pub(crate) async fn insights_trending(
+pub async fn insights_trending(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightTrendingInput,
 ) -> Result<InsightTrendingOutput, String> {
@@ -61,7 +61,7 @@ pub(crate) async fn insights_trending(
 }
 
 /// Add articles to the insight engine for cross-article analysis
-pub(crate) async fn insights_index(
+pub async fn insights_index(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightIndexInput,
 ) -> Result<InsightIndexOutput, String> {
@@ -88,7 +88,7 @@ pub(crate) async fn insights_index(
 }
 
 /// Get statistics about indexed articles
-pub(crate) async fn insights_stats(
+pub async fn insights_stats(
     storage: &Arc<Mutex<InsightStorage>>,
 ) -> Result<InsightStatsOutput, String> {
     let storage = storage.lock().await;
@@ -97,7 +97,7 @@ pub(crate) async fn insights_stats(
 }
 
 /// Clear all indexed articles from the insight engine
-pub(crate) async fn insights_clear(
+pub async fn insights_clear(
     storage: &Arc<Mutex<InsightStorage>>,
 ) -> Result<InsightClearOutput, String> {
     let mut storage = storage.lock().await;

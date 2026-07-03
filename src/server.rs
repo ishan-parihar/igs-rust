@@ -467,6 +467,12 @@ impl IgsMcpServer {
         output.format.as_deref().unwrap_or("toon").to_string()
     }
 
+    /// Public accessor for the insight engine — used by the CLI's `igs insights` subcommand
+    /// to share the same InsightStorage that MCP tools use.
+    pub fn insights(&self) -> &Arc<Mutex<InsightStorage>> {
+        &self.insights
+    }
+
     pub fn filtered_tool_names(&self, all_tools: Vec<String>) -> Vec<String> {
         if self.tool_groups.is_empty() {
             return all_tools;
