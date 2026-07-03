@@ -11,17 +11,27 @@ CONFIG_DIR="${IGS_CONFIG_DIR:-$HOME/.config/igs-mcp}"
 echo "=== IGS Intelligence Gathering System — Installer ==="
 echo ""
 
-# Detect platform
+# Detect platform (uses Rust target triples to match release artifacts)
 ARCH=$(uname -m)
 OS=$(uname -s)
 case "$OS" in
-    Linux)  PLATFORM="x86_64-linux-musl" ;;
-    Darwin) PLATFORM="x86_64-macos" ;;
+    Linux)  PLATFORM="x86_64-unknown-linux-musl" ;;
+    Darwin) PLATFORM="aarch64-apple-darwin" ;;
     *)      echo "Error: Unsupported OS: $OS"; exit 1 ;;
 esac
 case "$ARCH" in
-    x86_64)  ;;
-    aarch64|arm64) PLATFORM="aarch64-${PLATFORM#*-}" ;;
+    x86_64)
+        if [ "$OS" = "Linux" ]; then
+            PLATFORM="x86_64-unknown-linux-musl"
+        fi
+        ;;
+    aarch64|arm64)
+        if [ "$OS" = "Linux" ]; then
+            PLATFORM="aarch64-unknown-linux-musl"
+        elif [ "$OS" = "Darwin" ]; then
+            PLATFORM="aarch64-apple-darwin"
+        fi
+        ;;
     *)       echo "Error: Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 

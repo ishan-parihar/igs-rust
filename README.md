@@ -18,27 +18,22 @@ MCP server + CLI for intelligence gathering. 68 tools, 411 sources, 47 countries
 
 ## Installation
 
-### Option 1: Download Release (Recommended)
+### Option 1: Install Script (Recommended)
 
-```bash
-# Download latest release (v0.5.0)
-curl -L -o igs.tar.gz https://github.com/ishan-parihar/igs-rust-mcp/releases/download/v0.5.0/igs-v0.5.0-x86_64-linux-musl.tar.gz
-
-# Extract
-tar -xzf igs.tar.gz
-
-# Move to PATH
-sudo mv igs /usr/local/bin/
-
-# Verify
-igs --version
-igs status
-```
-
-### Option 2: Install Script
+Detects your platform, downloads the latest release, and installs to `~/.local/bin`:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/ishan-parihar/igs-rust-mcp/master/scripts/install.sh | bash
+```
+
+### Option 2: Manual Download
+
+Download the tarball for your platform from the [latest release](https://github.com/ishan-parihar/igs-rust-mcp/releases/latest), then:
+
+```bash
+tar -xzf igs-*.tar.gz
+sudo mv igs /usr/local/bin/
+igs --version
 ```
 
 ### Option 3: Build from Source
