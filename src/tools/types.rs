@@ -1794,3 +1794,80 @@ pub struct TwitterReadInput {
 pub struct TwitterReadOutput {
     pub tweet: TwitterTweet,
 }
+
+// ─── Monitor Tool Types ───────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorCreateInput {
+    /// Unique monitor ID
+    pub id: String,
+    /// Human-readable name
+    pub name: String,
+    /// Pool IDs to monitor
+    pub pools: Vec<String>,
+    /// Keywords to watch for
+    pub keywords: Vec<String>,
+    /// Poll interval in seconds (default: 300 = 5 min)
+    pub interval_secs: Option<u64>,
+    /// Alert threshold: min keyword matches (default: 1)
+    pub threshold: Option<u32>,
+    /// Webhook URL for alerts
+    pub webhook_url: Option<String>,
+    /// File path to append alerts to
+    pub alert_file: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorCreateOutput {
+    pub created: bool,
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorListInput {
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorInfo {
+    pub id: String,
+    pub name: String,
+    pub pools: Vec<String>,
+    pub keywords: Vec<String>,
+    pub interval_secs: u64,
+    pub threshold: u32,
+    pub active: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorListOutput {
+    pub monitors: Vec<MonitorInfo>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorDeleteInput {
+    pub id: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorDeleteOutput {
+    pub removed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorPauseInput {
+    pub id: String,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct MonitorPauseOutput {
+    pub paused: bool,
+}
