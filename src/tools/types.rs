@@ -1291,8 +1291,12 @@ pub struct SopChainInfo {
 pub struct SopExecuteInput {
     /// Chain name
     pub chain_name: String,
-    /// Step overrides
-    pub overrides: Option<Vec<serde_json::Value>>,
+    /// Query to substitute for $QUERY placeholder in chain steps
+    pub query: Option<String>,
+    /// Target URL to substitute for $TARGET_URL placeholder
+    pub target_url: Option<String>,
+    /// Country code to substitute for $COUNTRY placeholder
+    pub country: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }

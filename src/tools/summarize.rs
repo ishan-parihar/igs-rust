@@ -39,7 +39,7 @@ const STOP_WORDS: &[&str] = &[
 
 /// Split text into sentences using common delimiters.
 fn split_sentences(text: &str) -> Vec<String> {
-    text.split(|c: char| c == '.' || c == '!' || c == '?')
+    text.split(['.', '!', '?'])
         .map(|s| s.trim())
         .filter(|s| s.len() > 20) // skip very short fragments
         .map(|s| s.to_string())

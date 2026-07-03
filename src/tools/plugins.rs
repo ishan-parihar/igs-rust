@@ -107,13 +107,18 @@ pub struct ScriptHookOutput {
 /// Pipe text through an external script. The script receives the text on stdin
 /// and should output the processed result on stdout. This enables integration
 /// with Python/Node/Bash NLP pipelines without modifying IGS itself.
+///
+/// The command string is parsed with a simple shell-like tokenizer that
+/// respects single and double quotes, so commands like
+/// `python3 -c 'print("hello")'` are correctly split into
+/// `["python3", "-c", 'print("hello")']`.
 pub async fn script_hook(input: ScriptHookInput) -> Result<ScriptHookOutput, String> {
-    let parts: Vec<&str> = input.command.split_whitespace().collect();
+    let parts = shell_split(&input.command);
     if parts.is_empty() {
         return Err("Empty command".into());
     }
 
-    let mut cmd = tokio::process::Command::new(parts[0]);
+    let mut cmd = tokio::process::Command::new(&parts[0]);
     for arg in &parts[1..] {
         cmd.arg(arg);
     }
@@ -271,6 +276,49 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+/// Split a command string into arguments, respecting single and double quotes.
+/// Examples:
+///   `python3 script.py` → ["python3", "script.py"]
+///   `python3 -c 'print("hello")'` → ["python3", "-c", "print(\"hello\")"]
+///   `echo "hello world"` → ["echo", "hello world"]
+fn shell_split(s: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if !in_single => {
+                // Escape next character
+                if let Some(&next) = chars.peek() {
+                    current.push(next);
+                    chars.next();
+                }
+            }
+            '\'' if !in_double => {
+                in_single = !in_single;
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+            }
+            ' ' | '\t' if !in_single && !in_double => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,5 +359,35 @@ mod tests {
         let parsed: ScheduledReport = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.name, "daily-brief");
         assert!(parsed.active);
+    }
+
+    #[test]
+    fn test_shell_split_simple() {
+        let parts = shell_split("python3 script.py");
+        assert_eq!(parts, vec!["python3", "script.py"]);
+    }
+
+    #[test]
+    fn test_shell_split_single_quotes() {
+        let parts = shell_split("python3 -c 'print(\"hello\")'");
+        assert_eq!(parts, vec!["python3", "-c", "print(\"hello\")"]);
+    }
+
+    #[test]
+    fn test_shell_split_double_quotes() {
+        let parts = shell_split("echo \"hello world\"");
+        assert_eq!(parts, vec!["echo", "hello world"]);
+    }
+
+    #[test]
+    fn test_shell_split_escape() {
+        let parts = shell_split(r"echo hello\ world");
+        assert_eq!(parts, vec!["echo", "hello world"]);
+    }
+
+    #[test]
+    fn test_shell_split_empty() {
+        let parts = shell_split("");
+        assert!(parts.is_empty());
     }
 }

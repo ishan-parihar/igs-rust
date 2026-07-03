@@ -1864,7 +1864,9 @@ async fn main() -> anyhow::Result<()> {
             SopAction::Execute { chain } => {
                 let result = r(sop::sop_execute(SopExecuteInput {
                     chain_name: chain,
-                    overrides: None,
+                    query: None,
+                    target_url: None,
+                    country: None,
                     output: OutputOptions { format: None },
                 }))?;
                 output(fmt, &result);
