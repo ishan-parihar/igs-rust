@@ -91,9 +91,15 @@ fn build_client(cookie_str: &str) -> Result<reqwest::Client, String> {
     headers.insert("origin", HeaderValue::from_static("https://x.com"));
     headers.insert("referer", HeaderValue::from_static("https://x.com/"));
     headers.insert("x-twitter-active-user", HeaderValue::from_static("yes"));
-    headers.insert("x-twitter-auth-type", HeaderValue::from_static("OAuth2Session"));
+    headers.insert(
+        "x-twitter-auth-type",
+        HeaderValue::from_static("OAuth2Session"),
+    );
     headers.insert("x-twitter-client-language", HeaderValue::from_static("en"));
-    headers.insert("authorization", HeaderValue::from_str(&format!("Bearer {BEARER_TOKEN}")).unwrap());
+    headers.insert(
+        "authorization",
+        HeaderValue::from_str(&format!("Bearer {BEARER_TOKEN}")).unwrap(),
+    );
     headers.insert("x-csrf-token", HeaderValue::from_str(&ct0).unwrap());
     headers.insert("cookie", HeaderValue::from_str(cookie_str).unwrap());
 
@@ -156,14 +162,22 @@ fn extract_tweet_from_result(result: &serde_json::Value) -> Option<TwitterTweet>
     let full_text = legacy.get("full_text")?.as_str()?.to_string();
     let created_at = legacy.get("created_at")?.as_str()?.to_string();
 
-    let user = result
-        .pointer("/core/user_results/result/legacy")?;
+    let user = result.pointer("/core/user_results/result/legacy")?;
     let name = user.get("name")?.as_str()?.to_string();
     let screen_name = user.get("screen_name")?.as_str()?.to_string();
 
-    let likes = legacy.get("favorite_count").and_then(|v| v.as_i64()).map(|v| v as i32);
-    let retweets = legacy.get("retweet_count").and_then(|v| v.as_i64()).map(|v| v as i32);
-    let replies = legacy.get("reply_count").and_then(|v| v.as_i64()).map(|v| v as i32);
+    let likes = legacy
+        .get("favorite_count")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
+    let retweets = legacy
+        .get("retweet_count")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
+    let replies = legacy
+        .get("reply_count")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
 
     let views = legacy
         .get("views")
@@ -189,13 +203,18 @@ fn extract_tweet_from_result(result: &serde_json::Value) -> Option<TwitterTweet>
         .and_then(|u| u.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|u| u.get("expanded_url").and_then(|t| t.as_str()).map(String::from))
+                .filter_map(|u| {
+                    u.get("expanded_url")
+                        .and_then(|t| t.as_str())
+                        .map(String::from)
+                })
                 .collect()
         })
         .unwrap_or_default();
 
     let is_retweet = full_text.starts_with("RT @");
-    let is_reply = legacy.get("in_reply_to_status_id_str")
+    let is_reply = legacy
+        .get("in_reply_to_status_id_str")
         .and_then(|v| v.as_str())
         .map(|s| !s.is_empty())
         .unwrap_or(false);
@@ -229,9 +248,7 @@ fn extract_tweets_from_timeline(data: &serde_json::Value) -> Vec<TwitterTweet> {
 
     if let Some(instructions) = instructions {
         for instruction in instructions {
-            let entries = instruction
-                .get("entries")
-                .and_then(|e| e.as_array());
+            let entries = instruction.get("entries").and_then(|e| e.as_array());
 
             if let Some(entries) = entries {
                 for entry in entries {
@@ -293,7 +310,9 @@ pub async fn twitter_search(input: TwitterSearchInput) -> Result<TwitterSearchOu
         .map_err(|e| format!("Settings: {e}"))?;
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
-        return Err("Twitter integration is disabled. Set twitter.enabled=true in settings.yml".into());
+        return Err(
+            "Twitter integration is disabled. Set twitter.enabled=true in settings.yml".into(),
+        );
     }
     let cookie = twitter
         .cookie
@@ -325,7 +344,10 @@ pub async fn twitter_search(input: TwitterSearchInput) -> Result<TwitterSearchOu
     let qid = QUERY_IDS.get("SearchTimeline").unwrap();
     let json = graphql_post(&client, qid, "SearchTimeline", &variables).await?;
 
-    tracing::debug!("Twitter search response: {}", serde_json::to_string_pretty(&json).unwrap_or_default());
+    tracing::debug!(
+        "Twitter search response: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
 
     let tweets = extract_tweets_from_timeline(&json);
     let count = tweets.len();
@@ -343,7 +365,9 @@ pub async fn twitter_read(input: TwitterReadInput) -> Result<TwitterReadOutput, 
         .map_err(|e| format!("Settings: {e}"))?;
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
-        return Err("Twitter integration is disabled. Set twitter.enabled=true in settings.yml".into());
+        return Err(
+            "Twitter integration is disabled. Set twitter.enabled=true in settings.yml".into(),
+        );
     }
     let cookie = twitter
         .cookie
