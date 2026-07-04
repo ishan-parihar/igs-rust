@@ -112,8 +112,9 @@ pub async fn gdelt_search(input: GdeltSearchInput) -> Result<GdeltSearchOutput, 
         .await
         .map_err(|e| format!("GDELT API error: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass cache mode never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass cache mode never returns Cached")
+    };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("GDELT JSON parse error: {}", e))?;
@@ -144,7 +145,9 @@ pub async fn gdelt_search(input: GdeltSearchInput) -> Result<GdeltSearchOutput, 
 }
 
 /// List articles from GDELT DOC 2.0 API with filtering.
-pub async fn gdelt_article_list(input: GdeltArticleListInput) -> Result<GdeltArticleListOutput, String> {
+pub async fn gdelt_article_list(
+    input: GdeltArticleListInput,
+) -> Result<GdeltArticleListOutput, String> {
     let settings = config::load_settings()
         .await
         .map_err(|e| format!("Settings: {}", e))?;
@@ -171,8 +174,9 @@ pub async fn gdelt_article_list(input: GdeltArticleListInput) -> Result<GdeltArt
         .await
         .map_err(|e| format!("GDELT API error: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass cache mode never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass cache mode never returns Cached")
+    };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("GDELT JSON parse error: {}", e))?;

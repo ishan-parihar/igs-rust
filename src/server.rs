@@ -2,9 +2,12 @@ use crate::config;
 use crate::http::HttpClient;
 use crate::persistence;
 use crate::tools::{
-    climate, env, finance, govt, health, helpers::{self, toon_encode}, insights, legal, lp_mcp, news,
-    parsers as parsers_tools, patents, politics, pools, reddit, research, satellite, security, sop,
-    sources, tool_guide, twitter, types::*, weather, web, youtube,
+    climate, env, finance, govt, health,
+    helpers::{self, toon_encode},
+    insights, legal, lp_mcp, news, parsers as parsers_tools, patents, politics, pools, reddit,
+    research, satellite, security, sop, sources, tool_guide, twitter,
+    types::*,
+    weather, web, youtube,
 };
 #[allow(unused_imports)]
 use crate::types::*;
@@ -505,7 +508,9 @@ impl IgsMcpServer {
         let settings = load_settings_sync().expect("Failed to load settings");
         let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
         let http_client = HttpClient::new(&settings.http, &cache_dir);
-        let monitor = Arc::new(crate::tools::monitor::MonitorManager::new(Arc::new(settings.clone())));
+        let monitor = Arc::new(crate::tools::monitor::MonitorManager::new(Arc::new(
+            settings.clone(),
+        )));
         let semantic_index = Arc::new(Mutex::new(crate::tools::semantic::SemanticIndex::new()));
         // Start the monitoring poll loop in the background
         monitor.start_all();
@@ -590,7 +595,12 @@ impl IgsMcpServer {
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_list(params.0).await?;
-        Ok(paginated_output(&all_output.sources, cursor, page_size, &format))
+        Ok(paginated_output(
+            &all_output.sources,
+            cursor,
+            page_size,
+            &format,
+        ))
     }
 
     #[tool(
@@ -649,7 +659,12 @@ impl IgsMcpServer {
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_countries().await?;
-        Ok(paginated_output(&all_output.countries, cursor, page_size, &format))
+        Ok(paginated_output(
+            &all_output.countries,
+            cursor,
+            page_size,
+            &format,
+        ))
     }
 
     #[tool(
@@ -664,7 +679,12 @@ impl IgsMcpServer {
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_cities().await?;
-        Ok(paginated_output(&all_output.cities, cursor, page_size, &format))
+        Ok(paginated_output(
+            &all_output.cities,
+            cursor,
+            page_size,
+            &format,
+        ))
     }
 
     #[tool(
@@ -679,7 +699,12 @@ impl IgsMcpServer {
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_domains().await?;
-        Ok(paginated_output(&all_output.domains, cursor, page_size, &format))
+        Ok(paginated_output(
+            &all_output.domains,
+            cursor,
+            page_size,
+            &format,
+        ))
     }
 
     // ── Parser Tools ────────────────────────────────────────────
@@ -695,7 +720,12 @@ impl IgsMcpServer {
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = parsers_tools::parsers_list().await?;
-        Ok(paginated_output(&all_output.parsers, cursor, page_size, "toon"))
+        Ok(paginated_output(
+            &all_output.parsers,
+            cursor,
+            page_size,
+            "toon",
+        ))
     }
 
     // ── News Tools ──────────────────────────────────────────────
@@ -1408,9 +1438,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpWaitForSelectorInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_wait_for_selector(params.0)
-            .await
-            .map(Json)
+        lp_mcp::lp_wait_for_selector(params.0).await.map(Json)
     }
 
     // ── Intelligence Upgrade Tools (P1) ────────────────────────
@@ -1482,8 +1510,13 @@ impl IgsMcpServer {
         &self,
         params: Parameters<TemporalAnalysisInput>,
     ) -> Result<Json<crate::tools::advanced::TemporalAnalysisOutput>, String> {
-        let points: Vec<(String, u32)> = serde_json::from_str(&params.0.points_json)
-            .map_err(|e| format!("Invalid points_json (expected [[\"timestamp\", count], ...]): {}", e))?;
+        let points: Vec<(String, u32)> =
+            serde_json::from_str(&params.0.points_json).map_err(|e| {
+                format!(
+                    "Invalid points_json (expected [[\"timestamp\", count], ...]): {}",
+                    e
+                )
+            })?;
         let result = crate::tools::advanced::analyze_time_series(&params.0.entity, &points);
         Ok(Json(result))
     }
@@ -1520,8 +1553,13 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceQualityInput>,
     ) -> Result<Json<crate::tools::advanced::SourceQualityOutput>, String> {
-        let sources: Vec<(String, String)> = serde_json::from_str(&params.0.sources_json)
-            .map_err(|e| format!("Invalid sources_json (expected [[\"name\", \"domain\"], ...]): {}", e))?;
+        let sources: Vec<(String, String)> =
+            serde_json::from_str(&params.0.sources_json).map_err(|e| {
+                format!(
+                    "Invalid sources_json (expected [[\"name\", \"domain\"], ...]): {}",
+                    e
+                )
+            })?;
         let result = crate::tools::advanced::score_sources(&sources);
         Ok(Json(result))
     }
@@ -1534,8 +1572,9 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ReportGenerateInput>,
     ) -> Result<Json<crate::tools::advanced::ReportOutput>, String> {
-        let articles: Vec<crate::tools::advanced::ReportArticle> = serde_json::from_str(&params.0.articles_json)
-            .map_err(|e| format!("Invalid articles_json: {}", e))?;
+        let articles: Vec<crate::tools::advanced::ReportArticle> =
+            serde_json::from_str(&params.0.articles_json)
+                .map_err(|e| format!("Invalid articles_json: {}", e))?;
         let result = crate::tools::advanced::generate_report(crate::tools::advanced::ReportInput {
             title: params.0.title,
             articles,
@@ -1719,10 +1758,7 @@ impl IgsMcpServer {
         Ok(Json(MonitorListOutput { monitors, count }))
     }
 
-    #[tool(
-        name = "monitor.delete",
-        description = "Delete a monitor by ID."
-    )]
+    #[tool(name = "monitor.delete", description = "Delete a monitor by ID.")]
     async fn monitor_delete(
         &self,
         params: Parameters<MonitorDeleteInput>,
@@ -1743,10 +1779,7 @@ impl IgsMcpServer {
         Ok(Json(MonitorPauseOutput { paused }))
     }
 
-    #[tool(
-        name = "monitor.resume",
-        description = "Resume a paused monitor."
-    )]
+    #[tool(name = "monitor.resume", description = "Resume a paused monitor.")]
     async fn monitor_resume(
         &self,
         params: Parameters<MonitorPauseInput>,
@@ -1974,7 +2007,11 @@ mod tests {
             vec![("OpenAI", "Organization", None)],
         ));
         let result = s.find_inter_domain_connections("openai", 2);
-        assert!(result.is_empty(), "expected empty (only 1 domain), got {:?}", result);
+        assert!(
+            result.is_empty(),
+            "expected empty (only 1 domain), got {:?}",
+            result
+        );
     }
 
     #[test]
@@ -2019,7 +2056,11 @@ mod tests {
         ));
         let result = s.find_inter_domain_connections("openai", 2);
         assert_eq!(result.len(), 1, "alias sweep should find both articles");
-        assert_eq!(result[0].domains.len(), 2, "both tech and finance should be recorded");
+        assert_eq!(
+            result[0].domains.len(),
+            2,
+            "both tech and finance should be recorded"
+        );
     }
 
     #[test]
@@ -2067,7 +2108,10 @@ mod tests {
         assert!(map.contains_key("finance"));
         // "tech" was added twice → 2 article_ids
         assert_eq!(map["tech"].article_ids.len(), 2);
-        assert_eq!(map["tech"].article_titles, vec!["Hello World".to_string(), "Hello World".to_string()]);
+        assert_eq!(
+            map["tech"].article_titles,
+            vec!["Hello World".to_string(), "Hello World".to_string()]
+        );
         assert_eq!(map["finance"].article_ids.len(), 1);
     }
 

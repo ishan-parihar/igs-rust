@@ -189,7 +189,9 @@ impl MonitorManager {
 
     /// Send a test alert to verify notification channel configuration.
     pub async fn test_alert(&self, input: MonitorTestInput) -> MonitorTestOutput {
-        let message = input.message.unwrap_or_else(|| "IGS monitor test alert".to_string());
+        let message = input
+            .message
+            .unwrap_or_else(|| "IGS monitor test alert".to_string());
         let channel = input.channel.as_str();
 
         match channel {
@@ -202,15 +204,35 @@ impl MonitorManager {
                             let status = resp.status();
                             let body = resp.text().await.unwrap_or_default();
                             if status.is_success() {
-                                MonitorTestOutput { success: true, channel: channel.into(), response: body, error: None }
+                                MonitorTestOutput {
+                                    success: true,
+                                    channel: channel.into(),
+                                    response: body,
+                                    error: None,
+                                }
                             } else {
-                                MonitorTestOutput { success: false, channel: channel.into(), response: body, error: Some(format!("HTTP {}", status)) }
+                                MonitorTestOutput {
+                                    success: false,
+                                    channel: channel.into(),
+                                    response: body,
+                                    error: Some(format!("HTTP {}", status)),
+                                }
                             }
                         }
-                        Err(e) => MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some(e.to_string()) },
+                        Err(e) => MonitorTestOutput {
+                            success: false,
+                            channel: channel.into(),
+                            response: String::new(),
+                            error: Some(e.to_string()),
+                        },
                     }
                 } else {
-                    MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some("webhook_url is required for slack".into()) }
+                    MonitorTestOutput {
+                        success: false,
+                        channel: channel.into(),
+                        response: String::new(),
+                        error: Some("webhook_url is required for slack".into()),
+                    }
                 }
             }
             "discord" => {
@@ -222,22 +244,47 @@ impl MonitorManager {
                             let status = resp.status();
                             let body = resp.text().await.unwrap_or_default();
                             if status.is_success() {
-                                MonitorTestOutput { success: true, channel: channel.into(), response: body, error: None }
+                                MonitorTestOutput {
+                                    success: true,
+                                    channel: channel.into(),
+                                    response: body,
+                                    error: None,
+                                }
                             } else {
-                                MonitorTestOutput { success: false, channel: channel.into(), response: body, error: Some(format!("HTTP {}", status)) }
+                                MonitorTestOutput {
+                                    success: false,
+                                    channel: channel.into(),
+                                    response: body,
+                                    error: Some(format!("HTTP {}", status)),
+                                }
                             }
                         }
-                        Err(e) => MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some(e.to_string()) },
+                        Err(e) => MonitorTestOutput {
+                            success: false,
+                            channel: channel.into(),
+                            response: String::new(),
+                            error: Some(e.to_string()),
+                        },
                     }
                 } else {
-                    MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some("webhook_url is required for discord".into()) }
+                    MonitorTestOutput {
+                        success: false,
+                        channel: channel.into(),
+                        response: String::new(),
+                        error: Some("webhook_url is required for discord".into()),
+                    }
                 }
             }
             "telegram" => {
                 let token = input.telegram_bot_token.as_deref().unwrap_or("");
                 let chat_id = input.telegram_chat_id.as_deref().unwrap_or("");
                 if token.is_empty() || chat_id.is_empty() {
-                    return MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some("telegram_bot_token and telegram_chat_id are required".into()) };
+                    return MonitorTestOutput {
+                        success: false,
+                        channel: channel.into(),
+                        response: String::new(),
+                        error: Some("telegram_bot_token and telegram_chat_id are required".into()),
+                    };
                 }
                 let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
                 let payload = serde_json::json!({
@@ -251,12 +298,27 @@ impl MonitorManager {
                         let status = resp.status();
                         let body = resp.text().await.unwrap_or_default();
                         if status.is_success() {
-                            MonitorTestOutput { success: true, channel: channel.into(), response: body, error: None }
+                            MonitorTestOutput {
+                                success: true,
+                                channel: channel.into(),
+                                response: body,
+                                error: None,
+                            }
                         } else {
-                            MonitorTestOutput { success: false, channel: channel.into(), response: body, error: Some(format!("HTTP {}", status)) }
+                            MonitorTestOutput {
+                                success: false,
+                                channel: channel.into(),
+                                response: body,
+                                error: Some(format!("HTTP {}", status)),
+                            }
                         }
                     }
-                    Err(e) => MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some(e.to_string()) },
+                    Err(e) => MonitorTestOutput {
+                        success: false,
+                        channel: channel.into(),
+                        response: String::new(),
+                        error: Some(e.to_string()),
+                    },
                 }
             }
             "email" => {
@@ -272,18 +334,48 @@ impl MonitorManager {
                             let status = resp.status();
                             let body = resp.text().await.unwrap_or_default();
                             if status.is_success() {
-                                MonitorTestOutput { success: true, channel: channel.into(), response: body, error: None }
+                                MonitorTestOutput {
+                                    success: true,
+                                    channel: channel.into(),
+                                    response: body,
+                                    error: None,
+                                }
                             } else {
-                                MonitorTestOutput { success: false, channel: channel.into(), response: body, error: Some(format!("HTTP {}", status)) }
+                                MonitorTestOutput {
+                                    success: false,
+                                    channel: channel.into(),
+                                    response: body,
+                                    error: Some(format!("HTTP {}", status)),
+                                }
                             }
                         }
-                        Err(e) => MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some(e.to_string()) },
+                        Err(e) => MonitorTestOutput {
+                            success: false,
+                            channel: channel.into(),
+                            response: String::new(),
+                            error: Some(e.to_string()),
+                        },
                     }
                 } else {
-                    MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some("webhook_url (email webhook endpoint) is required for email".into()) }
+                    MonitorTestOutput {
+                        success: false,
+                        channel: channel.into(),
+                        response: String::new(),
+                        error: Some(
+                            "webhook_url (email webhook endpoint) is required for email".into(),
+                        ),
+                    }
                 }
             }
-            _ => MonitorTestOutput { success: false, channel: channel.into(), response: String::new(), error: Some(format!("Unknown channel '{}'. Supported: slack, discord, telegram, email, webhook", channel)) },
+            _ => MonitorTestOutput {
+                success: false,
+                channel: channel.into(),
+                response: String::new(),
+                error: Some(format!(
+                    "Unknown channel '{}'. Supported: slack, discord, telegram, email, webhook",
+                    channel
+                )),
+            },
         }
     }
 
@@ -348,7 +440,8 @@ impl MonitorManager {
                                 } else {
                                     tracing::debug!(
                                         "Monitor {} alert suppressed (cooldown {}s)",
-                                        monitor_for_task.id, cooldown
+                                        monitor_for_task.id,
+                                        cooldown
                                     );
                                 }
                             }
@@ -384,9 +477,7 @@ async fn poll_monitor(
             .collect();
 
         for source in pool_sources {
-            if let Ok(items) =
-                parsers::parse_by_source(source, http, "prefer", None).await
-            {
+            if let Ok(items) = parsers::parse_by_source(source, http, "prefer", None).await {
                 for item in items.iter().take(50) {
                     let text = format!("{} {}", item.title, item.content_snippet).to_lowercase();
                     let matched: Vec<String> = monitor
@@ -428,9 +519,7 @@ async fn poll_monitor(
 async fn deliver_alert(alert: &MonitorAlert, monitor: &MonitorConfig) {
     let alert_text = format!(
         "🚨 IGS Alert: {}\nTriggered by: {}\n{} matching articles",
-        alert.monitor_name,
-        alert.triggered_by,
-        alert.article_count
+        alert.monitor_name, alert.triggered_by, alert.article_count
     );
 
     // 1. Webhook (Slack/Discord/Teams/Raw)
@@ -452,12 +541,18 @@ async fn deliver_alert(alert: &MonitorAlert, monitor: &MonitorConfig) {
 
         let client = reqwest::Client::new();
         if let Err(e) = client.post(webhook_url).json(&payload).send().await {
-            tracing::warn!("Monitor {} webhook delivery failed: {}", alert.monitor_id, e);
+            tracing::warn!(
+                "Monitor {} webhook delivery failed: {}",
+                alert.monitor_id,
+                e
+            );
         }
     }
 
     // 2. Telegram
-    if let (Some(ref token), Some(ref chat_id)) = (&monitor.telegram_bot_token, &monitor.telegram_chat_id) {
+    if let (Some(ref token), Some(ref chat_id)) =
+        (&monitor.telegram_bot_token, &monitor.telegram_chat_id)
+    {
         let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
         let payload = serde_json::json!({
             "chat_id": chat_id,
@@ -467,13 +562,18 @@ async fn deliver_alert(alert: &MonitorAlert, monitor: &MonitorConfig) {
         });
         let client = reqwest::Client::new();
         if let Err(e) = client.post(&url).json(&payload).send().await {
-            tracing::warn!("Monitor {} Telegram delivery failed: {}", alert.monitor_id, e);
+            tracing::warn!(
+                "Monitor {} Telegram delivery failed: {}",
+                alert.monitor_id,
+                e
+            );
         }
     }
 
     // 3. Email (via webhook endpoint)
     if let Some(ref email_url) = monitor.email_webhook_url {
-        let recipients = monitor.email_recipients
+        let recipients = monitor
+            .email_recipients
             .as_ref()
             .map(|r| r.join(", "))
             .unwrap_or_default();
@@ -501,7 +601,11 @@ async fn deliver_alert(alert: &MonitorAlert, monitor: &MonitorConfig) {
             .open(&path)
             .and_then(|mut f| std::io::Write::write_all(&mut f, alert_line.as_bytes()))
         {
-            tracing::warn!("Monitor {} file alert write failed: {}", alert.monitor_id, e);
+            tracing::warn!(
+                "Monitor {} file alert write failed: {}",
+                alert.monitor_id,
+                e
+            );
         }
     }
 

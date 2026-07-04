@@ -177,7 +177,10 @@ impl SemanticIndex {
         // Normalize query vector
         let query_mag = query_vec.values().map(|v| v * v).sum::<f64>().sqrt();
         let query_normalized: HashMap<String, f64> = if query_mag > 0.0 {
-            query_vec.iter().map(|(k, &v)| (k.clone(), v / query_mag)).collect()
+            query_vec
+                .iter()
+                .map(|(k, &v)| (k.clone(), v / query_mag))
+                .collect()
         } else {
             query_vec
         };
@@ -198,7 +201,11 @@ impl SemanticIndex {
             .filter(|r| r.score > 0.0)
             .collect();
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(limit);
         results
     }
@@ -264,7 +271,12 @@ mod tests {
     fn test_add_and_search() {
         let mut index = SemanticIndex::new();
         index.add("1", "AI breakthrough announced", "https://example.com/1", "OpenAI released GPT-5 with remarkable capabilities in artificial intelligence and machine learning");
-        index.add("2", "Weather forecast for today", "https://example.com/2", "Sunny skies expected with mild temperatures across the region");
+        index.add(
+            "2",
+            "Weather forecast for today",
+            "https://example.com/2",
+            "Sunny skies expected with mild temperatures across the region",
+        );
         index.add("3", "Machine learning advances", "https://example.com/3", "New models achieve state of the art performance on NLP benchmarks using transformer architectures");
 
         let results = index.search("artificial intelligence machine learning", 10);
@@ -276,7 +288,12 @@ mod tests {
     #[test]
     fn test_search_no_matches() {
         let mut index = SemanticIndex::new();
-        index.add("1", "Hello world", "https://example.com/1", "Basic greeting text about programming");
+        index.add(
+            "1",
+            "Hello world",
+            "https://example.com/1",
+            "Basic greeting text about programming",
+        );
 
         let results = index.search("xyzabc123 nonexistent", 10);
         assert!(results.is_empty());
@@ -297,9 +314,24 @@ mod tests {
     fn test_batch_add() {
         let mut index = SemanticIndex::new();
         let docs = vec![
-            ("1".into(), "Title 1".into(), "url1".into(), "text one".into()),
-            ("2".into(), "Title 2".into(), "url2".into(), "text two".into()),
-            ("3".into(), "Title 3".into(), "url3".into(), "text three".into()),
+            (
+                "1".into(),
+                "Title 1".into(),
+                "url1".into(),
+                "text one".into(),
+            ),
+            (
+                "2".into(),
+                "Title 2".into(),
+                "url2".into(),
+                "text two".into(),
+            ),
+            (
+                "3".into(),
+                "Title 3".into(),
+                "url3".into(),
+                "text three".into(),
+            ),
         ];
         index.add_batch(&docs);
         assert_eq!(index.len(), 3);

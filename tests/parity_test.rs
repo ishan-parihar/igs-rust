@@ -11,7 +11,6 @@
 /// 3. Converting MCP tool names (e.g., "weather.forecast") to CLI command paths
 ///    (e.g., "weather forecast")
 /// 4. Asserting every MCP tool has a CLI equivalent
-
 use igs_rust_mcp::tools::registry::TOOL_GROUPS;
 use std::process::Command;
 
@@ -111,8 +110,11 @@ fn get_cli_subcommands(domain: &str) -> Vec<String> {
     // e.g., "  forecast        Get weather forecast for a location"
     for line in stdout.lines() {
         let trimmed = line.trim_start();
-        if trimmed.is_empty() || trimmed.starts_with("Usage:") || trimmed.starts_with("Options:")
-            || trimmed.starts_with("Commands:") || trimmed.starts_with("--")
+        if trimmed.is_empty()
+            || trimmed.starts_with("Usage:")
+            || trimmed.starts_with("Options:")
+            || trimmed.starts_with("Commands:")
+            || trimmed.starts_with("--")
             || trimmed.starts_with("help")
         {
             continue;
@@ -150,9 +152,13 @@ fn test_every_mcp_tool_has_cli_equivalent() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     if !stdout.lines().any(|line| {
                         let t = line.trim_start();
-                        t.starts_with(domain) && (t.len() == domain.len() || t.as_bytes()[domain.len()] == b' ')
+                        t.starts_with(domain)
+                            && (t.len() == domain.len() || t.as_bytes()[domain.len()] == b' ')
                     }) {
-                        missing.push(format!("{} → `igs {}` (top-level command not found)", tool, domain));
+                        missing.push(format!(
+                            "{} → `igs {}` (top-level command not found)",
+                            tool, domain
+                        ));
                     }
                 }
                 Some((domain, subcmd)) => {

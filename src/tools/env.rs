@@ -34,8 +34,9 @@ pub async fn env_epa_facilities(
         .await
         .map_err(|e| format!("EPA API error: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass cache mode never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass cache mode never returns Cached")
+    };
 
     let data: serde_json::Value =
         serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
@@ -86,8 +87,9 @@ pub async fn env_epa_emissions(
         .await
         .map_err(|e| format!("EPA API error: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass cache mode never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass cache mode never returns Cached")
+    };
 
     let data: serde_json::Value =
         serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;

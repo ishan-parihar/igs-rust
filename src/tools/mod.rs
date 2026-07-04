@@ -15,8 +15,8 @@ pub mod types_base;
 pub mod weather;
 pub mod web;
 
-pub mod climate;
 pub mod advanced;
+pub mod climate;
 pub mod data_sources;
 pub mod dump;
 pub mod entity_resolution;

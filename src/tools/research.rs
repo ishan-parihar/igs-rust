@@ -461,8 +461,9 @@ pub async fn research_pubmed_search(
         .await
         .map_err(|e| format!("PubMed search error: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(search_resp, _, _) = search_outcome
-        else { unreachable!("bypass cache mode never returns Cached") };
+    let http_mod::FetchOutcome::Response(search_resp, _, _) = search_outcome else {
+        unreachable!("bypass cache mode never returns Cached")
+    };
 
     let search_data: serde_json::Value = serde_json::from_str(&search_resp.body_text)
         .map_err(|e| format!("JSON parse error: ${e}"))?;
@@ -495,8 +496,9 @@ pub async fn research_pubmed_search(
         .await
         .map_err(|e| format!("PubMed detail error: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(detail_resp, _, _) = detail_outcome
-        else { unreachable!("bypass cache mode never returns Cached") };
+    let http_mod::FetchOutcome::Response(detail_resp, _, _) = detail_outcome else {
+        unreachable!("bypass cache mode never returns Cached")
+    };
 
     let detail_data: serde_json::Value = serde_json::from_str(&detail_resp.body_text)
         .map_err(|e| format!("JSON parse error: ${e}"))?;
@@ -556,8 +558,9 @@ pub async fn research_download(
         );
         match http.fetch(&url, None, "bypass").await {
             Ok(outcome) => {
-                let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-                    else { unreachable!("bypass cache mode never returns Cached") };
+                let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+                    unreachable!("bypass cache mode never returns Cached")
+                };
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
                     json["openAccessPdf"]["url"]
                         .as_str()

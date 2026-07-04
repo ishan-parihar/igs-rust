@@ -1,14 +1,14 @@
 use clap::{Parser, Subcommand};
 use igs_rust_mcp::server::IgsMcpServer;
+use igs_rust_mcp::tools::types::LimitInput;
 use igs_rust_mcp::tools::types::*;
 use igs_rust_mcp::tools::types_base::{
     DepthOptions, DiscoveryFilters, KeywordFilter, OutputOptions,
 };
-use igs_rust_mcp::tools::types::LimitInput;
 use igs_rust_mcp::tools::{
-    climate, env, finance, govt, health, helpers, insights, legal, news,
-    parsers as parsers_tools, patents, politics, pools, reddit, registry, research,
-    satellite, security, sop, sources, twitter, weather, web, youtube,
+    climate, env, finance, govt, health, helpers, insights, legal, news, parsers as parsers_tools,
+    patents, politics, pools, reddit, registry, research, satellite, security, sop, sources,
+    twitter, weather, web, youtube,
 };
 use rmcp::ServiceExt;
 use tracing_subscriber::EnvFilter;
@@ -1191,7 +1191,11 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(sources::sources_enable_scraper(EnableScraperInput {
                     id,
                     list_url,
-                    selectors: if selectors.is_empty() { None } else { Some(selectors) },
+                    selectors: if selectors.is_empty() {
+                        None
+                    } else {
+                        Some(selectors)
+                    },
                 })
                 .await)?;
                 output(fmt, &result);
@@ -1376,7 +1380,9 @@ async fn main() -> anyhow::Result<()> {
             ResearchAction::PubMedSearch { query, limit } => {
                 let result = r(research::research_pubmed_search(ResearchPubMedInput {
                     query,
-                    limits: LimitInput { limit: Some(limit as u32) },
+                    limits: LimitInput {
+                        limit: Some(limit as u32),
+                    },
                     output: OutputOptions { format: None },
                 })
                 .await)?;
@@ -1512,84 +1518,74 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Browser { action } => {
-            match action {
-                BrowserAction::Goto { url, wait_until } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(
-                        LpGotoInput {
-                            url,
-                            wait_until: Some(wait_until),
-                        },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::Markdown { strip_mode } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_markdown(
-                        LpMarkdownInput { strip_mode },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::Links { selector } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_links(
-                        LpLinksInput { selector },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::Evaluate { expression } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_evaluate(
-                        LpEvaluateInput { expression },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::Click {
-                    selector,
-                    wait_for_navigation,
-                } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(
-                        LpClickInput {
-                            selector,
-                            wait_for_navigation: Some(wait_for_navigation),
-                        },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::Fill { selector, value } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_fill(
-                        LpFillInput { selector, value },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::Scroll { direction, pixels } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(
-                        LpScrollInput {
-                            direction: Some(direction),
-                            pixels: Some(pixels),
-                        },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
-                BrowserAction::WaitForSelector {
-                    selector,
-                    timeout_ms,
-                } => {
-                    let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(
-                        LpWaitForSelectorInput {
-                            selector,
-                            timeout_ms: Some(timeout_ms),
-                        },
-                    )
-                    .await)?;
-                    output(fmt, &result);
-                }
+        Commands::Browser { action } => match action {
+            BrowserAction::Goto { url, wait_until } => {
+                let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(LpGotoInput {
+                    url,
+                    wait_until: Some(wait_until),
+                })
+                .await)?;
+                output(fmt, &result);
             }
-        }
+            BrowserAction::Markdown { strip_mode } => {
+                let result =
+                    r(
+                        igs_rust_mcp::tools::lp_mcp::lp_markdown(LpMarkdownInput { strip_mode })
+                            .await,
+                    )?;
+                output(fmt, &result);
+            }
+            BrowserAction::Links { selector } => {
+                let result =
+                    r(igs_rust_mcp::tools::lp_mcp::lp_links(LpLinksInput { selector }).await)?;
+                output(fmt, &result);
+            }
+            BrowserAction::Evaluate { expression } => {
+                let result =
+                    r(
+                        igs_rust_mcp::tools::lp_mcp::lp_evaluate(LpEvaluateInput { expression })
+                            .await,
+                    )?;
+                output(fmt, &result);
+            }
+            BrowserAction::Click {
+                selector,
+                wait_for_navigation,
+            } => {
+                let result = r(igs_rust_mcp::tools::lp_mcp::lp_click(LpClickInput {
+                    selector,
+                    wait_for_navigation: Some(wait_for_navigation),
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+            BrowserAction::Fill { selector, value } => {
+                let result =
+                    r(igs_rust_mcp::tools::lp_mcp::lp_fill(LpFillInput { selector, value }).await)?;
+                output(fmt, &result);
+            }
+            BrowserAction::Scroll { direction, pixels } => {
+                let result = r(igs_rust_mcp::tools::lp_mcp::lp_scroll(LpScrollInput {
+                    direction: Some(direction),
+                    pixels: Some(pixels),
+                })
+                .await)?;
+                output(fmt, &result);
+            }
+            BrowserAction::WaitForSelector {
+                selector,
+                timeout_ms,
+            } => {
+                let result = r(igs_rust_mcp::tools::lp_mcp::lp_wait_for_selector(
+                    LpWaitForSelectorInput {
+                        selector,
+                        timeout_ms: Some(timeout_ms),
+                    },
+                )
+                .await)?;
+                output(fmt, &result);
+            }
+        },
 
         Commands::Weather { action } => match action {
             WeatherAction::Forecast { location, days } => {
@@ -1704,13 +1700,15 @@ async fn main() -> anyhow::Result<()> {
                 output(fmt, &result);
             }
             PoliticsAction::FecCommittees { query } => {
-                let result = r(politics::politics_fec_committees(PoliticsFecCommitteesInput {
-                    name: query,
-                    committee_type: None,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                })
-                .await)?;
+                let result = r(
+                    politics::politics_fec_committees(PoliticsFecCommitteesInput {
+                        name: query,
+                        committee_type: None,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    })
+                    .await,
+                )?;
                 output(fmt, &result);
             }
         },
@@ -1737,7 +1735,11 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Satellite { action } => match action {
-            SatelliteAction::FirmsFires { lat, lon, radius_km } => {
+            SatelliteAction::FirmsFires {
+                lat,
+                lon,
+                radius_km,
+            } => {
                 // Convert lat/lon + radius to bounding box (west, south, east, north)
                 let radius = radius_km.unwrap_or(50.0);
                 let lat_offset = radius / 111.0;
@@ -1789,7 +1791,9 @@ async fn main() -> anyhow::Result<()> {
                 output(fmt, &result);
             }
             LegalAction::CaseDetails { id } => {
-                let case_id: u32 = id.parse().map_err(|e| anyhow::anyhow!("Invalid case ID (must be numeric): {}", e))?;
+                let case_id: u32 = id
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("Invalid case ID (must be numeric): {}", e))?;
                 let result = r(legal::legal_case_details(LegalCaseDetailsInput {
                     case_id,
                     output: OutputOptions { format: None },
@@ -1824,7 +1828,11 @@ async fn main() -> anyhow::Result<()> {
         },
 
         Commands::Climate { action } => match action {
-            ClimateAction::NoaaObservations { location, start, end } => {
+            ClimateAction::NoaaObservations {
+                location,
+                start,
+                end,
+            } => {
                 let result = r(climate::climate_noaa_observations(ClimateNoaaInput {
                     dataset: None,
                     location: Some(location),
@@ -1920,7 +1928,12 @@ async fn main() -> anyhow::Result<()> {
                 let result = sop::sop_list();
                 output(fmt, &result);
             }
-            SopAction::Execute { chain, query, target_url, country } => {
+            SopAction::Execute {
+                chain,
+                query,
+                target_url,
+                country,
+            } => {
                 let result = r(sop::sop_execute(SopExecuteInput {
                     chain_name: chain,
                     query,
@@ -1934,7 +1947,8 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Monitor { action } => {
             use igs_rust_mcp::tools::monitor::{MonitorConfig, MonitorManager};
-            let settings = igs_rust_mcp::config::load_settings().await
+            let settings = igs_rust_mcp::config::load_settings()
+                .await
                 .map_err(|e| anyhow::anyhow!("Settings load failed: {}", e))?;
             let manager = MonitorManager::new(std::sync::Arc::new(settings));
             match action {
@@ -1948,23 +1962,25 @@ async fn main() -> anyhow::Result<()> {
                     webhook_url,
                     alert_file,
                 } => {
-                    manager.add(MonitorConfig {
-                        id: id.clone(),
-                        name,
-                        pools,
-                        keywords,
-                        interval_secs,
-                        threshold,
-                        webhook_url,
-                        webhook_format: None,
-                        alert_file,
-                        telegram_bot_token: None,
-                        telegram_chat_id: None,
-                        email_webhook_url: None,
-                        email_recipients: None,
-                        cooldown_secs: None,
-                        active: true,
-                    }).await;
+                    manager
+                        .add(MonitorConfig {
+                            id: id.clone(),
+                            name,
+                            pools,
+                            keywords,
+                            interval_secs,
+                            threshold,
+                            webhook_url,
+                            webhook_format: None,
+                            alert_file,
+                            telegram_bot_token: None,
+                            telegram_chat_id: None,
+                            email_webhook_url: None,
+                            email_recipients: None,
+                            cooldown_secs: None,
+                            active: true,
+                        })
+                        .await;
                     output(fmt, &MonitorCreateOutput { created: true, id });
                 }
                 MonitorAction::List => {
@@ -1996,21 +2012,32 @@ async fn main() -> anyhow::Result<()> {
                     let resumed = manager.resume(&id).await;
                     output(fmt, &MonitorPauseOutput { paused: !resumed });
                 }
-                MonitorAction::Test { channel, url, telegram_token, telegram_chat_id, message } => {
-                    let result = manager.test_alert(igs_rust_mcp::tools::monitor::MonitorTestInput {
-                        channel,
-                        webhook_url: url,
-                        telegram_bot_token: telegram_token,
-                        telegram_chat_id,
-                        message,
-                    }).await;
+                MonitorAction::Test {
+                    channel,
+                    url,
+                    telegram_token,
+                    telegram_chat_id,
+                    message,
+                } => {
+                    let result = manager
+                        .test_alert(igs_rust_mcp::tools::monitor::MonitorTestInput {
+                            channel,
+                            webhook_url: url,
+                            telegram_bot_token: telegram_token,
+                            telegram_chat_id,
+                            message,
+                        })
+                        .await;
                     output(fmt, &result);
                 }
             }
         }
 
         Commands::Intelligence { action } => match action {
-            IntelligenceAction::Summarize { text, num_sentences } => {
+            IntelligenceAction::Summarize {
+                text,
+                num_sentences,
+            } => {
                 let text = if text == "-" {
                     let mut buf = String::new();
                     std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
@@ -2020,18 +2047,26 @@ async fn main() -> anyhow::Result<()> {
                 };
                 let num = num_sentences.unwrap_or(3) as usize;
                 let result = igs_rust_mcp::tools::summarize::summarize(&text, num);
-                output(fmt, &SummarizeOutput {
-                    summary: result.summary,
-                    sentence_count: result.sentence_count,
-                    original_count: result.original_count,
-                    top_sentences: result.top_sentences,
-                });
+                output(
+                    fmt,
+                    &SummarizeOutput {
+                        summary: result.summary,
+                        sentence_count: result.sentence_count,
+                        original_count: result.original_count,
+                        top_sentences: result.top_sentences,
+                    },
+                );
             }
             IntelligenceAction::ResolveEntities { names } => {
                 let result = igs_rust_mcp::tools::entity_resolution::resolve_entities(&names);
                 output(fmt, &result);
             }
-            IntelligenceAction::Gdelt { query, limit, start_date, end_date } => {
+            IntelligenceAction::Gdelt {
+                query,
+                limit,
+                start_date,
+                end_date,
+            } => {
                 let result = r(igs_rust_mcp::tools::gdelt::gdelt_search(
                     igs_rust_mcp::tools::gdelt::GdeltSearchInput {
                         query,
@@ -2041,7 +2076,8 @@ async fn main() -> anyhow::Result<()> {
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
         },
@@ -2095,7 +2131,11 @@ async fn main() -> anyhow::Result<()> {
                 let result = igs_rust_mcp::tools::advanced::score_sources(&srcs);
                 output(fmt, &result);
             }
-            AdvancedAction::GenerateReport { title, articles, style } => {
+            AdvancedAction::GenerateReport {
+                title,
+                articles,
+                style,
+            } => {
                 let articles_str = if articles == "-" {
                     let mut buf = String::new();
                     std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
@@ -2103,8 +2143,9 @@ async fn main() -> anyhow::Result<()> {
                 } else {
                     articles
                 };
-                let arts: Vec<igs_rust_mcp::tools::advanced::ReportArticle> = serde_json::from_str(&articles_str)
-                    .map_err(|e| anyhow::anyhow!("Invalid articles JSON: {}", e))?;
+                let arts: Vec<igs_rust_mcp::tools::advanced::ReportArticle> =
+                    serde_json::from_str(&articles_str)
+                        .map_err(|e| anyhow::anyhow!("Invalid articles JSON: {}", e))?;
                 let result = igs_rust_mcp::tools::advanced::generate_report(
                     igs_rust_mcp::tools::advanced::ReportInput {
                         title,
@@ -2114,7 +2155,11 @@ async fn main() -> anyhow::Result<()> {
                 );
                 output(fmt, &result);
             }
-            AdvancedAction::SemanticSearch { query, articles, limit } => {
+            AdvancedAction::SemanticSearch {
+                query,
+                articles,
+                limit,
+            } => {
                 let articles_str = if articles == "-" {
                     let mut buf = String::new();
                     std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
@@ -2123,17 +2168,21 @@ async fn main() -> anyhow::Result<()> {
                     articles
                 };
                 // Parse articles as Vec of (id, title, link, text) tuples
-                let article_tuples: Vec<(String, String, String, String)> = serde_json::from_str(&articles_str)
-                    .map_err(|e| anyhow::anyhow!("Invalid articles JSON: {}", e))?;
+                let article_tuples: Vec<(String, String, String, String)> =
+                    serde_json::from_str(&articles_str)
+                        .map_err(|e| anyhow::anyhow!("Invalid articles JSON: {}", e))?;
                 let mut index = igs_rust_mcp::tools::semantic::SemanticIndex::new();
                 index.add_batch(&article_tuples);
                 let results = index.search(&query, limit as usize);
                 let count = results.len();
-                output(fmt, &igs_rust_mcp::tools::semantic::SemanticSearchOutput {
-                    query,
-                    results,
-                    count,
-                });
+                output(
+                    fmt,
+                    &igs_rust_mcp::tools::semantic::SemanticSearchOutput {
+                        query,
+                        results,
+                        count,
+                    },
+                );
             }
         },
 
@@ -2152,7 +2201,8 @@ async fn main() -> anyhow::Result<()> {
                         articles_json: articles_str,
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
             PluginsAction::ScriptHook { command, text } => {
@@ -2169,7 +2219,8 @@ async fn main() -> anyhow::Result<()> {
                         text,
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
             PluginsAction::Export { data, file, format } => {
@@ -2187,7 +2238,8 @@ async fn main() -> anyhow::Result<()> {
                         format: Some(format),
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
         },
@@ -2201,7 +2253,8 @@ async fn main() -> anyhow::Result<()> {
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
             OsintAction::Shodan { query, api_key } => {
@@ -2212,7 +2265,8 @@ async fn main() -> anyhow::Result<()> {
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
             OsintAction::Hibp { email, api_key } => {
@@ -2222,10 +2276,18 @@ async fn main() -> anyhow::Result<()> {
                         api_key,
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
-            OsintAction::Acled { country, event_type, start_date, end_date, api_key, email } => {
+            OsintAction::Acled {
+                country,
+                event_type,
+                start_date,
+                end_date,
+                api_key,
+                email,
+            } => {
                 let result = r(igs_rust_mcp::tools::data_sources::acled_search(
                     igs_rust_mcp::tools::data_sources::AcledSearchInput {
                         country,
@@ -2237,7 +2299,8 @@ async fn main() -> anyhow::Result<()> {
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
                     },
-                ).await)?;
+                )
+                .await)?;
                 output(fmt, &result);
             }
         },

@@ -34,10 +34,7 @@ pub struct TemporalAnalysisOutput {
 
 /// Analyze a time series of entity mention counts and detect anomalies
 /// using z-score. Points with |z| > 2.0 are flagged as anomalies.
-pub fn analyze_time_series(
-    entity: &str,
-    points: &[(String, u32)],
-) -> TemporalAnalysisOutput {
+pub fn analyze_time_series(entity: &str, points: &[(String, u32)]) -> TemporalAnalysisOutput {
     if points.is_empty() {
         return TemporalAnalysisOutput {
             entity: entity.to_string(),
@@ -64,7 +61,11 @@ pub fn analyze_time_series(
     let anomalies: Vec<AnomalyResult> = points
         .iter()
         .map(|(ts, c)| {
-            let z = if std_dev > 0.0 { (*c as f64 - mean) / std_dev } else { 0.0 };
+            let z = if std_dev > 0.0 {
+                (*c as f64 - mean) / std_dev
+            } else {
+                0.0
+            };
             AnomalyResult {
                 timestamp: ts.clone(),
                 count: *c,
@@ -249,7 +250,8 @@ pub struct LanguageDetectionOutput {
 /// - Check Unicode script (Latin, Cyrillic, CJK, Arabic, Devanagari)
 /// - Check for common stop words in each language
 pub fn detect_language(text: &str) -> LanguageDetectionOutput {
-    let mut script_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    let mut script_counts: std::collections::HashMap<&str, usize> =
+        std::collections::HashMap::new();
 
     for c in text.chars() {
         if c.is_ascii_alphabetic() {
@@ -318,10 +320,15 @@ fn detect_latin_language(text: &str) -> String {
     if max == 0 {
         return "unknown".into(); // no stop words matched — can't determine
     }
-    if max == en_count { "en" }
-    else if max == es_count { "es" }
-    else if max == fr_count { "fr" }
-    else { "de" }
+    if max == en_count {
+        "en"
+    } else if max == es_count {
+        "es"
+    } else if max == fr_count {
+        "fr"
+    } else {
+        "de"
+    }
     .into()
 }
 
@@ -330,10 +337,10 @@ fn detect_latin_language(text: &str) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SourceTrustScore {
     pub source_name: String,
-    pub tier: u32,          // 1 (highest trust) to 5 (lowest)
-    pub bias_lean: String,  // left, center, right, unknown
+    pub tier: u32,               // 1 (highest trust) to 5 (lowest)
+    pub bias_lean: String,       // left, center, right, unknown
     pub cross_source_count: u32, // how many other sources report similar stories
-    pub confidence: f64,    // 0.0 to 1.0
+    pub confidence: f64,         // 0.0 to 1.0
     pub verified: bool,
 }
 
@@ -396,7 +403,10 @@ pub fn score_sources(sources: &[(String, String)]) -> SourceQualityOutput {
     }
 
     let count = scores.len();
-    SourceQualityOutput { sources: scores, count }
+    SourceQualityOutput {
+        sources: scores,
+        count,
+    }
 }
 
 // ─── Report Generation ─────────────────────────────────────────
@@ -450,14 +460,23 @@ pub fn generate_report(input: ReportInput) -> ReportOutput {
         }
         "bullet" => {
             for article in &input.articles {
-                md.push_str(&format!("- **{}** — {} ([link]({}))\n", article.source, article.title, article.link));
+                md.push_str(&format!(
+                    "- **{}** — {} ([link]({}))\n",
+                    article.source, article.title, article.link
+                ));
             }
         }
         _ => {
             // "brief" style
             for (i, article) in input.articles.iter().enumerate() {
-                md.push_str(&format!("{}. **{}**\n   {}\n   *{} — [link]({})*\n\n", 
-                    i + 1, article.source, article.title, article.pub_date, article.link));
+                md.push_str(&format!(
+                    "{}. **{}**\n   {}\n   *{} — [link]({})*\n\n",
+                    i + 1,
+                    article.source,
+                    article.title,
+                    article.pub_date,
+                    article.link
+                ));
             }
         }
     }
@@ -512,7 +531,15 @@ mod tests {
         ];
         let result = analyze_time_series("entity", &points);
         assert_eq!(result.time_series.len(), 6);
-        assert!(!result.anomalies.is_empty(), "Expected at least one anomaly, got z-scores: {:?}", result.time_series.iter().zip(result.anomalies.iter()).collect::<Vec<_>>());
+        assert!(
+            !result.anomalies.is_empty(),
+            "Expected at least one anomaly, got z-scores: {:?}",
+            result
+                .time_series
+                .iter()
+                .zip(result.anomalies.iter())
+                .collect::<Vec<_>>()
+        );
         assert!(result.anomalies[0].is_anomaly);
     }
 

@@ -60,10 +60,13 @@ pub async fn openalex_search(input: OpenAlexSearchInput) -> Result<OpenAlexSearc
         query_enc, limit
     );
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("OpenAlex API error: {}", e))?;
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass never returns Cached")
+    };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("OpenAlex JSON parse error: {}", e))?;
@@ -71,19 +74,20 @@ pub async fn openalex_search(input: OpenAlexSearchInput) -> Result<OpenAlexSearc
     let works: Vec<OpenAlexWork> = json["results"]
         .as_array()
         .map(|arr| {
-            arr.iter().map(|w| {
-                let authors: Vec<String> = w["authorships"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|au| au["author"]["display_name"].as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
-                    .unwrap_or_default();
+            arr.iter()
+                .map(|w| {
+                    let authors: Vec<String> = w["authorships"]
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|au| {
+                                    au["author"]["display_name"].as_str().map(|s| s.to_string())
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
 
-                let abstract_text = w["abstract_inverted_index"]
-                    .as_object()
-                    .map(|inv_idx| {
+                    let abstract_text = w["abstract_inverted_index"].as_object().map(|inv_idx| {
                         let mut positions: Vec<(usize, &str)> = Vec::new();
                         for (word, pos_list) in inv_idx {
                             if let Some(positions_arr) = pos_list.as_array() {
@@ -95,20 +99,25 @@ pub async fn openalex_search(input: OpenAlexSearchInput) -> Result<OpenAlexSearc
                             }
                         }
                         positions.sort_by_key(|(p, _)| *p);
-                        positions.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(" ")
+                        positions
+                            .iter()
+                            .map(|(_, w)| *w)
+                            .collect::<Vec<_>>()
+                            .join(" ")
                     });
 
-                OpenAlexWork {
-                    id: w["id"].as_str().unwrap_or("").to_string(),
-                    title: w["title"].as_str().unwrap_or("").to_string(),
-                    authors,
-                    year: w["publication_year"].as_i64().map(|y| y as i32),
-                    citation_count: w["cited_by_count"].as_i64().map(|c| c as i32),
-                    doi: w["doi"].as_str().map(|s| s.to_string()),
-                    url: w["id"].as_str().unwrap_or("").to_string(),
-                    abstract_text,
-                }
-            }).collect()
+                    OpenAlexWork {
+                        id: w["id"].as_str().unwrap_or("").to_string(),
+                        title: w["title"].as_str().unwrap_or("").to_string(),
+                        authors,
+                        year: w["publication_year"].as_i64().map(|y| y as i32),
+                        citation_count: w["cited_by_count"].as_i64().map(|c| c as i32),
+                        doi: w["doi"].as_str().map(|s| s.to_string()),
+                        url: w["id"].as_str().unwrap_or("").to_string(),
+                        abstract_text,
+                    }
+                })
+                .collect()
         })
         .unwrap_or_default();
 
@@ -167,10 +176,13 @@ pub async fn shodan_search(input: ShodanSearchInput) -> Result<ShodanSearchOutpu
     );
     let _ = limit; // Shodan pagination is page-based
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("Shodan API error: {}", e))?;
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass never returns Cached")
+    };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("Shodan JSON parse error: {}", e))?;
@@ -178,21 +190,29 @@ pub async fn shodan_search(input: ShodanSearchInput) -> Result<ShodanSearchOutpu
     let results: Vec<ShodanResult> = json["matches"]
         .as_array()
         .map(|arr| {
-            arr.iter().map(|m| {
-                let vulns: Vec<String> = m["vulns"]
-                    .as_array()
-                    .map(|v| v.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
-                    .unwrap_or_default();
+            arr.iter()
+                .map(|m| {
+                    let vulns: Vec<String> = m["vulns"]
+                        .as_array()
+                        .map(|v| {
+                            v.iter()
+                                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
 
-                ShodanResult {
-                    ip: m["ip_str"].as_str().unwrap_or("").to_string(),
-                    port: m["port"].as_u64().unwrap_or(0) as u16,
-                    organization: m["org"].as_str().map(|s| s.to_string()),
-                    country: m["location"]["country_name"].as_str().map(|s| s.to_string()),
-                    product: m["product"].as_str().map(|s| s.to_string()),
-                    vulns,
-                }
-            }).collect()
+                    ShodanResult {
+                        ip: m["ip_str"].as_str().unwrap_or("").to_string(),
+                        port: m["port"].as_u64().unwrap_or(0) as u16,
+                        organization: m["org"].as_str().map(|s| s.to_string()),
+                        country: m["location"]["country_name"]
+                            .as_str()
+                            .map(|s| s.to_string()),
+                        product: m["product"].as_str().map(|s| s.to_string()),
+                        vulns,
+                    }
+                })
+                .collect()
         })
         .unwrap_or_default();
 
@@ -241,16 +261,22 @@ pub async fn hibp_check(input: HibpBreachInput) -> Result<HibpBreachOutput, Stri
     let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
     let http = HttpClient::new(&settings.http, &cache_dir);
 
-    let url = format!("https://haveibeenpwned.com/api/v3/breachedaccount/{}", input.email);
+    let url = format!(
+        "https://haveibeenpwned.com/api/v3/breachedaccount/{}",
+        input.email
+    );
     let headers = std::collections::HashMap::from([
         ("hibp-api-key".into(), input.api_key),
         ("user-agent".into(), "IGS-MCP".into()),
     ]);
 
-    let outcome = http.fetch(&url, Some(&headers), "bypass").await
+    let outcome = http
+        .fetch(&url, Some(&headers), "bypass")
+        .await
         .map_err(|e| format!("HIBP API error: {}", e))?;
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass never returns Cached")
+    };
 
     // 404 means no breaches — that's a success
     if resp.status == 404 {
@@ -274,7 +300,11 @@ pub async fn hibp_check(input: HibpBreachInput) -> Result<HibpBreachOutput, Stri
             description: b["Description"].as_str().map(|s| s.to_string()),
             data_classes: b["DataClasses"]
                 .as_array()
-                .map(|dc| dc.iter().filter_map(|d| d.as_str().map(|s| s.to_string())).collect())
+                .map(|dc| {
+                    dc.iter()
+                        .filter_map(|d| d.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
                 .unwrap_or_default(),
         })
         .collect();
@@ -350,13 +380,20 @@ pub async fn acled_search(input: AcledSearchInput) -> Result<AcledSearchOutput, 
         url.push_str(&format!("&event_type={}", urlencoding(event_type)));
     }
     if let Some(ref start) = input.start_date {
-        url.push_str(&format!("&event_date={}|{}", start, input.end_date.as_deref().unwrap_or("")));
+        url.push_str(&format!(
+            "&event_date={}|{}",
+            start,
+            input.end_date.as_deref().unwrap_or("")
+        ));
     }
 
-    let outcome = http.fetch(&url, None, "bypass").await
+    let outcome = http
+        .fetch(&url, None, "bypass")
+        .await
         .map_err(|e| format!("ACLED API error: {}", e))?;
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("bypass never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("bypass never returns Cached")
+    };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
         .map_err(|e| format!("ACLED JSON parse error: {}", e))?;
@@ -364,20 +401,23 @@ pub async fn acled_search(input: AcledSearchInput) -> Result<AcledSearchOutput, 
     let events: Vec<AcledEvent> = json["data"]
         .as_array()
         .map(|arr| {
-            arr.iter().map(|e| AcledEvent {
-                date: e["event_date"].as_str().unwrap_or("").to_string(),
-                event_type: e["event_type"].as_str().unwrap_or("").to_string(),
-                country: e["country"].as_str().unwrap_or("").to_string(),
-                location: e["location"].as_str().unwrap_or("").to_string(),
-                actor1: e["actor1"].as_str().unwrap_or("").to_string(),
-                actor2: e["actor2"].as_str().map(|s| s.to_string()),
-                fatalities: e["fatalities"].as_str()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0),
-                notes: e["notes"].as_str().unwrap_or("").to_string(),
-                latitude: e["latitude"].as_str().and_then(|s| s.parse().ok()),
-                longitude: e["longitude"].as_str().and_then(|s| s.parse().ok()),
-            }).collect()
+            arr.iter()
+                .map(|e| AcledEvent {
+                    date: e["event_date"].as_str().unwrap_or("").to_string(),
+                    event_type: e["event_type"].as_str().unwrap_or("").to_string(),
+                    country: e["country"].as_str().unwrap_or("").to_string(),
+                    location: e["location"].as_str().unwrap_or("").to_string(),
+                    actor1: e["actor1"].as_str().unwrap_or("").to_string(),
+                    actor2: e["actor2"].as_str().map(|s| s.to_string()),
+                    fatalities: e["fatalities"]
+                        .as_str()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0),
+                    notes: e["notes"].as_str().unwrap_or("").to_string(),
+                    latitude: e["latitude"].as_str().and_then(|s| s.parse().ok()),
+                    longitude: e["longitude"].as_str().and_then(|s| s.parse().ok()),
+                })
+                .collect()
         })
         .unwrap_or_default();
 

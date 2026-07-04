@@ -40,18 +40,33 @@ fn alias_dictionary() -> HashMap<String, (String, String)> {
     dict.insert("openai".into(), ("OpenAI".into(), "Organization".into()));
     dict.insert("oai".into(), ("OpenAI".into(), "Organization".into()));
     dict.insert("google".into(), ("Google".into(), "Organization".into()));
-    dict.insert("alphabet".into(), ("Alphabet Inc.".into(), "Organization".into()));
-    dict.insert("microsoft".into(), ("Microsoft".into(), "Organization".into()));
+    dict.insert(
+        "alphabet".into(),
+        ("Alphabet Inc.".into(), "Organization".into()),
+    );
+    dict.insert(
+        "microsoft".into(),
+        ("Microsoft".into(), "Organization".into()),
+    );
     dict.insert("msft".into(), ("Microsoft".into(), "Organization".into()));
     dict.insert("apple".into(), ("Apple Inc.".into(), "Organization".into()));
     dict.insert("aapl".into(), ("Apple Inc.".into(), "Organization".into()));
     dict.insert("amazon".into(), ("Amazon".into(), "Organization".into()));
     dict.insert("amzn".into(), ("Amazon".into(), "Organization".into()));
-    dict.insert("meta".into(), ("Meta Platforms".into(), "Organization".into()));
-    dict.insert("facebook".into(), ("Meta Platforms".into(), "Organization".into()));
+    dict.insert(
+        "meta".into(),
+        ("Meta Platforms".into(), "Organization".into()),
+    );
+    dict.insert(
+        "facebook".into(),
+        ("Meta Platforms".into(), "Organization".into()),
+    );
     dict.insert("nvidia".into(), ("NVIDIA".into(), "Organization".into()));
     dict.insert("nvda".into(), ("NVIDIA".into(), "Organization".into()));
-    dict.insert("tesla".into(), ("Tesla, Inc.".into(), "Organization".into()));
+    dict.insert(
+        "tesla".into(),
+        ("Tesla, Inc.".into(), "Organization".into()),
+    );
     dict.insert("tsla".into(), ("Tesla, Inc.".into(), "Organization".into()));
 
     // Countries (GPE - Geo-Political Entity)
@@ -77,13 +92,25 @@ fn alias_dictionary() -> HashMap<String, (String, String)> {
 
     // Organizations (government/military)
     dict.insert("nato".into(), ("NATO".into(), "Organization".into()));
-    dict.insert("un".into(), ("United Nations".into(), "Organization".into()));
-    dict.insert("u.n.".into(), ("United Nations".into(), "Organization".into()));
+    dict.insert(
+        "un".into(),
+        ("United Nations".into(), "Organization".into()),
+    );
+    dict.insert(
+        "u.n.".into(),
+        ("United Nations".into(), "Organization".into()),
+    );
     dict.insert("cia".into(), ("CIA".into(), "Organization".into()));
     dict.insert("fbi".into(), ("FBI".into(), "Organization".into()));
     dict.insert("nsa".into(), ("NSA".into(), "Organization".into()));
-    dict.insert("doj".into(), ("Department of Justice".into(), "Organization".into()));
-    dict.insert("dod".into(), ("Department of Defense".into(), "Organization".into()));
+    dict.insert(
+        "doj".into(),
+        ("Department of Justice".into(), "Organization".into()),
+    );
+    dict.insert(
+        "dod".into(),
+        ("Department of Defense".into(), "Organization".into()),
+    );
     dict.insert("epa".into(), ("EPA".into(), "Organization".into()));
     dict.insert("fda".into(), ("FDA".into(), "Organization".into()));
     dict.insert("cdc".into(), ("CDC".into(), "Organization".into()));
@@ -91,11 +118,23 @@ fn alias_dictionary() -> HashMap<String, (String, String)> {
     dict.insert("w.h.o.".into(), ("WHO".into(), "Organization".into()));
 
     // Tech terms
-    dict.insert("ai".into(), ("Artificial Intelligence".into(), "Concept".into()));
-    dict.insert("a.i.".into(), ("Artificial Intelligence".into(), "Concept".into()));
+    dict.insert(
+        "ai".into(),
+        ("Artificial Intelligence".into(), "Concept".into()),
+    );
+    dict.insert(
+        "a.i.".into(),
+        ("Artificial Intelligence".into(), "Concept".into()),
+    );
     dict.insert("ml".into(), ("Machine Learning".into(), "Concept".into()));
-    dict.insert("nlp".into(), ("Natural Language Processing".into(), "Concept".into()));
-    dict.insert("llm".into(), ("Large Language Model".into(), "Concept".into()));
+    dict.insert(
+        "nlp".into(),
+        ("Natural Language Processing".into(), "Concept".into()),
+    );
+    dict.insert(
+        "llm".into(),
+        ("Large Language Model".into(), "Concept".into()),
+    );
 
     dict
 }
@@ -144,7 +183,12 @@ pub fn resolve_entities(names: &[String]) -> EntityResolutionOutput {
         let (canonical_name, entity_type, aliases, confidence) =
             if let Some((canonical, etype)) = dict.get(&normalized) {
                 // Found in alias dict — high confidence
-                (canonical.clone(), etype.clone(), vec![normalized.clone()], 0.95)
+                (
+                    canonical.clone(),
+                    etype.clone(),
+                    vec![normalized.clone()],
+                    0.95,
+                )
             } else {
                 // Unknown entity — use normalized name as canonical, lower confidence
                 let etype = classify_entity_type(name);
@@ -177,7 +221,11 @@ pub fn resolve_entities(names: &[String]) -> EntityResolutionOutput {
     }
 
     let mut entities: Vec<ResolvedEntity> = seen.into_values().collect();
-    entities.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    entities.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let count = entities.len();
 
     EntityResolutionOutput { entities, count }
@@ -194,8 +242,11 @@ fn classify_entity_type(name: &str) -> String {
     if words.len() > 1 {
         let first = words[0];
         // Common organization indicators
-        if name.contains("Inc") || name.contains("Corp") || name.contains("Ltd")
-            || name.contains("LLC") || name.contains("Company")
+        if name.contains("Inc")
+            || name.contains("Corp")
+            || name.contains("Ltd")
+            || name.contains("LLC")
+            || name.contains("Company")
         {
             return "Organization".into();
         }
@@ -204,7 +255,12 @@ fn classify_entity_type(name: &str) -> String {
             return "GPE".into();
         }
         // Default multi-word capitalized → Person
-        if first.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if first
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             return "Person".into();
         }
     }

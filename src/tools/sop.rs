@@ -120,8 +120,8 @@ pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
             .replace("$QUERY", &query)
             .replace("$TARGET_URL", &target_url)
             .replace("$COUNTRY", &country);
-        let params_json: serde_json::Value = serde_json::from_str(&params_substituted)
-            .unwrap_or(step.params.clone());
+        let params_json: serde_json::Value =
+            serde_json::from_str(&params_substituted).unwrap_or(step.params.clone());
 
         let params_display = serde_json::to_string(&params_json).unwrap_or_default();
 

@@ -53,8 +53,9 @@ pub async fn webhook_enrich(input: WebhookEnrichInput) -> Result<WebhookEnrichOu
         .await
         .map_err(|e| format!("Webhook request failed: {}", e))?;
 
-    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-        else { unreachable!("post_json never returns Cached") };
+    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+        unreachable!("post_json never returns Cached")
+    };
 
     if resp.status >= 400 {
         return Ok(WebhookEnrichOutput {
@@ -126,17 +127,23 @@ pub async fn script_hook(input: ScriptHookInput) -> Result<ScriptHookOutput, Str
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn script: {}", e))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn script: {}", e))?;
 
     // Write text to stdin
     if let Some(mut stdin) = child.stdin.take() {
         use tokio::io::AsyncWriteExt;
-        stdin.write_all(input.text.as_bytes()).await
+        stdin
+            .write_all(input.text.as_bytes())
+            .await
             .map_err(|e| format!("Failed to write to script stdin: {}", e))?;
         // stdin is dropped here, closing the pipe
     }
 
-    let output = child.wait_with_output().await
+    let output = child
+        .wait_with_output()
+        .await
         .map_err(|e| format!("Script execution failed: {}", e))?;
 
     Ok(ScriptHookOutput {
@@ -198,8 +205,7 @@ pub async fn export_data(input: ExportInput) -> Result<ExportOutput, String> {
     }
 
     let bytes = content.as_bytes();
-    std::fs::write(&path, bytes)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(ExportOutput {
         success: true,

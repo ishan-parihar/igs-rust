@@ -101,8 +101,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                                                     .collect()
                                             })
                                             .unwrap_or_default();
-                                        let answer =
-                                            json["answer"].as_str().map(|s| s.to_string());
+                                        let answer = json["answer"].as_str().map(|s| s.to_string());
                                         let count = results.len();
                                         return Ok(WebSearchOutput {
                                             count,
@@ -236,8 +235,9 @@ async fn web_scrape_default(
 
     let body = match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
-            let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-                else { unreachable!("bypass cache mode never returns Cached") };
+            let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+                unreachable!("bypass cache mode never returns Cached")
+            };
             if resp.status < 200 || resp.status >= 400 {
                 return Err(format!("HTTP {} for URL: {}", resp.status, input.url));
             }

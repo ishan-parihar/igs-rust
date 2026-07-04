@@ -86,8 +86,9 @@ pub async fn sources_autodiscover(input: AutodiscoverInput) -> Result<Autodiscov
             let http = HttpClient::new(&settings.http, &cache_dir);
             match http.fetch(&input.url, None, "bypass").await {
                 Ok(outcome) => {
-                    let http_mod::FetchOutcome::Response(resp, _, _) = outcome
-                        else { unreachable!("bypass cache mode never returns Cached") };
+                    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+                        unreachable!("bypass cache mode never returns Cached")
+                    };
                     let body = resp.body_text;
                     let feed_url = find_feed_url(&body, &input.url);
 
