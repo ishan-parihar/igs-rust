@@ -272,12 +272,20 @@ enum NewsAction {
         sources: Option<Vec<String>>,
         #[arg(long, value_delimiter = ',')]
         countries: Option<Vec<String>>,
+        #[arg(long, value_delimiter = ',')]
+        cities: Option<Vec<String>>,
+        #[arg(long, value_delimiter = ',')]
+        domains: Option<Vec<String>>,
         #[arg(long)]
         start: Option<String>,
         #[arg(long)]
         end: Option<String>,
         #[arg(long, value_delimiter = ',')]
         keywords: Option<Vec<String>>,
+        #[arg(long, value_delimiter = ',')]
+        exclude_keywords: Option<Vec<String>>,
+        #[arg(long)]
+        match_all: bool,
         #[arg(long, default_value = "50")]
         limit: i32,
         #[arg(long, default_value = "prefer")]
@@ -285,6 +293,12 @@ enum NewsAction {
         /// Fetch depth: "quick" (10 sources, 20 results), "deep" (200 sources, 500 results), or omit for default (100 sources, 100 results)
         #[arg(long)]
         depth: Option<String>,
+        /// Skip NLP enrichment (depth=deep only)
+        #[arg(long)]
+        skip_enrich: bool,
+        /// Skip insight indexing (depth=deep only)
+        #[arg(long)]
+        skip_index: bool,
     },
     /// Test a single source
     Test {
@@ -389,6 +403,15 @@ enum WebAction {
         include_domains: Option<Vec<String>>,
         #[arg(long, value_delimiter = ',')]
         exclude_domains: Option<Vec<String>>,
+        /// Search provider: auto, tavily, or firecrawl
+        #[arg(long)]
+        provider: Option<String>,
+        /// Days back (news topic only)
+        #[arg(long)]
+        days: Option<i32>,
+        /// Include LLM-generated answer in results
+        #[arg(long)]
+        include_answer: bool,
     },
     /// Scrape a URL to structured markdown
     Scrape {
@@ -737,6 +760,15 @@ enum SopAction {
     Execute {
         #[arg(long)]
         chain: String,
+        /// Query to substitute for $QUERY placeholder
+        #[arg(long)]
+        query: Option<String>,
+        /// Target URL to substitute for $TARGET_URL placeholder
+        #[arg(long)]
+        target_url: Option<String>,
+        /// Country code to substitute for $COUNTRY placeholder
+        #[arg(long)]
+        country: Option<String>,
     },
 }
 
@@ -928,6 +960,24 @@ enum MonitorAction {
     Resume {
         #[arg(long)]
         id: String,
+    },
+    /// Test a notification channel
+    Test {
+        /// Channel to test: slack, discord, telegram, email, webhook
+        #[arg(long)]
+        channel: String,
+        /// Webhook URL (for slack, discord, email, webhook)
+        #[arg(long)]
+        url: Option<String>,
+        /// Telegram bot token
+        #[arg(long)]
+        telegram_token: Option<String>,
+        /// Telegram chat ID
+        #[arg(long)]
+        telegram_chat_id: Option<String>,
+        /// Test message
+        #[arg(long)]
+        message: Option<String>,
     },
 }
 
@@ -1171,12 +1221,18 @@ async fn main() -> anyhow::Result<()> {
                 pools,
                 sources: srcs,
                 countries,
+                cities,
+                domains,
                 start,
                 end,
                 keywords,
+                exclude_keywords,
+                match_all,
                 limit,
                 cache_mode,
                 depth,
+                skip_enrich,
+                skip_index,
             } => {
                 let kw = keywords.map(KeywordFilter::Multiple);
                 let result = r(news::news_fetch(NewsFetchInput {
@@ -1184,20 +1240,20 @@ async fn main() -> anyhow::Result<()> {
                         pools,
                         sources: srcs,
                         countries,
-                        cities: None,
-                        domains: None,
+                        cities,
+                        domains,
                         start,
                         end,
                         keywords: kw,
-                        exclude_keywords: None,
-                        match_all: None,
+                        exclude_keywords,
+                        match_all: Some(match_all),
                         limit: Some(limit),
                         cache_mode: Some(cache_mode),
                     },
                     discovery_mode: None,
                     urgency: None,
-                    skip_enrich: None,
-                    skip_index: None,
+                    skip_enrich: Some(skip_enrich),
+                    skip_index: Some(skip_index),
                     depth_opts: DepthOptions { depth },
                     output: OutputOptions { format: None },
                 })
@@ -1335,16 +1391,19 @@ async fn main() -> anyhow::Result<()> {
                 topic,
                 include_domains,
                 exclude_domains,
+                provider,
+                days,
+                include_answer,
             } => {
                 let result = r(web::web_search(WebSearchInput {
                     query,
-                    provider: None,
+                    provider,
                     max_results: Some(max_results),
                     topic,
                     include_domains,
                     exclude_domains,
-                    days: None,
-                    include_answer: None,
+                    days,
+                    include_answer: Some(include_answer),
                     output: OutputOptions { format: None },
                 })
                 .await)?;
@@ -1861,12 +1920,12 @@ async fn main() -> anyhow::Result<()> {
                 let result = sop::sop_list();
                 output(fmt, &result);
             }
-            SopAction::Execute { chain } => {
+            SopAction::Execute { chain, query, target_url, country } => {
                 let result = r(sop::sop_execute(SopExecuteInput {
                     chain_name: chain,
-                    query: None,
-                    target_url: None,
-                    country: None,
+                    query,
+                    target_url,
+                    country,
                     output: OutputOptions { format: None },
                 }))?;
                 output(fmt, &result);
@@ -1897,7 +1956,13 @@ async fn main() -> anyhow::Result<()> {
                         interval_secs,
                         threshold,
                         webhook_url,
+                        webhook_format: None,
                         alert_file,
+                        telegram_bot_token: None,
+                        telegram_chat_id: None,
+                        email_webhook_url: None,
+                        email_recipients: None,
+                        cooldown_secs: None,
                         active: true,
                     }).await;
                     output(fmt, &MonitorCreateOutput { created: true, id });
@@ -1930,6 +1995,16 @@ async fn main() -> anyhow::Result<()> {
                 MonitorAction::Resume { id } => {
                     let resumed = manager.resume(&id).await;
                     output(fmt, &MonitorPauseOutput { paused: !resumed });
+                }
+                MonitorAction::Test { channel, url, telegram_token, telegram_chat_id, message } => {
+                    let result = manager.test_alert(igs_rust_mcp::tools::monitor::MonitorTestInput {
+                        channel,
+                        webhook_url: url,
+                        telegram_bot_token: telegram_token,
+                        telegram_chat_id,
+                        message,
+                    }).await;
+                    output(fmt, &result);
                 }
             }
         }

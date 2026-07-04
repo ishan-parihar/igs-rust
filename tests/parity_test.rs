@@ -75,6 +75,7 @@ fn mcp_tool_to_cli_path(tool_name: &str) -> Option<(&str, &str)> {
         "monitor.delete" => return Some(("monitor", "delete")),
         "monitor.pause" => return Some(("monitor", "pause")),
         "monitor.resume" => return Some(("monitor", "resume")),
+        "monitor.test" => return Some(("monitor", "test")),
         _ => {}
     }
 

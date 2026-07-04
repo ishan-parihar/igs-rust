@@ -1811,14 +1811,26 @@ pub struct MonitorCreateInput {
     pub pools: Vec<String>,
     /// Keywords to watch for
     pub keywords: Vec<String>,
-    /// Poll interval in seconds (default: 300 = 5 min)
+    /// Poll interval in seconds (default: 300 = 5 min, minimum: 30)
     pub interval_secs: Option<u64>,
     /// Alert threshold: min keyword matches (default: 1)
     pub threshold: Option<u32>,
-    /// Webhook URL for alerts
+    /// Webhook URL for alerts (Slack, Discord, or custom HTTP endpoint)
     pub webhook_url: Option<String>,
+    /// Webhook format: "slack" (default), "discord", "teams", "raw"
+    pub webhook_format: Option<String>,
     /// File path to append alerts to
     pub alert_file: Option<String>,
+    /// Telegram bot token (from @BotFather)
+    pub telegram_bot_token: Option<String>,
+    /// Telegram chat ID to send alerts to
+    pub telegram_chat_id: Option<String>,
+    /// Email webhook URL (HTTP endpoint that sends emails)
+    pub email_webhook_url: Option<String>,
+    /// Email recipients
+    pub email_recipients: Option<Vec<String>>,
+    /// Cooldown in seconds between alerts (default: 300 = 5 min)
+    pub cooldown_secs: Option<u64>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }

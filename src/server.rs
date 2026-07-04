@@ -1678,7 +1678,13 @@ impl IgsMcpServer {
             interval_secs: params.0.interval_secs.unwrap_or(300),
             threshold: params.0.threshold.unwrap_or(1),
             webhook_url: params.0.webhook_url.clone(),
+            webhook_format: params.0.webhook_format.clone(),
             alert_file: params.0.alert_file.clone(),
+            telegram_bot_token: params.0.telegram_bot_token.clone(),
+            telegram_chat_id: params.0.telegram_chat_id.clone(),
+            email_webhook_url: params.0.email_webhook_url.clone(),
+            email_recipients: params.0.email_recipients.clone(),
+            cooldown_secs: params.0.cooldown_secs,
             active: true,
         };
         self.monitor.add(monitor).await;
@@ -1747,6 +1753,18 @@ impl IgsMcpServer {
     ) -> Result<Json<MonitorPauseOutput>, String> {
         let resumed = self.monitor.resume(&params.0.id).await;
         Ok(Json(MonitorPauseOutput { paused: !resumed }))
+    }
+
+    #[tool(
+        name = "monitor.test",
+        description = "Send a test alert to verify notification channel configuration. Supports slack, discord, telegram, email, and generic webhook channels. Use before creating a monitor to verify credentials."
+    )]
+    async fn monitor_test(
+        &self,
+        params: Parameters<crate::tools::monitor::MonitorTestInput>,
+    ) -> Result<Json<crate::tools::monitor::MonitorTestOutput>, String> {
+        let result = self.monitor.test_alert(params.0).await;
+        Ok(Json(result))
     }
 
     // ── SOP Tools ─────────────────────────────────────────────
