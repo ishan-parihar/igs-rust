@@ -153,10 +153,11 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
     },
     ToolGroup {
         name: "monitor",
-        description: "Real-time monitoring & alerting. Create monitors that poll news sources for keyword matches and trigger webhook/file alerts.",
+        description: "Real-time monitoring & alerting. Create monitors that poll news sources for keyword matches and trigger alerts via Slack, Discord, Telegram, email, or file. Supports per-monitor intervals, cooldowns, and multi-channel delivery.",
         tools: &[
             "monitor.create", "monitor.list",
             "monitor.delete", "monitor.pause", "monitor.resume",
+            "monitor.test",
         ],
     },
     ToolGroup {
@@ -320,6 +321,7 @@ mod tests {
             "monitor.delete",
             "monitor.pause",
             "monitor.resume",
+            "monitor.test",
             "news.summarize",
             "entities.resolve",
             "search.gdelt",
