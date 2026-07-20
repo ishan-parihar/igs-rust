@@ -994,7 +994,6 @@ fn output<T: serde::Serialize>(format: &str, value: &T) {
 
 // AXI helpers
 
-// truncate_str is imported via helpers::truncate_str (re-exported from toon_helper)
 
 
 #[tokio::main]
