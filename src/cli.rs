@@ -21,7 +21,7 @@ struct Cli {
     format: String,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -992,14 +992,6 @@ fn output<T: serde::Serialize>(format: &str, value: &T) {
 }
 
 // AXI helpers
-fn axi_error(msg: &str, hint: Option<&str>) -> ! {
-    let mut out = serde_json::json!({ "error": msg });
-    if let Some(h) = hint {
-        out["help"] = serde_json::json!(h);
-    }
-    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
-    std::process::exit(2);
-}
 
 fn truncate_str(s: &str, max: usize) -> String {
     let char_count = s.chars().count();
@@ -1027,7 +1019,56 @@ async fn main() -> anyhow::Result<()> {
     let fmt = &cli.format;
 
     match cli.command {
-        Commands::Mcp => {
+        // ── AXI §8 + §10: no-args home view shows live state + tool identity ──
+        None => {
+            let bin_path = std::env::current_exe()
+                .map(|p| {
+                    let s = p.display().to_string();
+                    if let Ok(home) = std::env::var("HOME") {
+                        s.replace(&home, "~")
+                    } else {
+                        s
+                    }
+                })
+                .unwrap_or_else(|_| "igs".to_string());
+            println!("bin: {}", bin_path);
+            println!("description: Intelligence Gathering System — news, research, OSINT, and web intelligence");
+            println!();
+
+            // Show tool groups for progressive discovery
+            let groups = registry::TOOL_GROUPS;
+            println!("tool_groups[{}]{{name,description,tool_count}}:", groups.len());
+            for g in groups {
+                println!("  {},{},{}", g.name, truncate_str(g.description, 60), g.tools.len());
+            }
+            println!();
+
+            // Show live state: pools and sources count
+            println!("state:");
+            match (
+                igs_rust_mcp::config::load_pools().await,
+                igs_rust_mcp::config::load_sources().await,
+            ) {
+                (Ok(pools), Ok(sources)) => {
+                    println!("  pools: {}", pools.pools.len());
+                    println!("  sources: {}", sources.sources.len());
+                    println!("  total_tools: {}", registry::total_tool_count());
+                }
+                (Err(e), _) | (_, Err(e)) => {
+                    println!("  not configured: {} (run 'igs status' for details)", e);
+                }
+            }
+            println!();
+
+            println!("help[6]:");
+            println!("  Run `igs tool-groups` to see all tool categories");
+            println!("  Run `igs news fetch` to gather intelligence from configured sources");
+            println!("  Run `igs web search --query \"...\"` to search the web");
+            println!("  Run `igs mcp` to start the MCP server for AI agents");
+            println!("  Run `igs --help` for full command reference");
+            println!("  Run `igs status` to see detailed system status");
+        }
+        Some(Commands::Mcp) => {
             // MCP server mode — takes over stdin/stdout, no CLI output
             let settings = igs_rust_mcp::config::load_settings().await?;
             let tool_groups = settings.tool_groups.unwrap_or_default();
@@ -1042,7 +1083,7 @@ async fn main() -> anyhow::Result<()> {
             return Ok(());
         }
 
-        Commands::Status => {
+        Some(Commands::Status) => {
             let settings = igs_rust_mcp::config::load_settings().await?;
             println!("IGS Intelligence Gathering System");
             println!("  Version: {}", env!("CARGO_PKG_VERSION"));
@@ -1071,12 +1112,12 @@ async fn main() -> anyhow::Result<()> {
             println!("  Sources: {}", sources.sources.len());
         }
 
-        Commands::Parsers => {
+        Some(Commands::Parsers) => {
             let result = r(parsers_tools::parsers_list().await)?;
             output(fmt, &result);
         }
 
-        Commands::ToolGroups { group } => {
+        Some(Commands::ToolGroups { group }) => {
             if let Some(group_name) = group {
                 match registry::get_group_tools(&group_name) {
                     Some(tools) => {
@@ -1120,7 +1161,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::Pools { action } => match action {
+        Some(Commands::Pools { action }) => match action {
             PoolAction::List => {
                 let result = r(pools::pools_list().await)?;
                 output(fmt, &result);
@@ -1145,7 +1186,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Sources { action } => match action {
+        Some(Commands::Sources { action }) => match action {
             SourceAction::List { pool, active_only } => {
                 let pools = pool.map(|p| vec![p]);
                 let result = r(sources::sources_list(SourceListInput {
@@ -1242,7 +1283,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::News { action } => match action {
+        Some(Commands::News { action }) => match action {
             NewsAction::Fetch {
                 pools,
                 sources: srcs,
@@ -1320,7 +1361,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Reddit { action } => match action {
+        Some(Commands::Reddit { action }) => match action {
             RedditAction::Search {
                 query,
                 subreddits,
@@ -1350,7 +1391,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Research { action } => match action {
+        Some(Commands::Research { action }) => match action {
             ResearchAction::Search {
                 query,
                 sources: srcs,
@@ -1412,7 +1453,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Web { action } => match action {
+        Some(Commands::Web { action }) => match action {
             WebAction::Search {
                 query,
                 max_results,
@@ -1496,7 +1537,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Twitter { action } => match action {
+        Some(Commands::Twitter { action }) => match action {
             TwitterAction::Search { query, limit, mode } => {
                 let result = r(twitter::twitter_search(TwitterSearchInput {
                     query,
@@ -1517,7 +1558,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Youtube { action } => match action {
+        Some(Commands::Youtube { action }) => match action {
             YoutubeAction::Search { query, limit } => {
                 let result = r(youtube::youtube_search(YoutubeSearchInput {
                     query,
@@ -1540,7 +1581,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Browser { action } => match action {
+        Some(Commands::Browser { action }) => match action {
             BrowserAction::Goto { url, wait_until } => {
                 let result = r(igs_rust_mcp::tools::lp_mcp::lp_goto(LpGotoInput {
                     url,
@@ -1609,7 +1650,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Weather { action } => match action {
+        Some(Commands::Weather { action }) => match action {
             WeatherAction::Forecast { location, days } => {
                 let result = r(weather::weather_forecast(WeatherForecastInput {
                     location,
@@ -1638,7 +1679,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Finance { action } => match action {
+        Some(Commands::Finance { action }) => match action {
             FinanceAction::Market { symbols } => {
                 let result = r(finance::finance_market(FinanceMarketInput {
                     symbols,
@@ -1665,7 +1706,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Security { action } => match action {
+        Some(Commands::Security { action }) => match action {
             SecurityAction::Cve { query, days_back } => {
                 let result = r(security::security_cve_search(CveSearchInput {
                     query,
@@ -1689,7 +1730,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Govt { action } => match action {
+        Some(Commands::Govt { action }) => match action {
             GovtAction::Bills { query, congress } => {
                 let result = r(govt::govt_bills(GovtBillsInput {
                     query,
@@ -1709,7 +1750,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Politics { action } => match action {
+        Some(Commands::Politics { action }) => match action {
             PoliticsAction::FecCandidates { query } => {
                 let result = r(politics::politics_fec_candidates(PoliticsFecInput {
                     name: query,
@@ -1735,7 +1776,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Patents { action } => match action {
+        Some(Commands::Patents { action }) => match action {
             PatentsAction::Search { query } => {
                 let result = r(patents::patents_search(PatentSearchInput {
                     query,
@@ -1756,7 +1797,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Satellite { action } => match action {
+        Some(Commands::Satellite { action }) => match action {
             SatelliteAction::FirmsFires {
                 lat,
                 lon,
@@ -1779,7 +1820,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Env { action } => match action {
+        Some(Commands::Env { action }) => match action {
             EnvAction::EpaFacilities { query } => {
                 let result = r(env::env_epa_facilities(EnvEpaFacilitiesInput {
                     state: None,
@@ -1801,7 +1842,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Legal { action } => match action {
+        Some(Commands::Legal { action }) => match action {
             LegalAction::SearchCases { query } => {
                 let result = r(legal::legal_search_cases(LegalSearchInput {
                     query,
@@ -1825,7 +1866,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Health { action } => match action {
+        Some(Commands::Health { action }) => match action {
             HealthAction::CdcLeadingCauses { state, year } => {
                 let result = r(health::health_cdc_leading_causes(HealthCdcInput {
                     state: Some(state),
@@ -1849,7 +1890,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Climate { action } => match action {
+        Some(Commands::Climate { action }) => match action {
             ClimateAction::NoaaObservations {
                 location,
                 start,
@@ -1878,7 +1919,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Insights { action } => {
+        Some(Commands::Insights { action }) => {
             // Insights tools require the shared InsightStorage from the server.
             // For CLI use, we create a standalone server instance to access
             // the insight engine.
@@ -1945,7 +1986,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::Sop { action } => match action {
+        Some(Commands::Sop { action }) => match action {
             SopAction::List => {
                 let result = sop::sop_list();
                 output(fmt, &result);
@@ -1967,7 +2008,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Monitor { action } => {
+        Some(Commands::Monitor { action }) => {
             use igs_rust_mcp::tools::monitor::{MonitorConfig, MonitorManager};
             let settings = igs_rust_mcp::config::load_settings()
                 .await
@@ -2055,7 +2096,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
 
-        Commands::Intelligence { action } => match action {
+        Some(Commands::Intelligence { action }) => match action {
             IntelligenceAction::Summarize {
                 text,
                 num_sentences,
@@ -2104,7 +2145,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Advanced { action } => match action {
+        Some(Commands::Advanced { action }) => match action {
             AdvancedAction::TemporalAnalysis { entity, points } => {
                 let points_str = if points == "-" {
                     let mut buf = String::new();
@@ -2208,7 +2249,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Plugins { action } => match action {
+        Some(Commands::Plugins { action }) => match action {
             PluginsAction::WebhookEnrich { url, articles } => {
                 let articles_str = if articles == "-" {
                     let mut buf = String::new();
@@ -2266,7 +2307,7 @@ async fn main() -> anyhow::Result<()> {
             }
         },
 
-        Commands::Osint { action } => match action {
+        Some(Commands::Osint { action }) => match action {
             OsintAction::OpenAlex { query, limit } => {
                 let result = r(igs_rust_mcp::tools::data_sources::openalex_search(
                     igs_rust_mcp::tools::data_sources::OpenAlexSearchInput {
