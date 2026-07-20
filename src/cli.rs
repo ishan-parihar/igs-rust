@@ -11,6 +11,7 @@ use igs_rust_mcp::tools::{
     twitter, weather, web, youtube,
 };
 use rmcp::ServiceExt;
+use toon_helper::truncate_str;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
@@ -993,16 +994,7 @@ fn output<T: serde::Serialize>(format: &str, value: &T) {
 
 // AXI helpers
 
-fn truncate_str(s: &str, max: usize) -> String {
-    let char_count = s.chars().count();
-    if char_count <= max {
-        s.to_string()
-    } else {
-        let truncated: String = s.chars().take(max).collect();
-        format!("{}...
-  ... (truncated, {} chars total)", truncated, char_count)
-    }
-}
+// truncate_str is imported via helpers::truncate_str (re-exported from toon_helper)
 
 
 #[tokio::main]

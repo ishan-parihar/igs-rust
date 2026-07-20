@@ -1241,6 +1241,7 @@ dependencies = [
  "sha2",
  "tokio",
  "toon-format",
+ "toon-helper",
  "tracing",
  "tracing-subscriber",
  "unpdf",
@@ -2531,6 +2532,15 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "toon-helper"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "toon-format",
 ]
 
 [[package]]
