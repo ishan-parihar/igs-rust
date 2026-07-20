@@ -991,6 +991,28 @@ fn output<T: serde::Serialize>(format: &str, value: &T) {
     println!("{}", text);
 }
 
+// AXI helpers
+fn axi_error(msg: &str, hint: Option<&str>) -> ! {
+    let mut out = serde_json::json!({ "error": msg });
+    if let Some(h) = hint {
+        out["help"] = serde_json::json!(h);
+    }
+    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+    std::process::exit(2);
+}
+
+fn truncate_str(s: &str, max: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count <= max {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max).collect();
+        format!("{}...
+  ... (truncated, {} chars total)", truncated, char_count)
+    }
+}
+
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
