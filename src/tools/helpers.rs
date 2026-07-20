@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+// Re-export shared toon-helper functions
+pub use toon_helper::{toon_encode, format_text, truncate_str, print_output};
+
 /// URL-encode a string
 pub fn urlencoding(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
@@ -224,49 +227,9 @@ pub fn find_feed_url(body: &str, base_url: &str) -> Option<String> {
     None
 }
 
-/// TOON-format encode a serializable value for AI-agent token-efficiency
-pub fn toon_encode<T: serde::Serialize>(value: &T) -> String {
-    toon_format::encode_default(value)
-        .unwrap_or_else(|_| serde_json::to_string(value).unwrap_or_default())
-}
-
-/// Serialize a value to the requested format ("toon" or "json") as a String.
-/// Shared by the CLI `output` helper and the server `format_output` helper.
-pub fn format_text<T: serde::Serialize>(value: &T, format: &str) -> String {
-    if format == "json" {
-        serde_json::to_string_pretty(value).unwrap_or_default()
-    } else {
-        toon_encode(value)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_toon_encode_simple_object() {
-        let value = serde_json::json!({"name": "Alice", "age": 30});
-        let result = toon_encode(&value);
-        assert!(!result.is_empty());
-        // TOON format should not start with JSON brace
-        assert!(!result.starts_with('{'));
-    }
-
-    #[test]
-    fn test_toon_encode_array() {
-        let value = serde_json::json!([1, 2, 3]);
-        let result = toon_encode(&value);
-        assert!(!result.is_empty());
-    }
-
-    #[test]
-    fn test_toon_encode_fallback() {
-        // Test with a value that might fail TOON encoding
-        let value = serde_json::json!(null);
-        let result = toon_encode(&value);
-        assert!(!result.is_empty());
-    }
 
     #[test]
     fn test_extract_topics_basic() {

@@ -50,3 +50,4 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 unpdf = "0.7"
 openssl-sys = { version = "0.9.117", features = ["vendored"] }
 
+toon-helper = { path = "../toon-helper" }
