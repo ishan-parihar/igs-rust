@@ -564,3 +564,93 @@ MIT
 ---
 
 Developed by [Ishan Parihar](https://github.com/ishanparihar)
+
+---
+
+## Agent Integration (AXI §7)
+
+IGS ships an installable AI agent skill that provides ambient context at session start — showing tool counts, pool status, and contextual help hints.
+
+### Install the Skill
+
+```bash
+# Via npx (recommended)
+npx skills add ishan-parihar/igs-rust --skill igs
+
+# Or download manually
+curl -fsSL https://raw.githubusercontent.com/ishan-parihar/igs-rust/master/SKILL.md \
+  -o ~/.agents/skills/igs/SKILL.md
+```
+
+### Session Hook (Claude Code)
+
+Add to `~/.claude/settings.json` or project `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "igs"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+At session start, IGS prints a compact dashboard:
+
+```
+bin: ~/.local/bin/igs
+description: Intelligence Gathering System — 64 tools, 411 sources, 47 countries
+
+pools[14]{name,description}:
+  GLOBAL_TECH_CYBER,Cybersecurity and tech news worldwide
+  ...
+
+total_sources: 411
+total_countries: 47
+
+help[4]:
+  Run `igs news fetch --pools GLOBAL_TECH_CYBER --limit 10` for recent tech news
+  Run `igs research search --query "topic"` for academic papers
+  Run `igs web search --query "topic"` for web search
+  Run `igs pools list` to see all 14 intelligence pools
+```
+
+### Session Hook (Codex)
+
+Add to `~/.codex/hooks.json` or project `.codex/hooks.json`:
+
+```json
+{
+  "SessionStart": "igs"
+}
+```
+
+Ensure hooks are enabled in `~/.codex/config.toml`:
+
+```toml
+[features]
+hooks = true
+```
+
+### Session Hook (OpenCode)
+
+Create `~/.config/opencode/plugins/igs.ts`:
+
+```typescript
+export default {
+  name: "igs",
+  onSessionStart: async () => {
+    const { execSync } = require("child_process");
+    return execSync("igs").toString();
+  },
+};
+```

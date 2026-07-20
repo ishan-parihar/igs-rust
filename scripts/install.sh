@@ -124,3 +124,87 @@ echo '        "args": ["mcp"]'
 echo '      }'
 echo '    }'
 echo '  }'
+
+# ── Install Session Hooks (AXI §7) ─────────────────────────────────────────
+echo ""
+echo "Installing AI agent session hooks..."
+
+# Claude Code session hook
+CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+if command -v jq &>/dev/null && [ -f "$CLAUDE_SETTINGS" ]; then
+    # Check if igs hook already exists
+    if jq -e '.hooks.SessionStart[]?.hooks[]?.command == "igs"' "$CLAUDE_SETTINGS" &>/dev/null; then
+        echo "  ✓ Claude Code session hook already installed"
+    else
+        # Backup and add hook
+        cp "$CLAUDE_SETTINGS" "${CLAUDE_SETTINGS}.bak.$(date +%s)"
+        jq '.hooks.SessionStart += [{"matcher":"","hooks":[{"type":"command","command":"igs"}]}]' \
+            "$CLAUDE_SETTINGS" > "${CLAUDE_SETTINGS}.tmp" && mv "${CLAUDE_SETTINGS}.tmp" "$CLAUDE_SETTINGS"
+        echo "  ✓ Claude Code session hook installed to $CLAUDE_SETTINGS"
+    fi
+else
+    echo "  → Claude Code: Add this to ~/.claude/settings.json:"
+    echo '    {"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"igs"}]}]}}'
+fi
+
+# Codex session hook
+CODEX_DIR="$HOME/.codex"
+if [ -d "$CODEX_DIR" ]; then
+    CODEX_HOOKS="$CODEX_DIR/hooks.json"
+    if [ -f "$CODEX_HOOKS" ] && jq -e '.SessionStart == "igs"' "$CODEX_HOOKS" &>/dev/null; then
+        echo "  ✓ Codex session hook already installed"
+    else
+        # Add/update hook
+        if [ -f "$CODEX_HOOKS" ]; then
+            cp "$CODEX_HOOKS" "${CODEX_HOOKS}.bak.$(date +%s)"
+            jq '.SessionStart = "igs"' "$CODEX_HOOKS" > "${CODEX_HOOKS}.tmp" && mv "${CODEX_HOOKS}.tmp" "$CODEX_HOOKS"
+        else
+            echo '{"SessionStart":"igs"}' > "$CODEX_HOOKS"
+        fi
+        echo "  ✓ Codex session hook installed to $CODEX_HOOKS"
+        # Ensure hooks feature is enabled
+        CODEX_CONFIG="$CODEX_DIR/config.toml"
+        if [ -f "$CODEX_CONFIG" ] && ! grep -q 'hooks = true' "$CODEX_CONFIG"; then
+            echo -e '\n[features]\nhooks = true' >> "$CODEX_CONFIG"
+            echo "  ✓ Enabled hooks in $CODEX_CONFIG"
+        fi
+    fi
+else
+    echo "  → Codex: Create ~/.codex/hooks.json with {"SessionStart":"igs"}"
+fi
+
+# OpenCode session hook
+OPENCODE_DIR="$HOME/.config/opencode/plugins"
+if [ -d "$HOME/.config/opencode" ]; then
+    mkdir -p "$OPENCODE_DIR"
+    if [ -f "$OPENCODE_DIR/igs.ts" ]; then
+        echo "  ✓ OpenCode session hook already installed"
+    else
+        cat > "$OPENCODE_DIR/igs.ts" << 'OPENCODE_PLUGIN'
+export default {
+  name: "igs",
+  onSessionStart: async () => {
+    const { execSync } = require("child_process");
+    return execSync("igs").toString();
+  },
+};
+OPENCODE_PLUGIN
+        echo "  ✓ OpenCode session hook installed to $OPENCODE_DIR/igs.ts"
+    fi
+else
+    echo "  → OpenCode: Create ~/.config/opencode/plugins/igs.ts (see README)"
+fi
+
+# Install SKILL.md for agents that don't support hooks
+SKILL_DIR="$HOME/.agents/skills/igs"
+mkdir -p "$SKILL_DIR"
+if [ ! -f "$SKILL_DIR/SKILL.md" ]; then
+    if command -v curl &>/dev/null; then
+        curl -fsSL "https://raw.githubusercontent.com/ishan-parihar/igs-rust/master/SKILL.md" \
+            -o "$SKILL_DIR/SKILL.md" 2>/dev/null && \
+            echo "  ✓ Skill installed to $SKILL_DIR/SKILL.md" || \
+            echo "  → Skill download failed (non-critical)"
+    fi
+else
+    echo "  ✓ Skill already installed at $SKILL_DIR/SKILL.md"
+fi
