@@ -1028,6 +1028,9 @@ async fn main() -> anyhow::Result<()> {
 
             // Show tool groups for progressive discovery
             let groups = registry::TOOL_GROUPS;
+            let total_tools: usize = groups.iter().map(|g| g.tools.len()).sum();
+            // AXI §4: Include total count header
+            println!("count: {} tool groups ({} total tools)", groups.len(), total_tools);
             println!("tool_groups[{}]{{name,description,tool_count}}:", groups.len());
             for g in groups {
                 println!("  {},{},{}", g.name, truncate_str(g.description, 60), g.tools.len());
