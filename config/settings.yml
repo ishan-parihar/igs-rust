@@ -1,82 +1,57 @@
-# IGS MCP Server — Settings Configuration
-# All values shown are defaults unless noted otherwise.
-# Environment variable substitution: ${VAR_NAME} is replaced at runtime.
-
-# ─── HTTP Client ──────────────────────────────────────────────
-http:
-  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
-  timeoutMs: 15000           # Per-request timeout in ms
-  retries: 2                 # Number of retries on failure
-  backoffBaseMs: 500         # Base delay for exponential backoff
-  backoffFactor: 2.0         # Multiplier for backoff (500, 1000, 2000, ...)
-  concurrency: 6             # Max concurrent HTTP requests globally
-  perHost: 2                 # Max concurrent requests per host
-
-# ─── Caching ──────────────────────────────────────────────────
+browser:
+  default: obscura
+  lightpanda:
+    auto_update: true
+    enabled: true
+    headless: true
+    max_concurrent: 10
+    obey_robots: true
+    stealth: true
+    timeout_ms: 30000
+  obscura:
+    auto_update: true
+    enabled: true
+    max_concurrent: 10
+    obey_robots: true
+    stealth: true
+    timeout_ms: 30000
 cache:
+  dir: cache
   enabled: true
-  dir: cache                 # Relative to config dir, or absolute path
-  ttlMs: 1800000             # Feed cache TTL: 30 minutes
-  # Removed (YAGNI): honorEtags, queryTtlMs, maxItemsPerSource
-  # These are accepted for backward compat but no longer read.
-
-# ─── Web Search Providers ─────────────────────────────────────
-
-# Tavily — AI-powered web search
-# Get API key: https://tavily.com
-tavily:
-  enabled: true
-  apiKey: ${TAVILY_API_KEY}          # Set TAVILY_API_KEY env var
-  searchDepth: basic         # basic, advanced, fast, ultra-fast
-  defaultTopic: general      # general, news, finance
-  timeoutMs: 30000
-
-# Firecrawl — Web scraping and crawling API
-# Get API key: https://firecrawl.dev
+  ttlMs: 1800000
 firecrawl:
-  enabled: true
-  apiKey: ${FIRECRAWL_API_KEY}       # Set FIRECRAWL_API_KEY env var
-  timeoutMs: 60000
+  apiKey: ${FIRECRAWL_API_KEY}
   defaultFormats:
-    - markdown
-    - html
-    - screenshot
-    - links
-
-# ─── Obscura Headless Browser ──────────────────────────────────
-# Binary auto-downloads to ~/.config/igs-mcp/bin/obscura
-# Rust-native, stealth built-in, drop-in Lightpanda replacement
-obscura:
-  enabled: true              # Enable Obscura for web.crawl, web.scrape, and browser automation
-  auto_update: true          # Check for updates once per day
-  obey_robots: true          # Respect robots.txt when crawling
-  timeout_ms: 30000          # Navigation timeout in ms
-  max_concurrent: 10         # Max parallel HTTP requests during page load
-  # proxy: "http://proxy:8080"           # HTTP/SOCKS5 proxy URL
-  stealth: true              # Enable anti-detection (TLS fingerprint, fingerprint randomization, tracker blocking)
-
-# ─── NLP Enrichment ──────────────────────────────────────────
-# All NLP is offline (no external API calls)
+  - markdown
+  - html
+  - screenshot
+  - links
+  enabled: true
+  timeoutMs: 60000
+http:
+  backoffBaseMs: 500
+  backoffFactor: 2.0
+  concurrency: 6
+  perHost: 2
+  retries: 2
+  timeoutMs: 15000
+  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
 nlp:
   enabled: true
-  max_topics: 8              # Max topics to extract per article
-  max_entities: 20           # Max entities to extract per article
-  # Removed (YAGNI): min_entity_length, dedup_threshold
-
-# ─── Output Format ────────────────────────────────────────────
+  max_entities: 20
+  max_topics: 8
 output:
-  default_format: toon       # "toon" (token-efficient) or "json"
-  dump_enabled: false        # Enable markdown dump of tool outputs to disk
-  dump_dir: "~/Documents/IGS"  # Root directory for dump files
-  # Removed (YAGNI): toon_indent, max_items_per_response
-
-# ─── Tool Groups ───────────────────────────────────────────────
-# Restrict available tools to specific groups (for focused sessions)
-# tool_groups: ["discovery", "news", "web"]
-
-# ─── Twitter/X Integration ───────────────────────────────────
-# Uses agent-twitter-client for cookie-based access to Twitter's internal APIs.
-# Cookie extracted from Brave-Origin-Beta browser.
-twitter:
+  default_format: toon
+  dump_dir: ~/Documents/IGS
+  dump_enabled: false
+tavily:
+  apiKey: ${TAVILY_API_KEY}
+  defaultTopic: general
   enabled: true
-  cookie: "guest_id=v1%3A177910199735927032; auth_token=6713a2bae6fd0795213b1be68fab64fa0db77465; ct0=8d2f549c7cf852a378d5cfe9978d04f881600c43c474648fdb23840ac1bf5a90a8709cb5d9a8fd3e7855b12389b33582779feee0c2c82ceeb74539dd52934e3def7fbf14c2413494c983c8a831cb36cd; kdt=zqm7I0Q1M8VeqXYWVDm96TSF4bLDxtGkRnI0XWRX; twid=u%3D3301263462; cf_clearance=rDg1F456gYZNKuP7BmbTLNfvggGUQ1Q_Y7UbCMUxOYI-1782559760-1.2.1.1-cQUNPwXNtgW7AzfZncJ8He83LMbfnl6HYBjj7_m230OhxGJl3_rCTvkNvBaNdGoOTdk90tLIdoWzIXIiVMKICSsw0K4XzdzWy3Kpspp9ysMmHw3we7uqrX8LCUi08QEjYWW9OnszXAvZKYn3O9X7dpepzS2XNs7Be_OJiBl.1XmyzDfAj1I4JwAm.T3sBgociSExMKQ4QW56KonkXsQQTxRjikco0OFuObsufgEg6U3l8AkzOS_VhpGxup.VyAtuPI5XkDkgtlzYZ12zRQQM_WSS2VzDuU284Eb3YlDoE2po7z_1BZ79j6yNQmWYZuaSvI2OekE3cgyYGkcuuyhltw"
+  searchDepth: basic
+  timeoutMs: 30000
+twitter:
+  cookie: guest_id=v1%3A177910199735927032; auth_token=6713a2bae6fd0795213b1be68fab64fa0db77465;
+    ct0=8d2f549c7cf852a378d5cfe9978d04f881600c43c474648fdb23840ac1bf5a90a8709cb5d9a8fd3e7855b12389b33582779feee0c2c82ceeb74539dd52934e3def7fbf14c2413494c983c8a831cb36cd;
+    kdt=zqm7I0Q1M8VeqXYWVDm96TSF4bLDxtGkRnI0XWRX; twid=u%3D3301263462; cf_clearance=rDg1F456gYZNKuP7BmbTLNfvggGUQ1Q_Y7UbCMUxOYI-1782559760-1.2.1.1-cQUNPwXNtgW7AzfZncJ8He83LMbfnl6HYBjj7_m230OhxGJl3_rCTvkNvBaNdGoOTdk90tLIdoWzIXIiVMKICSsw0K4XzdzWy3Kpspp9ysMmHw3we7uqrX8LCUi08QEjYWW9OnszXAvZKYn3O9X7dpepzS2XNs7Be_OJiBl.1XmyzDfAj1I4JwAm.T3sBgociSExMKQ4QW56KonkXsQQTxRjikco0OFuObsufgEg6U3l8AkzOS_VhpGxup.VyAtuPI5XkDkgtlzYZ12zRQQM_WSS2VzDuU284Eb3YlDoE2po7z_1BZ79j6yNQmWYZuaSvI2OekE3cgyYGkcuuyhltw
+  enabled: true

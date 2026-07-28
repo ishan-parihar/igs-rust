@@ -1,51 +1,51 @@
 use crate::config;
-use crate::types::ObscuraSettings;
+use crate::types::LightpandaSettings;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::info;
 
-/// Manages the Obscura headless browser binary lifecycle:
+/// Manages the Lightpanda headless browser binary lifecycle:
 /// - Checks for updates once per day
 /// - Downloads latest stable binary if not present or outdated
 /// - Caches version metadata to avoid redundant API calls
 /// - Provides path to the binary for subprocess invocation
-pub struct ObscuraManager {
+pub struct LightpandaManager {
     binary_dir: PathBuf,
     binary_path: PathBuf,
     version_file: PathBuf,
     last_check_file: PathBuf,
-    settings: ObscuraSettings,
+    settings: LightpandaSettings,
 }
 
-const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/h4ckf0r0day/obscura/releases";
-const GITHUB_DOWNLOAD_BASE: &str = "https://github.com/h4ckf0r0day/obscura/releases/download";
-const CHECK_INTERVAL_SECS: u64 = 86400;
+const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/lightpanda-io/browser/releases";
+const GITHUB_DOWNLOAD_BASE: &str = "https://github.com/lightpanda-io/browser/releases/download";
+const CHECK_INTERVAL_SECS: u64 = 86400; // 24 hours
 
-impl ObscuraManager {
+impl LightpandaManager {
     /// Create a new manager using the user config directory
-    pub fn new(settings: &ObscuraSettings) -> Self {
+    pub fn new(settings: &LightpandaSettings) -> Self {
         let bin_dir = config::user_config_dir().join("bin");
         Self {
-            binary_path: bin_dir.join("obscura"),
-            version_file: bin_dir.join(".obscura_version"),
-            last_check_file: bin_dir.join(".obscura_last_check"),
+            binary_path: bin_dir.join("lightpanda"),
+            version_file: bin_dir.join(".lightpanda_version"),
+            last_check_file: bin_dir.join(".lightpanda_last_check"),
             binary_dir: bin_dir,
             settings: settings.clone(),
         }
     }
 
-    /// Ensure the Obscura binary is available and up-to-date.
+    /// Ensure the Lightpanda binary is available and up-to-date.
     /// Checks at most once per day. Returns the path to the binary.
     pub async fn ensure_ready(&self) -> Result<PathBuf> {
         if !self.settings.enabled {
-            anyhow::bail!("Obscura is not enabled. Set obscura.enabled=true in settings.yml");
+            anyhow::bail!("Lightpanda is not enabled. Set lightpanda.enabled=true in settings.yml");
         }
 
         // Create bin dir if needed
         if !self.binary_dir.exists() {
             std::fs::create_dir_all(&self.binary_dir)
-                .context("Failed to create Obscura bin directory")?;
+                .context("Failed to create Lightpanda bin directory")?;
         }
 
         // Check if binary exists and if we need to check for updates
@@ -68,19 +68,17 @@ impl ObscuraManager {
 
         // Download
         let arch = Self::detect_arch()?;
-        // Obscura asset names: obscura-{arch}.tar.gz (e.g., obscura-x86_64-linux.tar.gz)
-        let asset_name = format!("obscura-{}.tar.gz", arch);
         let url = format!(
-            "{}/{}/{}",
-            GITHUB_DOWNLOAD_BASE, latest_version, asset_name
+            "{}/{}/lightpanda-{}",
+            GITHUB_DOWNLOAD_BASE, latest_version, arch
         );
 
-        info!("Downloading Obscura {} from {}", latest_version, url);
-        self.download_and_extract_binary(&url).await?;
+        info!("Downloading Lightpanda {} from {}", latest_version, url);
+        self.download_binary(&url).await?;
 
         // Write version metadata
         std::fs::write(&self.version_file, &latest_version)
-            .context("Failed to write Obscura version file")?;
+            .context("Failed to write Lightpanda version file")?;
         self.write_last_check()?;
 
         // Make executable
@@ -88,11 +86,11 @@ impl ObscuraManager {
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&self.binary_path, std::fs::Permissions::from_mode(0o755))
-                .context("Failed to make Obscura binary executable")?;
+                .context("Failed to make Lightpanda binary executable")?;
         }
 
         info!(
-            "Obscura {} installed to {:?}",
+            "Lightpanda {} installed to {:?}",
             latest_version, self.binary_path
         );
         Ok(self.binary_path.clone())
@@ -129,7 +127,7 @@ impl ObscuraManager {
 
     fn read_version_file(&self) -> Result<String> {
         std::fs::read_to_string(&self.version_file)
-            .context("Failed to read Obscura version file")
+            .context("Failed to read Lightpanda version file")
             .map(|s| s.trim().to_string())
     }
 
@@ -137,7 +135,7 @@ impl ObscuraManager {
     /// Uses /releases (plural) and filters out prerelease tags.
     async fn fetch_latest_version(&self) -> Result<String> {
         let client = reqwest::Client::builder()
-            .user_agent("igs-mcp/0.1")
+            .user_agent("igs-rust/0.1")
             .build()?;
 
         let resp = client
@@ -145,7 +143,7 @@ impl ObscuraManager {
             .header("Accept", "application/vnd.github.v3+json")
             .send()
             .await
-            .context("Failed to fetch Obscura release info")?;
+            .context("Failed to fetch Lightpanda release info")?;
 
         if !resp.status().is_success() {
             anyhow::bail!("GitHub API returned status {}", resp.status());
@@ -169,74 +167,52 @@ impl ObscuraManager {
             return Ok(tag.to_string());
         }
 
-        anyhow::bail!("No stable release found for Obscura")
+        anyhow::bail!("No stable release found for Lightpanda")
     }
 
-    /// Download and extract the binary from the given tar.gz URL
-    async fn download_and_extract_binary(&self, url: &str) -> Result<()> {
+    /// Download the binary from the given URL
+    async fn download_binary(&self, url: &str) -> Result<()> {
         let client = reqwest::Client::builder()
-            .user_agent("igs-mcp/0.1")
+            .user_agent("igs-rust/0.1")
             .build()?;
 
         let resp = client
             .get(url)
             .send()
             .await
-            .context("Failed to download Obscura binary")?;
+            .context("Failed to download Lightpanda binary")?;
 
         if !resp.status().is_success() {
             anyhow::bail!("Download returned status {}", resp.status());
         }
 
         let bytes = resp.bytes().await?;
-        
-        // Write to temp file
-        let temp_path = self.binary_dir.join("obscura.tar.gz");
-        std::fs::write(&temp_path, &bytes).context("Failed to write Obscura archive")?;
-        
-        // Extract tar.gz
-        let tar_gz = std::fs::File::open(&temp_path)?;
-        let tar = flate2::read::GzDecoder::new(tar_gz);
-        let mut archive = tar::Archive::new(tar);
-        
-        // Extract to binary_dir
-        archive.unpack(&self.binary_dir)
-            .context("Failed to extract Obscura archive")?;
-        
-        // Find the binary (should be named 'obscura' after extraction)
-        let extracted_binary = self.binary_dir.join("obscura");
-        if extracted_binary.exists() {
-            // Move to final location
-            std::fs::rename(&extracted_binary, &self.binary_path)
-                .context("Failed to move Obscura binary to final location")?;
-        } else {
-            // Try to find any executable file
-            for entry in std::fs::read_dir(&self.binary_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() {
-                    // Check if it's executable or named obscura
-                    if path.file_name().and_then(|n| n.to_str()) == Some("obscura") {
-                        std::fs::rename(&path, &self.binary_path)
-                            .context("Failed to move Obscura binary")?;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        // Clean up temp file
-        let _ = std::fs::remove_file(&temp_path);
-        
+        std::fs::write(&self.binary_path, &bytes).context("Failed to write Lightpanda binary")?;
+
         Ok(())
     }
 
-    /// Fetch with all available options including wait_selector.
+    /// Detect the current platform architecture for binary download
+    fn detect_arch() -> Result<&'static str> {
+        match (std::env::consts::ARCH, std::env::consts::OS) {
+            ("x86_64", "linux") => Ok("x86_64-linux"),
+            ("aarch64", "linux") => Ok("aarch64-linux"),
+            ("x86_64", "macos") => Ok("x86_64-macos"),
+            ("aarch64", "macos") => Ok("aarch64-macos"),
+            _ => anyhow::bail!(
+                "Unsupported platform for Lightpanda: {} {}",
+                std::env::consts::ARCH,
+                std::env::consts::OS
+            ),
+        }
+    }
+
+    /// Fetch a URL using Lightpanda with all available options
     pub async fn fetch_with_all_options(
         &self,
         url: &str,
         dump_format: &str,
-        _obey_robots: bool,
+        obey_robots: bool,
         wait_until: &str,
         _include_frames: bool,
         wait_selector: Option<&str>,
@@ -250,8 +226,12 @@ impl ObscuraManager {
             .arg(dump_format)
             .arg("--wait-until")
             .arg(wait_until)
-            .arg("--timeout")
-            .arg((self.settings.timeout_ms / 1000).to_string());
+            .arg("--wait-ms")
+            .arg(self.settings.timeout_ms.to_string());
+
+        if obey_robots {
+            cmd.arg("--obey-robots");
+        }
 
         if let Some(ref proxy) = self.settings.proxy {
             cmd.arg("--proxy").arg(proxy);
@@ -264,28 +244,13 @@ impl ObscuraManager {
         let output = cmd
             .output()
             .await
-            .context("Failed to execute Obscura fetch")?;
+            .context("Failed to execute Lightpanda fetch")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Obscura fetch failed: {}", stderr);
+            anyhow::bail!("Lightpanda fetch failed: {}", stderr);
         }
 
-        String::from_utf8(output.stdout).context("Obscura output was not valid UTF-8")
-    }
-
-    /// Detect the current platform architecture for binary download
-    fn detect_arch() -> Result<&'static str> {
-        match (std::env::consts::ARCH, std::env::consts::OS) {
-            ("x86_64", "linux") => Ok("x86_64-linux"),
-            ("aarch64", "linux") => Ok("aarch64-linux"),
-            ("x86_64", "macos") => Ok("x86_64-macos"),
-            ("aarch64", "macos") => Ok("aarch64-macos"),
-            _ => anyhow::bail!(
-                "Unsupported platform for Obscura: {} {}",
-                std::env::consts::ARCH,
-                std::env::consts::OS
-            ),
-        }
+        String::from_utf8(output.stdout).context("Lightpanda output was not valid UTF-8")
     }
 }

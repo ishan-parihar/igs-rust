@@ -1097,7 +1097,7 @@ async fn main() -> anyhow::Result<()> {
                 "  NLP:     enabled={}, max_topics={}",
                 settings.nlp.enabled, settings.nlp.max_topics
             );
-            println!("  Obscura: enabled={}", settings.obscura.enabled);
+            println!("  Obscura: enabled={}", settings.browser.obscura.enabled);
             println!("  Output:  format={}", settings.output.default_format);
 
             let pools = igs_rust_mcp::config::load_pools().await?;

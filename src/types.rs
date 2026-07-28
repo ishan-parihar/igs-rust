@@ -227,8 +227,6 @@ pub struct ObscuraSettings {
     pub proxy: Option<String>,
     #[serde(default = "default_lp_max_concurrent")]
     pub max_concurrent: u32,
-    #[serde(default)]
-    pub stealth: bool,
 }
 
 impl Default for ObscuraSettings {
@@ -240,14 +238,68 @@ impl Default for ObscuraSettings {
             timeout_ms: 30000,
             proxy: None,
             max_concurrent: 10,
-            stealth: true,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct OpenWeatherSettings {
+    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    #[serde(rename_all = "camelCase")]
+    pub struct LightpandaSettings {
+        #[serde(default)]
+        pub enabled: bool,
+        #[serde(default = "default_true")]
+        pub auto_update: bool,
+        #[serde(default = "default_true")]
+        pub obey_robots: bool,
+        #[serde(default = "default_lp_timeout")]
+        pub timeout_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
+    #[serde(default = "default_lp_max_concurrent")]
+    pub max_concurrent: u32,
+}
+
+    impl Default for LightpandaSettings {
+        fn default() -> Self {
+            Self {
+                enabled: true,
+                auto_update: true,
+                obey_robots: true,
+                timeout_ms: 30000,
+                proxy: None,
+                max_concurrent: 10,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    #[serde(rename_all = "camelCase")]
+    pub struct BrowserSettings {
+        #[serde(default = "default_browser")]
+        pub default: String,
+        #[serde(default)]
+        pub obscura: ObscuraSettings,
+        #[serde(default)]
+        pub lightpanda: LightpandaSettings,
+    }
+
+    fn default_browser() -> String {
+        "obscura".to_string()
+    }
+
+    impl Default for BrowserSettings {
+        fn default() -> Self {
+            Self {
+                default: default_browser(),
+                obscura: ObscuraSettings::default(),
+                lightpanda: LightpandaSettings::default(),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    #[serde(rename_all = "camelCase")]
+    pub struct OpenWeatherSettings {
     #[serde(default)]
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -367,8 +419,10 @@ pub struct Settings {
     pub tavily: Option<TavilySettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub firecrawl: Option<FirecrawlSettings>,
+    // Removed YAGNI field: time: TimeSettings — `timezone` was never read
+    // Removed YAGNI field: pipeline: PipelineSettings — all fields were never read
     #[serde(default)]
-    pub obscura: ObscuraSettings,
+    pub browser: BrowserSettings,
     #[serde(default)]
     pub nlp: NlpSettings,
     // Removed YAGNI field: pipeline: PipelineSettings — all fields were never read

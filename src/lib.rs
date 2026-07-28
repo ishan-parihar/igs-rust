@@ -9,6 +9,7 @@ pub(crate) mod cache;
 pub(crate) mod clustering;
 pub(crate) mod fusion;
 pub(crate) mod http;
+pub(crate) mod lightpanda;
 pub(crate) mod obscura;
 pub(crate) mod parsers;
 pub(crate) mod persistence;
