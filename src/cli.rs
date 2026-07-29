@@ -1218,6 +1218,9 @@ async fn main() -> anyhow::Result<()> {
             PoolAction::List => {
                 let result = r(pools::pools_list().await)?;
                 output(fmt, &result);
+                if result.pools.is_empty() {
+                    eprintln!("  0 pools configured — igs pools upsert --id <id> --name <name>");
+                }
                 print_next_step(&[
                     "igs pools upsert --id <id> --name <name> to create a pool",
                     "igs sources list --pool <id> to see sources in a pool",
@@ -1255,6 +1258,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                if result.sources.is_empty() {
+                    eprintln!("  0 sources found — igs sources upsert --name <name> --source-type rss --url <url>");
+                }
                 print_next_step(&[
                     "igs sources upsert --name <name> --source-type rss --url <url> to add a source",
                     "igs news fetch --sources <id> to test a source",
@@ -1333,6 +1339,9 @@ async fn main() -> anyhow::Result<()> {
             SourceAction::Countries => {
                 let result = r(sources::sources_countries().await)?;
                 output(fmt, &result);
+                if result.countries.is_empty() {
+                    eprintln!("  0 countries found — igs sources upsert to add sources first");
+                }
                 print_next_step(&[
                     "igs sources list --pool <country_code> to see sources in a country",
                     "igs news fetch --countries <code> to fetch news from a country",
@@ -1341,6 +1350,9 @@ async fn main() -> anyhow::Result<()> {
             SourceAction::Cities => {
                 let result = r(sources::sources_cities().await)?;
                 output(fmt, &result);
+                if result.cities.is_empty() {
+                    eprintln!("  0 cities found — igs sources upsert to add sources first");
+                }
                 print_next_step(&[
                     "igs sources list to see sources in these cities",
                     "igs news fetch --cities <name> to fetch news from a city",
@@ -1349,6 +1361,9 @@ async fn main() -> anyhow::Result<()> {
             SourceAction::Domains => {
                 let result = r(sources::sources_domains().await)?;
                 output(fmt, &result);
+                if result.domains.is_empty() {
+                    eprintln!("  0 domains found — igs sources upsert to add sources first");
+                }
                 print_next_step(&[
                     "igs sources list to see sources by domain",
                 ]);
