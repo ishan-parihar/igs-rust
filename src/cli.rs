@@ -1333,14 +1333,25 @@ async fn main() -> anyhow::Result<()> {
             SourceAction::Countries => {
                 let result = r(sources::sources_countries().await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs sources list --pool <country_code> to see sources in a country",
+                    "igs news fetch --countries <code> to fetch news from a country",
+                ]);
             }
             SourceAction::Cities => {
                 let result = r(sources::sources_cities().await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs sources list to see sources in these cities",
+                    "igs news fetch --cities <name> to fetch news from a city",
+                ]);
             }
             SourceAction::Domains => {
                 let result = r(sources::sources_domains().await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs sources list to see sources by domain",
+                ]);
             }
         },
 
@@ -1401,6 +1412,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs news fetch --sources <id> to fetch news from this source",
+                ]);
             }
             NewsAction::Enrich { input, extract } => {
                 let items_json = if let Some(path) = input {
@@ -1424,6 +1438,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "Pipe enriched output to `igs insights index-articles` for cross-article analysis",
+                ]);
             }
         },
 
@@ -1502,6 +1519,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs research paper --id <id> for detailed view",
+                    "igs web scrape --url <url> for full content",
+                ]);
             }
             ResearchAction::Download {
                 id,
@@ -1516,6 +1537,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs research paper --id <id> for detailed view",
+                    "igs research search --query \"...\" to search across all sources",
+                ]);
             }
             ResearchAction::PubMedSearch { query, limit } => {
                 let result = r(research::research_pubmed_search(ResearchPubMedInput {
@@ -1527,6 +1552,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs research paper --id <id> for full paper details",
+                    "igs research download --id <id> to save PDF",
+                ]);
             }
         },
 
@@ -1580,6 +1609,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs web crawl --url <site> for deep crawl",
+                    "igs web search --query \"...\" for broader search",
+                ]);
             }
             WebAction::Crawl {
                 url,
@@ -1618,6 +1651,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs web crawl --url <site> for full site mapping",
+                    "igs web scrape --url <page> for specific page content",
+                ]);
             }
         },
 
@@ -1631,6 +1668,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs twitter read --url <tweet_url> for full tweet details",
+                ]);
             }
             TwitterAction::Read { url } => {
                 let result = r(twitter::twitter_read(TwitterReadInput {
@@ -1639,6 +1679,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "Use the tweet URL to share or reference this content",
+                ]);
             }
         },
 
@@ -1650,10 +1693,17 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs youtube metadata --url <video_url> for full details",
+                    "igs youtube subtitles --url <video_url> for transcript",
+                ]);
             }
             YoutubeAction::Metadata { url } => {
                 let result = r(youtube::youtube_metadata(YoutubeMetadataInput { url }).await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs youtube subtitles --url <video_url> for transcript",
+                ]);
             }
             YoutubeAction::Subtitles { url, lang } => {
                 let result = r(youtube::youtube_subtitles(YoutubeSubtitlesInput {
@@ -1743,6 +1793,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs weather current --location <loc> for current conditions",
+                    "igs weather alerts --lat <lat> --lon <lon> for severe weather",
+                ]);
             }
             WeatherAction::Current { location } => {
                 let result = r(weather::weather_current(WeatherCurrentInput {
@@ -1751,6 +1805,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs weather forecast --location <loc> for multi-day outlook",
+                ]);
             }
             WeatherAction::Alerts { lat, lon } => {
                 let result = r(weather::weather_alerts(WeatherAlertsInput {
@@ -1760,6 +1817,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs weather forecast --location <loc> for detailed forecast",
+                ]);
             }
         },
 
@@ -1771,6 +1831,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs finance crypto --symbols <coin> for crypto prices",
+                    "igs finance trending to see top trending coins",
+                ]);
             }
             FinanceAction::Crypto { symbols } => {
                 let result = r(finance::finance_crypto(FinanceCryptoInput {
@@ -1780,6 +1844,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs finance market --symbols <ticker> for stock quotes",
+                ]);
             }
             FinanceAction::Trending => {
                 let result = r(finance::finance_trending(FinanceTrendingInput {
@@ -1787,6 +1854,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs finance crypto --symbols <coin> for specific coin details",
+                ]);
             }
         },
 
@@ -1801,6 +1871,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs security advisories --ecosystem <ecosystem> for broader advisories",
+                ]);
             }
             SecurityAction::Advisories { ecosystem } => {
                 let result = r(security::security_advisories(SecurityAdvisoriesInput {
@@ -1811,6 +1884,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs security cve --query <keyword> for specific vulnerabilities",
+                ]);
             }
         },
 
@@ -1823,6 +1899,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs govt regulations --query <topic> for regulatory documents",
+                ]);
             }
             GovtAction::Regulations { query } => {
                 let result = r(govt::govt_regulations(GovtRegulationsInput {
@@ -1831,6 +1910,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs govt bills --query <topic> for congressional bills",
+                ]);
             }
         },
 
@@ -1845,6 +1927,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs politics fec-committees --query <name> for committee data",
+                ]);
             }
             PoliticsAction::FecCommittees { query } => {
                 let result = r(
@@ -1857,6 +1942,9 @@ async fn main() -> anyhow::Result<()> {
                     .await,
                 )?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs politics fec-candidates --query <name> for candidate data",
+                ]);
             }
         },
 
@@ -1870,6 +1958,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs patents details --id <patent_id> for full patent info",
+                ]);
             }
             PatentsAction::Details { id } => {
                 let result = r(patents::patents_details(PatentDetailsInput {
@@ -1878,6 +1969,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs patents search --query <keyword> for related patents",
+                ]);
             }
         },
 
@@ -1901,6 +1995,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs satellite firms-fires --lat <lat> --lon <lon> for fire data",
+                ]);
             }
         },
 
@@ -1914,6 +2011,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs env epa-emissions --query <state_code> for emissions data",
+                ]);
             }
             EnvAction::EpaEmissions { query } => {
                 let result = r(env::env_epa_emissions(EnvEpaEmissionsInput {
@@ -1923,6 +2023,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs env epa-facilities --query <name> for facility details",
+                ]);
             }
         },
 
@@ -1936,6 +2039,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs legal case-details --id <case_id> for full case info",
+                ]);
             }
             LegalAction::CaseDetails { id } => {
                 let case_id: u32 = id
@@ -1947,6 +2053,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs legal search-cases --query <keyword> for related cases",
+                ]);
             }
         },
 
@@ -1960,6 +2069,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs health who-gho --indicator <indicator> for global health data",
+                ]);
             }
             HealthAction::WhoGho { indicator } => {
                 let result = r(health::health_who_gho(HealthWhoInput {
@@ -1971,6 +2083,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs health cdc-leading-causes --state <state> for US mortality data",
+                ]);
             }
         },
 
@@ -1991,6 +2106,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs climate noaa-stations --location <loc> for nearby stations",
+                ]);
             }
             ClimateAction::NoaaStations { location } => {
                 let result = r(climate::climate_noaa_stations(ClimateNoaaStationsInput {
@@ -2000,6 +2118,9 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs climate noaa-observations --location <loc> for weather data",
+                ]);
             }
         },
 
@@ -2025,6 +2146,10 @@ async fn main() -> anyhow::Result<()> {
                     )
                     .await)?;
                     output(fmt, &result);
+                    print_next_step(&[
+                        "Run `igs news fetch --depth deep` to index more articles",
+                        "Run `igs insights trending-entities` to detect entity trends",
+                    ]);
                 }
                 InsightsAction::TrendingEntities {
                     time_window_hours,
@@ -2042,6 +2167,9 @@ async fn main() -> anyhow::Result<()> {
                     )
                     .await)?;
                     output(fmt, &result);
+                    print_next_step(&[
+                        "Run `igs insights find-connections` to see cross-domain links",
+                    ]);
                 }
                 InsightsAction::IndexArticles { input: input_path } => {
                     let items_json = if input_path == "-" {
@@ -2058,14 +2186,23 @@ async fn main() -> anyhow::Result<()> {
                     )
                     .await)?;
                     output(fmt, &result);
+                    print_next_step(&[
+                        "Run `igs insights stats` to check index status",
+                    ]);
                 }
                 InsightsAction::Stats => {
                     let result = r(insights::insights_stats(&server.insights()).await)?;
                     output(fmt, &result);
+                    print_next_step(&[
+                        "Run `igs insights find-connections` to analyze indexed articles",
+                    ]);
                 }
                 InsightsAction::ClearIndex => {
                     let result = r(insights::insights_clear(&server.insights()).await)?;
                     output(fmt, &result);
+                    print_next_step(&[
+                        "Run `igs news fetch --depth deep` to re-index articles",
+                    ]);
                 }
             }
         }
@@ -2074,6 +2211,9 @@ async fn main() -> anyhow::Result<()> {
             SopAction::List => {
                 let result = sop::sop_list();
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs sop execute --chain <name> to run a workflow",
+                ]);
             }
             SopAction::Execute {
                 chain,
@@ -2089,6 +2229,9 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 }))?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "Run the output through `igs news enrich` for deeper analysis",
+                ]);
             }
         },
 
