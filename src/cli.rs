@@ -21,6 +21,10 @@ struct Cli {
     #[arg(long, default_value = "toon", global = true)]
     format: String,
 
+    /// Show full content (disable truncation for large fields)
+    #[arg(long, global = true)]
+    full: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -992,7 +996,25 @@ fn output<T: serde::Serialize>(format: &str, value: &T) {
     println!("{}", text);
 }
 
-// AXI helpers
+/// AXI §3: Output with truncation (disable with --full)
+fn output_truncated<T: serde::Serialize>(format: &str, value: &T, full: bool) {
+    if full {
+        output(format, value);
+        return;
+    }
+    let json_val = serde_json::to_value(value).unwrap_or_default();
+    let truncated = helpers::truncate_json_strings(&json_val, 500);
+    let text = helpers::format_text(&truncated, format);
+    println!("{}", text);
+}
+
+/// AXI §9: Print next-step hints after command output
+fn print_next_step(hints: &[&str]) {
+    eprintln!();
+    for hint in hints {
+        eprintln!("  → {}", hint);
+    }
+}
 
 
 
@@ -1008,6 +1030,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     let fmt = &cli.format;
+    let full = cli.full;
 
     match cli.command {
         // ── AXI §8 + §10: no-args home view shows live state + tool identity ──
@@ -1047,6 +1070,42 @@ async fn main() -> anyhow::Result<()> {
                     println!("  pools: {}", pools.pools.len());
                     println!("  sources: {}", sources.sources.len());
                     println!("  total_tools: {}", registry::total_tool_count());
+
+                    // AXI §8: Quick news snapshot from first active pool
+                    if let Some(first_pool) = pools.pools.first() {
+                        if let Ok(result) = news::news_fetch(NewsFetchInput {
+                            filters: DiscoveryFilters {
+                                pools: Some(vec![first_pool.id.clone()]),
+                                sources: None,
+                                countries: None,
+                                cities: None,
+                                domains: None,
+                                start: None,
+                                end: None,
+                                keywords: None,
+                                exclude_keywords: None,
+                                match_all: None,
+                                limit: Some(3),
+                                cache_mode: Some("fresh".to_string()),
+                            },
+                            discovery_mode: None,
+                            urgency: None,
+                            skip_enrich: Some(true),
+                            skip_index: Some(true),
+                            depth_opts: DepthOptions { depth: None },
+                            output: OutputOptions { format: None },
+                        })
+                        .await
+                        {
+                            if !result.items.is_empty() {
+                                println!();
+                                println!("recent[{}]{{title,source,published}}:", result.items.len());
+                                for item in &result.items {
+                                    println!("  {},{},{}", truncate_str(&item.title, 80), item.source_name, truncate_str(&item.pub_date, 10));
+                                }
+                            }
+                        }
+                    }
                 }
                 (Err(e), _) | (_, Err(e)) => {
                     println!("  not configured: {} (run 'igs status' for details)", e);
@@ -1159,6 +1218,10 @@ async fn main() -> anyhow::Result<()> {
             PoolAction::List => {
                 let result = r(pools::pools_list().await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs pools upsert --id <id> --name <name> to create a pool",
+                    "igs sources list --pool <id> to see sources in a pool",
+                ]);
             }
             PoolAction::Upsert {
                 id,
@@ -1192,6 +1255,10 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output(fmt, &result);
+                print_next_step(&[
+                    "igs sources upsert --name <name> --source-type rss --url <url> to add a source",
+                    "igs news fetch --sources <id> to test a source",
+                ]);
             }
             SourceAction::Upsert {
                 name,
@@ -1319,7 +1386,12 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 })
                 .await)?;
-                output(fmt, &result);
+                output_truncated(fmt, &result, full);
+                print_next_step(&[
+                    "Run with --full to see untruncated content",
+                    "igs news enrich --input - to add topics/entities/sentiment",
+                    "igs news summarize to extract key sentences",
+                ]);
             }
             NewsAction::Test { id, cache_mode } => {
                 let result = r(news::news_test_source(NewsTestInput {
@@ -1372,7 +1444,11 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 })
                 .await)?;
-                output(fmt, &result);
+                output_truncated(fmt, &result, full);
+                print_next_step(&[
+                    "igs reddit feed --subreddits <sub> for subreddit feeds",
+                    "igs web search --query \"...\" for broader search",
+                ]);
             }
             RedditAction::Feed { subreddits, limit } => {
                 let result = r(reddit::reddit_feed(RedditFeedInput {
@@ -1381,7 +1457,10 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 })
                 .await)?;
-                output(fmt, &result);
+                output_truncated(fmt, &result, full);
+                print_next_step(&[
+                    "igs reddit search --query \"...\" to search within subreddit",
+                ]);
             }
         },
 
@@ -1404,7 +1483,11 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 })
                 .await)?;
-                output(fmt, &result);
+                output_truncated(fmt, &result, full);
+                print_next_step(&[
+                    "igs research paper --id <id> for detailed view",
+                    "igs web scrape --url <url> for full content",
+                ]);
             }
             ResearchAction::Paper {
                 id,
@@ -1470,7 +1553,11 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 })
                 .await)?;
-                output(fmt, &result);
+                output_truncated(fmt, &result, full);
+                print_next_step(&[
+                    "igs web scrape --url <interesting_url> for full page content",
+                    "igs web crawl --url <site> for deep crawl",
+                ]);
             }
             WebAction::Scrape {
                 url,
@@ -1516,7 +1603,10 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 })
                 .await)?;
-                output(fmt, &result);
+                output_truncated(fmt, &result, full);
+                print_next_step(&[
+                    "igs web scrape --url <page_url> to extract full content from a specific page",
+                ]);
             }
             WebAction::Map { url, limit, search } => {
                 let result = r(web::web_map(WebMapInput {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 // Re-export shared toon-helper functions
-pub use toon_helper::{toon_encode, format_text, truncate_str, print_output};
+pub use toon_helper::{toon_encode, format_text, truncate_str, truncate_json_strings, print_output};
 
 /// URL-encode a string
 pub fn urlencoding(s: &str) -> String {
