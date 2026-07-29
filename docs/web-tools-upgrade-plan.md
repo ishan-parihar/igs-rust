@@ -305,20 +305,22 @@ fn compute_relevance_score(
 
 | Priority | Phase | Impact | Effort | Dependencies |
 |----------|-------|--------|--------|--------------|
+| 🔴 P0 | 3.1 Smart engine routing | High | **Low** | None |
 | 🔴 P0 | 1.5 Hacker News engine | High | Low | None |
 | 🔴 P0 | 1.6 Stack Overflow engine | High | Low | None |
-| 🔴 P0 | 1.1 Relevance scoring | High | Medium | None |
+| 🔴 P0 | 1.1 Relevance scoring (BM25/cosine from CRW) | High | Medium | None |
 | 🟠 P1 | 1.2 Content depth control | Medium | Low | 1.1 |
 | 🟠 P1 | 1.3 Highlight extraction | Medium | Medium | 1.1 |
 | 🟠 P1 | 1.4 Answer synthesis | Medium | Medium | None |
 | 🟡 P2 | 2.1 Structured JSON extraction | High | Medium | None |
-| 🟡 P2 | 2.3 Content cleaning | Medium | Medium | None |
+| 🟡 P2 | 2.3 Content cleaning (readability from CRW) | Medium | Medium | Phase A |
 | 🟡 P2 | 2.4 Metadata enrichment | Medium | Low | None |
-| 🟢 P3 | 3.1 Smart engine routing | Medium | Medium | 1.1-1.6 |
 | 🟢 P3 | 3.2 Semantic dedup | Low | Medium | None |
 | 🟢 P3 | 3.3 Result caching | Low | Low | None |
 | ⚪ P4 | 4.1 Research mode | High | High | All above |
 | ⚪ P4 | 4.2 Image search | Medium | Medium | None |
+
+> **Note:** Smart routing (3.1) moved to P0 — it's the highest-leverage, lowest-effort change. Reordering based on code review: new engines first, then scoring, then extraction.
 
 ---
 
@@ -513,28 +515,31 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 
 ### 11.4 Recommended Porting Plan
 
-**Phase A: Port Readability Extractor (1 day)**
-- Copy `extract_main_content` and `text_density` from CRW's `readability.rs`
-- Adapt to our `web.extract` and `web.scrape` tools
-- Replace our current simple selector-based extraction with CRW's text-density scoring
-- Add the 25+ scored selectors (MDN, StackOverflow, Wikipedia, generic)
-- Add the drill-down logic for too-broad containers
+> **License Note:** CRW is AGPL-3.0. Rather than copying functions wholesale, we should **reimplement from scratch** using the same proven algorithms and selector lists. The algorithms (BM25, cosine TF-IDF, text density) are standard and well-documented. The value of CRW is in the **proven selector lists** and **drill-down heuristics**, not the code itself. Reimplementing avoids AGPL contamination.
 
-**Phase B: Port BM25/Cosine Scoring (1 day)**
-- Copy `filter_chunks_scored`, `filter_bm25_scored`, `filter_cosine_scored` from CRW's `filter.rs`
+**Phase A: Reimplement Readability Extractor (1 day)**
+- Reimplement `text_density` (3 lines — trivial from scratch)
+- Copy the **selector list** (not the code) from CRW's `readability.rs`:
+  - Priority: `article`, `main`, `[role="main"]`
+  - Scored: `.post-content`, `.article-body`, `.entry-content`, `.main-page-content`, `.js-post-body`, `.s-prose`, `#question`, `.mw-parser-output`, `#mw-content-text`, etc.
+- Reimplement the drill-down logic for too-broad containers (>90% of body)
+- Add penalty tokens for nav/sidebar/filter elements
+- Apply to `web.extract` and `web.scrape` tools
+
+**Phase B: Reimplement BM25/Cosine Scoring (1 day)**
+- Reimplement BM25 using standard algorithm (Wikipedia reference)
+- Reimplement cosine TF-IDF using standard algorithm
 - Add to `web.search` for result ranking after dedup
-- Add to `web.extract` for chunk-based extraction
 - Use for highlight extraction (top-K relevant sentences)
 
-**Phase C: Port Reranking Pipeline (2 days)**
-- Copy junk filtering (`is_junk`, `JUNK_HOSTS`, `STOPWORDS`) from CRW's `rerank.rs`
-- Copy coverage gates (`covers`, `coverage_count`, `MIN_COVERAGE`)
-- Copy domain dedup (`registrable`, `domain`)
-- Adapt to our `WebSearchResult` type
+**Phase C: Reimplement Reranking Pipeline (2 days)**
+- Reimplement junk filtering using CRW's **data lists** (JUNK_HOSTS, STOPWORDS) — these are just string sets, not copyrightable
+- Reimplement coverage gates (`MIN_COVERAGE = 0.5`)
+- Reimplement domain dedup (`registrable` = last two labels of host)
 - Apply after engine-specific scoring, before final output
 
-**Phase D: Port Content Cleaning (1 day)**
-- Copy the scored selectors list from CRW's `readability.rs`
+**Phase D: Reimplement Content Cleaning (1 day)**
+- Use the **selector list** from CRW (not the code)
 - Add to `extract_semantic_excerpt` and `extract_main_text`
 - Add the penalty tokens for nav/sidebar/filter elements
 
