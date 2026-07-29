@@ -1,7 +1,7 @@
 use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 /// Extract domain from a URL string
@@ -36,8 +36,297 @@ fn extract_internal_links(
         .collect()
 }
 
+/// Domain authority lookup for relevance scoring.
+/// Higher scores = more authoritative sources.
+fn domain_authority(domain: &str) -> f64 {
+    let lower = domain.to_lowercase();
+    static AUTHORITIES: &[(&str, f64)] = &[
+        ("github.com", 0.95),
+        ("stackoverflow.com", 0.90),
+        ("arxiv.org", 0.85),
+        ("wikipedia.org", 0.85),
+        ("news.ycombinator.com", 0.85),
+        ("developer.mozilla.org", 0.90),
+        ("docs.python.org", 0.85),
+        ("docs.rs", 0.85),
+        ("crates.io", 0.80),
+        ("reddit.com", 0.70),
+        ("medium.com", 0.65),
+        ("dev.to", 0.65),
+        ("stackoverflow.blog", 0.75),
+        ("arstechnica.com", 0.75),
+        ("techcrunch.com", 0.75),
+        ("theverge.com", 0.70),
+        ("reuters.com", 0.85),
+        ("apnews.com", 0.85),
+        ("bbc.com", 0.80),
+        ("nytimes.com", 0.80),
+        ("nature.com", 0.85),
+        ("sciencedirect.com", 0.80),
+    ];
+    for (pattern, score) in AUTHORITIES {
+        if lower.contains(pattern) {
+            return *score;
+        }
+    }
+    0.5 // default authority for unknown domains
+}
+
+/// Compute keyword relevance score (0.0-1.0) between a query and text.
+/// Uses term frequency weighting.
+fn keyword_relevance(title: &str, content: &str, query: &str) -> f64 {
+    let query_lower = query.to_lowercase();
+    let query_words: Vec<&str> = query_lower.split_whitespace().filter(|w| w.len() > 1).collect();
+    if query_words.is_empty() {
+        return 0.5;
+    }
+
+    let title_lower = title.to_lowercase();
+    let content_lower = content.to_lowercase();
+    let combined = format!("{} {}", title_lower, content_lower);
+
+    let mut matched = 0;
+    for word in &query_words {
+        if title_lower.contains(word) {
+            matched += 2; // title match counts double
+        } else if combined.contains(word) {
+            matched += 1;
+        }
+    }
+
+    (matched as f64 / (query_words.len() as f64 * 2.0)).min(1.0)
+}
+
+/// Compute freshness score (0.0-1.0) from a date string.
+/// Newer results get higher scores.
+fn freshness_score(published_date: Option<&str>) -> f64 {
+    let Some(date_str) = published_date else {
+        return 0.5; // unknown date gets neutral score
+    };
+
+    // Try to parse ISO date or relative time
+    if let Ok(dt) = chrono::NaiveDate::parse_from_str(
+        date_str.split('T').next().unwrap_or(date_str),
+        "%Y-%m-%d"
+    ) {
+        let today = chrono::Utc::now().date_naive();
+        let days_old = (today - dt).num_days().max(0);
+        match days_old {
+            0..=1 => 1.0,
+            2..=7 => 0.9,
+            8..=30 => 0.7,
+            31..=90 => 0.5,
+            91..=365 => 0.3,
+            _ => 0.1,
+        }
+    } else if date_str.contains("hour") || date_str.contains("minute") || date_str.contains("just now") {
+        1.0
+    } else if date_str.contains("day") {
+        0.8
+    } else if date_str.contains("week") {
+        0.6
+    } else if date_str.contains("month") {
+        0.4
+    } else if date_str.contains("year") {
+        0.2
+    } else {
+        0.5
+    }
+}
+
+/// Compute composite relevance score for a search result.
+/// Weights: keyword 50%, freshness 20%, domain authority 30%.
+fn compute_relevance_score(result: &WebSearchResult, query: &str) -> f64 {
+    let keyword = keyword_relevance(
+        &result.title,
+        result.content.as_deref().unwrap_or(""),
+        query,
+    );
+    let freshness = freshness_score(result.published_date.as_deref());
+    let authority = result.domain.as_deref().map(domain_authority).unwrap_or(0.5);
+
+    keyword * 0.5 + freshness * 0.2 + authority * 0.3
+}
+
+/// Extract key sentences from text that match the query (highlights).
+/// Returns up to 5 sentences, scored by query term overlap.
+fn extract_highlights(text: &str, query: &str, max_highlights: usize) -> Vec<String> {
+    let query_words: Vec<String> = query
+        .to_lowercase()
+        .split_whitespace()
+        .filter(|w| w.len() > 1)
+        .map(|w| w.to_string())
+        .collect();
+
+    if query_words.is_empty() || text.is_empty() {
+        return vec![];
+    }
+
+    // Split into sentences
+    let sentences: Vec<String> = text
+        .split(|c: char| c == '.' || c == '!' || c == '?')
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.len() > 30 && s.len() < 500)
+        .collect();
+
+    // Score each sentence by query word overlap
+    let mut scored: Vec<(f64, String)> = sentences
+        .into_iter()
+        .map(|s| {
+            let lower = s.to_lowercase();
+            let score: f64 = query_words
+                .iter()
+                .map(|w| if lower.contains(w.as_str()) { 1.0 } else { 0.0 })
+                .sum();
+            (score, s)
+        })
+        .filter(|(score, _)| *score > 0.0)
+        .collect();
+
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored.into_iter().take(max_highlights).map(|(_, s)| s).collect()
+}
+
+/// Truncate content to the specified length mode.
+/// Uses char-counting to avoid panics on non-ASCII text.
+fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
+    let text = content?;
+    let max = match mode {
+        "minimal" => 150,
+        "full" => 2500,
+        _ => 600, // standard
+    };
+    if text.chars().count() <= max {
+        Some(text.to_string())
+    } else {
+        // Truncate to max chars, then trim to last word boundary
+        let truncated: String = text.chars().take(max).collect();
+        match truncated.rfind(' ') {
+            Some(byte_pos) => {
+                Some(format!("{}...", &truncated[..byte_pos]))
+            }
+            _ => Some(format!("{}...", truncated)),
+        }
+    }
+}
+
+/// Domain-level dedup: keep highest-scoring result per registrable domain.
+fn domain_dedup(results: &mut Vec<WebSearchResult>) {
+    // Common multi-part TLDs that should be treated as a single suffix
+    static MULTI_PART_TLDS: &[&str] = &[
+        "co.uk", "com.au", "co.nz", "co.za", "co.in", "co.jp",
+        "com.br", "com.cn", "com.mx", "com.sg", "com.tw",
+        "or.jp", "ne.jp", "net.au", "org.au",
+    ];
+
+    // Extract registrable domain (e.g., "bbc.co.uk" from "www.bbc.co.uk")
+    fn registrable_domain(domain: &str) -> String {
+        let lower = domain.to_lowercase();
+        // Check for known multi-part TLDs
+        for tld in MULTI_PART_TLDS {
+            if let Some(pos) = lower.rfind(tld) {
+                let before = &lower[..pos];
+                if let Some(dot) = before.rfind('.') {
+                    return format!("{}{}", &before[dot + 1..], tld);
+                }
+            }
+        }
+        // Default: last two labels
+        let parts: Vec<&str> = lower.split('.').collect();
+        if parts.len() <= 2 {
+            lower
+        } else {
+            format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1])
+        }
+    }
+
+    let mut best_by_domain: HashMap<String, usize> = HashMap::new();
+    let mut to_remove = HashSet::new();
+
+    for (i, result) in results.iter().enumerate() {
+        if let Some(ref domain) = result.domain {
+            let reg = registrable_domain(domain);
+            if let Some(&prev_idx) = best_by_domain.get(&reg) {
+                // Keep the one with higher score
+                let prev_score = results[prev_idx].score.unwrap_or(0.0);
+                let cur_score = result.score.unwrap_or(0.0);
+                if cur_score > prev_score {
+                    to_remove.insert(prev_idx);
+                    best_by_domain.insert(reg, i);
+                } else {
+                    to_remove.insert(i);
+                }
+            } else {
+                best_by_domain.insert(reg, i);
+            }
+        }
+    }
+
+    if !to_remove.is_empty() {
+        let mut idx = 0;
+        results.retain(|_| {
+            let keep = !to_remove.contains(&idx);
+            idx += 1;
+            keep
+        });
+    }
+}
+
+/// Smart topic-based engine routing.
+/// Automatically selects optimal engines based on query intent.
+fn route_engines(topic: &str, query: &str) -> Vec<String> {
+    let query_lower = query.to_lowercase();
+
+    // Detect topic from query keywords if not explicit
+    let effective_topic = if topic != "general" {
+        topic
+    } else if query_lower.contains("rust") || query_lower.contains("python") || query_lower.contains("javascript")
+        || query_lower.contains("code") || query_lower.contains("api") || query_lower.contains("library")
+        || query_lower.contains("function") || query_lower.contains("error") || query_lower.contains("bug")
+        || query_lower.contains("compiler") || query_lower.contains("package") || query_lower.contains("crate")
+    {
+        "code"
+    } else if query_lower.contains("news") || query_lower.contains("breaking") || query_lower.contains("today")
+        || query_lower.contains("yesterday") || query_lower.contains("latest") || query_lower.contains("recent")
+    {
+        "news"
+    } else if query_lower.contains("research") || query_lower.contains("paper") || query_lower.contains("study")
+        || query_lower.contains("journal") || query_lower.contains("clinical") || query_lower.contains("trial")
+    {
+        "academic"
+    } else {
+        "general"
+    };
+
+    match effective_topic {
+        "code" => vec![
+            "github".to_string(),
+            "stackoverflow".to_string(),
+            "hackernews".to_string(),
+            "duckduckgo".to_string(),
+        ],
+        "news" => vec![
+            "duckduckgo".to_string(),
+            "brave".to_string(),
+            "hackernews".to_string(),
+        ],
+        "academic" => vec![
+            "wikipedia".to_string(),
+            "github".to_string(),
+            "duckduckgo".to_string(),
+        ],
+        _ => vec![ // general
+            "duckduckgo".to_string(),
+            "brave".to_string(),
+            "wikipedia".to_string(),
+            "hackernews".to_string(),
+        ],
+    }
+}
+
 /// Search the web using multiple engines in parallel.
-/// Engines: duckduckgo (Obscura, free), brave (HTTP API, free tier), wikipedia (REST API, free), github (REST API, free).
+/// Engines: duckduckgo (Obscura, free), brave (HTTP API, free tier), wikipedia (REST API, free),
+///          github (REST API, free), hackernews (Algolia API, free), stackoverflow (StackExchange API, free).
 /// Supports "fast" mode (snippets only) and "deep" mode (scrape result pages for 500-2000 char excerpts).
 pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String> {
     let settings = config::load_settings()
@@ -47,16 +336,12 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
     let max_results: usize = input.max_results.unwrap_or(10) as usize;
     let depth = input.depth.as_deref().unwrap_or("fast");
     let topic = input.topic.as_deref().unwrap_or("general");
+    let content_length = input.content_length.as_deref().unwrap_or("standard");
+    let include_highlights = input.include_highlights.unwrap_or(false);
     let is_deep = depth == "deep";
 
     // Determine which engines to use
-    let engines = input.engines.clone().unwrap_or_else(|| {
-        match topic {
-            "code" => vec!["github".to_string(), "duckduckgo".to_string()],
-            "news" => vec!["duckduckgo".to_string(), "brave".to_string()],
-            _ => vec!["duckduckgo".to_string(), "brave".to_string(), "wikipedia".to_string()],
-        }
-    });
+    let engines = input.engines.clone().unwrap_or_else(|| route_engines(topic, &input.query));
 
     let start = Instant::now();
 
@@ -94,6 +379,20 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let topic_clone = topic.to_string();
                 handles.push(tokio::spawn(async move {
                     search_github(&q, max_results, &http_clone, &topic_clone).await
+                }));
+            }
+            "hackernews" => {
+                let q = input.query.clone();
+                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                handles.push(tokio::spawn(async move {
+                    search_hackernews(&q, max_results, &http_clone).await
+                }));
+            }
+            "stackoverflow" => {
+                let q = input.query.clone();
+                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                handles.push(tokio::spawn(async move {
+                    search_stackoverflow(&q, max_results, &http_clone).await
                 }));
             }
             _ => {} // skip unknown engines
@@ -148,8 +447,20 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
         });
     }
 
-    // Truncate to max_results
-    deduped.truncate(max_results);
+    // Compute relevance scores for all results
+    for result in &mut deduped {
+        result.score = Some(compute_relevance_score(result, &input.query));
+    }
+
+    // Domain-level dedup: keep highest-scoring result per registrable domain
+    domain_dedup(&mut deduped);
+
+    // Sort by score (highest first)
+    deduped.sort_by(|a, b| {
+        b.score.unwrap_or(0.0)
+            .partial_cmp(&a.score.unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Deep mode: scrape each result page for semantic excerpts
     if is_deep && !deduped.is_empty() {
@@ -177,19 +488,62 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
         }
     }
 
+    // Apply content depth control (skip in deep mode — deep already provides full excerpts)
+    if !is_deep {
+        for result in &mut deduped {
+            result.content = truncate_content(result.content.as_deref(), content_length);
+        }
+    }
+
+    // Extract highlights if requested (only from substantial text)
+    if include_highlights {
+        for result in &mut deduped {
+            let text = result
+                .raw_content
+                .as_deref()
+                .or(result.content.as_deref())
+                .unwrap_or("");
+            // Only extract highlights from text with enough content (>200 chars)
+            if text.len() > 200 {
+                let hl = extract_highlights(text, &input.query, 5);
+                if !hl.is_empty() {
+                    result.highlights = Some(hl);
+                }
+            }
+        }
+    }
+
+    // Truncate to max_results
+    deduped.truncate(max_results);
+
     let elapsed_ms = start.elapsed().as_millis() as u64;
     let count = deduped.len();
+
+    // Compute answer confidence: based on engine count and result diversity
+    let confidence = if answer.is_some() {
+        let engine_count = engines_used.len() as f64;
+        let domain_count = deduped.iter()
+            .filter_map(|r| r.domain.as_ref())
+            .collect::<HashSet<_>>()
+            .len() as f64;
+        let base = 0.5 + (engine_count * 0.1).min(0.3) + (domain_count * 0.05).min(0.2);
+        Some(base.min(1.0))
+    } else {
+        None
+    };
 
     Ok(WebSearchOutput {
         count,
         results: deduped,
         answer,
+        confidence,
         meta: WebSearchMeta {
             provider: engines_used.join("+"),
             query: input.query,
             engines_used,
             response_time_ms: elapsed_ms,
             total_results: count,
+            scored: Some(true),
         },
     })
 }
@@ -285,6 +639,7 @@ fn parse_duckduckgo_html(html: &str, max_results: usize) -> Vec<WebSearchResult>
                                 url,
                                 content: snippet,
                                 score: None,
+                                highlights: None,
                                 raw_content: None,
                                 source: Some("duckduckgo".to_string()),
                                 domain,
@@ -399,6 +754,7 @@ async fn search_brave(
                             url: url_str,
                             content: if description.is_empty() { None } else { Some(description) },
                             score: None,
+                            highlights: None,
                             raw_content: None,
                             source: Some("brave".to_string()),
                             domain,
@@ -453,6 +809,7 @@ async fn search_wikipedia(
                             url,
                             content: Some(extract),
                             score: Some(1.0),
+                            highlights: None,
                             raw_content: None,
                             source: Some("wikipedia".to_string()),
                             domain: Some("wikipedia.org".to_string()),
@@ -493,6 +850,7 @@ async fn search_wikipedia(
                             url,
                             content: if snippet.is_empty() { None } else { Some(snippet) },
                             score: Some(0.8),
+                            highlights: None,
                             raw_content: None,
                             source: Some("wikipedia".to_string()),
                             domain: Some("wikipedia.org".to_string()),
@@ -552,6 +910,7 @@ async fn search_github(
                             url: html_url,
                             content: Some(content),
                             score: Some(stars as f64 / 100000.0).map(|s| s.min(1.0)),
+                            highlights: None,
                             raw_content: None,
                             source: Some("github".to_string()),
                             domain: Some("github.com".to_string()),
@@ -592,6 +951,7 @@ async fn search_github(
                             url: html_url,
                             content: if content.is_empty() { None } else { Some(content) },
                             score: Some(score_val),
+                            highlights: None,
                             raw_content: None,
                             source: Some("github".to_string()),
                             domain: Some("github.com".to_string()),
@@ -607,6 +967,147 @@ async fn search_github(
     } // end if topic == "code"
 
     Ok(("github".to_string(), results, None))
+}
+
+// ─── Hacker News Engine (Algolia API) ─────────────────────────
+
+/// Search Hacker News via Algolia's free API. Returns (engine_name, results, answer).
+/// API: https://hn.algolia.com/api/v1/search?query={q}&tags=story&hitsPerPage={limit}
+async fn search_hackernews(
+    query: &str,
+    max_results: usize,
+    http: &HttpClient,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
+    let hits = max_results.min(30);
+    let url = format!(
+        "https://hn.algolia.com/api/v1/search?query={}&tags=story&hitsPerPage={}",
+        query_encoded, hits
+    );
+
+    match http.fetch(&url, None, "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("HN parse error: {}", e))?;
+
+            let mut results = Vec::new();
+
+            if let Some(hits_arr) = json["hits"].as_array() {
+                for hit in hits_arr.iter().take(max_results) {
+                    let title = hit["title"].as_str().unwrap_or("").to_string();
+                    let url_str = hit["url"].as_str()
+                        .unwrap_or(&format!("https://news.ycombinator.com/item?id={}", hit["objectID"].as_str().unwrap_or("")))
+                        .to_string();
+                    let author = hit["author"].as_str().unwrap_or("").to_string();
+                    let points = hit["points"].as_u64().unwrap_or(0);
+                    let num_comments = hit["num_comments"].as_u64().unwrap_or(0);
+                    let created_at = hit["created_at"].as_str().unwrap_or("").to_string();
+
+                    let content = format!(
+                        "⬆️ {} points | 💬 {} comments | by {}",
+                        points, num_comments, author
+                    );
+
+                    results.push(WebSearchResult {
+                        title,
+                        url: url_str,
+                        content: Some(content),
+                        score: Some((points as f64 / 500.0).min(1.0)),
+                        highlights: None,
+                        raw_content: None,
+                        source: Some("hackernews".to_string()),
+                        domain: Some("news.ycombinator.com".to_string()),
+                        published_date: Some(created_at),
+                        favicon: None,
+                    });
+                }
+            }
+
+            Ok(("hackernews".to_string(), results, None))
+        }
+        Ok(http_mod::FetchOutcome::Cached(_)) => {
+            // Bypass mode should never return Cached; treat as error
+            Err("HN API: unexpected cached response in bypass mode".into())
+        }
+        Err(e) => Err(format!("HN API error: {}", e)),
+    }
+}
+
+// ─── Stack Overflow Engine (StackExchange API) ────────────────
+
+/// Search Stack Overflow via StackExchange API (free, 10K requests/day with API key).
+/// Returns (engine_name, results, answer).
+/// API: https://api.stackexchange.com/2.3/search?order=desc&sort=relevance&intitle={q}&site=stackoverflow
+async fn search_stackoverflow(
+    query: &str,
+    max_results: usize,
+    http: &HttpClient,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
+    let pagesize = max_results.min(20);
+    // Use 'all' instead of 'intitle' to search title+body for better relevance
+    let url = format!(
+        "https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q={}&site=stackoverflow&pagesize={}&filter=withbody",
+        query_encoded, pagesize
+    );
+
+    match http.fetch(&url, None, "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("SO parse error: {}", e))?;
+
+            let mut results = Vec::new();
+
+            if let Some(items) = json["items"].as_array() {
+                for item in items.iter().take(max_results) {
+                    let title = item["title"].as_str().unwrap_or("").to_string();
+                    let link = item["link"].as_str().unwrap_or("").to_string();
+                    let score = item["score"].as_i64().unwrap_or(0);
+                    let answer_count = item["answer_count"].as_u64().unwrap_or(0);
+                    let tags: Vec<String> = item["tags"].as_array()
+                        .map(|arr| arr.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect())
+                        .unwrap_or_default();
+                    let created = item["creation_date"].as_i64().unwrap_or(0);
+                    let view_count = item["view_count"].as_u64().unwrap_or(0);
+
+                    // Convert unix timestamp to ISO date
+                    let date_str = if created > 0 {
+                        let dt = chrono::DateTime::from_timestamp(created, 0)
+                            .map(|d| d.format("%Y-%m-%d").to_string())
+                            .unwrap_or_default();
+                        dt
+                    } else {
+                        String::new()
+                    };
+
+                    let content = format!(
+                        "{} score | {} answers | 👁️ {} views | tags: {}",
+                        score, answer_count, view_count, tags.join(", ")
+                    );
+
+                    results.push(WebSearchResult {
+                        title,
+                        url: link,
+                        content: Some(content),
+                        score: Some((score as f64 / 100.0).min(1.0).max(0.0)),
+                        highlights: None,
+                        raw_content: None,
+                        source: Some("stackoverflow".to_string()),
+                        domain: Some("stackoverflow.com".to_string()),
+                        published_date: if date_str.is_empty() { None } else { Some(date_str) },
+                        favicon: None,
+                    });
+                }
+            }
+
+            Ok(("stackoverflow".to_string(), results, None))
+        }
+        Ok(http_mod::FetchOutcome::Cached(_)) => {
+            // Bypass mode should never return Cached; treat as error
+            Err("SO API: unexpected cached response in bypass mode".into())
+        }
+        Err(e) => Err(format!("SO API error: {}", e)),
+    }
 }
 
 pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String> {

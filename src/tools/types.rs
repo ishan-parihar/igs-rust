@@ -577,20 +577,30 @@ pub struct WebSearchInput {
     pub query: String,
     /// Max results (default: 10)
     pub max_results: Option<i32>,
-    /// Search engines to use (default: ["duckduckgo"]). Options: duckduckgo, brave, wikipedia, github
+    /// Search engines to use (auto-selected by topic if omitted).
+    /// Options: duckduckgo, brave, wikipedia, github, hackernews, stackoverflow
     pub engines: Option<Vec<String>>,
-    /// Search depth: "fast" (DDG snippets only, ~2s) or "deep" (scrape result pages for 500-2000 char excerpts, ~5-10s)
+    /// Search depth: "fast" (snippets only, ~2s) or "deep" (scrape pages for 500-2000 char excerpts, ~5-10s)
     pub depth: Option<String>,
-    /// Topic filter: "general", "news", "code" (routes to GitHub for code)
+    /// Topic filter for smart engine routing:
+    ///   "general" → DDG + Brave + Wikipedia + Hacker News
+    ///   "news"    → DDG + Brave + Hacker News
+    ///   "code"    → GitHub + Stack Overflow + Hacker News
+    ///   "medical" → Wikipedia + PubMed (via research)
+    ///   "academic"→ Wikipedia + GitHub
     pub topic: Option<String>,
+    /// Content depth: "minimal" (title+snippet, ~100 chars), "standard" (title+500 chars, default), "full" (title+2000 chars)
+    pub content_length: Option<String>,
+    /// Include key sentence highlights matching the query
+    pub include_highlights: Option<bool>,
+    /// Include answer synthesis from multiple engines
+    pub include_answer: Option<bool>,
     /// Include domains
     pub include_domains: Option<Vec<String>>,
     /// Exclude domains
     pub exclude_domains: Option<Vec<String>>,
     /// Days back (for news topic)
     pub days: Option<i32>,
-    /// Include answer synthesis from DuckDuckGo Instant Answer API
-    pub include_answer: Option<bool>,
     /// Provider (backward compat, ignored)
     pub provider: Option<String>,
     #[serde(flatten)]
@@ -604,17 +614,23 @@ pub struct WebSearchMeta {
     pub engines_used: Vec<String>,
     pub response_time_ms: u64,
     pub total_results: usize,
+    /// Whether results were scored by relevance
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scored: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchResult {
     pub title: String,
     pub url: String,
-    /// Clean content snippet (500-2000 chars in deep mode, meta description in fast mode)
+    /// Clean content snippet (controlled by content_length: ~100/500/2000 chars)
     pub content: Option<String>,
-    /// Relevance score 0.0-1.0
+    /// Relevance score 0.0-1.0 (computed from keyword match + freshness + domain authority)
     pub score: Option<f64>,
-    /// Full page text (only when include_raw_content=true)
+    /// Key sentences matching the query (up to 5 highlights)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub highlights: Option<Vec<String>>,
+    /// Full page text (only in deep mode)
     pub raw_content: Option<String>,
     /// Source engine that produced this result
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -636,6 +652,9 @@ pub struct WebSearchOutput {
     pub count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
+    /// Overall confidence in the answer (0.0-1.0)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
     pub meta: WebSearchMeta,
 }
 

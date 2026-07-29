@@ -356,7 +356,7 @@ pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
         vec![
             ToolGuideItem {
                 name: "web.search".to_string(),
-                description: "Real-time web search (Tavily)".to_string(),
+                description: "Multi-engine web search (DDG, Brave, Wikipedia, GitHub, Hacker News, Stack Overflow)".to_string(),
             },
             ToolGuideItem {
                 name: "web.scrape".to_string(),

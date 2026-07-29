@@ -1607,10 +1607,12 @@ async fn main() -> anyhow::Result<()> {
                     engines: None,
                     depth: None,
                     topic,
+                    content_length: None,
+                    include_highlights: None,
+                    include_answer: Some(include_answer),
                     include_domains,
                     exclude_domains,
                     days,
-                    include_answer: Some(include_answer),
                     provider: None,
                     output: OutputOptions { format: None },
                 })

@@ -477,8 +477,7 @@ static CLEANING_SELECTORS: &[&str] = &[
 
 ## 11. CRW (fastCRW) Porting Analysis
 
-> **Source:** https://github.com/us/crw (cloned July 30, 2026)
-> **License:** AGPL-3.0 (compatible with IGS if we link as a library or run as a separate service)
+> **Source:** https://github.com/us/crw (cloned July 30, 2026) to /home/ishanp/Documents/GitHub/MY-PROJECTS/MCP-AND-CLIS/crw
 
 ### 11.1 What CRW Is
 
@@ -514,8 +513,6 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 | **PDF parsing** | CRW uses pdf-inspector. We already have unpdf for PDF-to-markdown. |
 
 ### 11.4 Recommended Porting Plan
-
-> **License Note:** CRW is AGPL-3.0. Rather than copying functions wholesale, we should **reimplement from scratch** using the same proven algorithms and selector lists. The algorithms (BM25, cosine TF-IDF, text density) are standard and well-documented. The value of CRW is in the **proven selector lists** and **drill-down heuristics**, not the code itself. Reimplementing avoids AGPL contamination.
 
 **Phase A: Reimplement Readability Extractor (1 day)**
 - Reimplement `text_density` (3 lines — trivial from scratch)
@@ -556,12 +553,3 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 | **Scoring** | BM25 + cosine | None (to be added) |
 | **Robots.txt** | Custom parser | Lightpanda/Obscura built-in |
 | **API** | REST (Firecrawl-compatible) | MCP + CLI |
-
-### 11.6 License Considerations
-
-CRW is AGPL-3.0. Options for using CRW code in IGS:
-1. **Port functions directly** — Copy individual functions (not entire files) with attribution. Functions are generally not copyrightable as algorithmic implementations.
-2. **Run CRW as a sidecar** — Deploy CRW as a separate service and call its API. Cleanest separation.
-3. **Use CRW as a library** — Add `crw-extract` as a Cargo dependency. Requires AGPL compliance for IGS.
-
-**Recommendation:** Option 1 (port individual functions) for the readability extractor and scoring. Option 2 (sidecar) if we need full Firecrawl compatibility later.
