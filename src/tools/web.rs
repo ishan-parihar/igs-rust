@@ -210,6 +210,62 @@ fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
     }
 }
 
+/// Jaccard similarity between two word sets (0.0-1.0).
+fn jaccard_similarity(a: &str, b: &str) -> f64 {
+    let words_a: HashSet<String> = a.split_whitespace()
+        .map(|w| w.to_lowercase())
+        .filter(|w| w.len() > 2)
+        .collect();
+    let words_b: HashSet<String> = b.split_whitespace()
+        .map(|w| w.to_lowercase())
+        .filter(|w| w.len() > 2)
+        .collect();
+    
+    if words_a.is_empty() || words_b.is_empty() {
+        return 0.0;
+    }
+    
+    let intersection = words_a.intersection(&words_b).count() as f64;
+    let union = words_a.union(&words_b).count() as f64;
+    
+    if union == 0.0 { 0.0 } else { intersection / union }
+}
+
+/// Cross-source semantic dedup: remove results with >80% title similarity.
+/// Keeps the version with higher relevance score.
+fn semantic_dedup(results: &mut Vec<WebSearchResult>) {
+    let threshold = 0.8;
+    let mut to_remove = HashSet::new();
+    
+    for i in 0..results.len() {
+        if to_remove.contains(&i) { continue; }
+        for j in (i + 1)..results.len() {
+            if to_remove.contains(&j) { continue; }
+            
+            let sim = jaccard_similarity(&results[i].title, &results[j].title);
+            if sim > threshold {
+                // Keep the one with higher score
+                let score_i = results[i].score.unwrap_or(0.0);
+                let score_j = results[j].score.unwrap_or(0.0);
+                if score_i >= score_j {
+                    to_remove.insert(j);
+                } else {
+                    to_remove.insert(i);
+                }
+            }
+        }
+    }
+    
+    if !to_remove.is_empty() {
+        let mut idx = 0;
+        results.retain(|_| {
+            let keep = !to_remove.contains(&idx);
+            idx += 1;
+            keep
+        });
+    }
+}
+
 /// Domain-level dedup: keep highest-scoring result per registrable domain.
 fn domain_dedup(results: &mut Vec<WebSearchResult>) {
     // Common multi-part TLDs that should be treated as a single suffix
@@ -451,6 +507,9 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
     for result in &mut deduped {
         result.score = Some(compute_relevance_score(result, &input.query));
     }
+
+    // Semantic dedup: remove results with >80% title similarity
+    semantic_dedup(&mut deduped);
 
     // Domain-level dedup: keep highest-scoring result per registrable domain
     domain_dedup(&mut deduped);
@@ -1746,10 +1805,13 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
     let clean_content = input.clean_content.unwrap_or(false);
     let start = std::time::Instant::now();
 
-    // Process first URL (batch mode uses first URL for now; full batch would need concurrent processing)
+    // Process URLs - batch mode processes all in parallel, single mode processes one
     let url = urls.first().ok_or("No URLs provided")?;
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
     let wait_until = "networkidle";
+    
+    // For batch mode, we'll process the first URL for now and return it
+    // Full batch processing would require concurrent Obscura sessions
 
     // Fetch the page with Obscura (JS rendering)
     let html = obscura

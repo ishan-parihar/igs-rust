@@ -1708,7 +1708,6 @@ async fn main() -> anyhow::Result<()> {
                     extract_images: Some(extract_images),
                     wait_selector: None,
                     include_html: Some(include_html),
-                    output_schema: None,
                     clean_content: None,
                     output: OutputOptions { format: None },
                 })

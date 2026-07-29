@@ -792,8 +792,6 @@ pub struct WebExtractInput {
     pub wait_selector: Option<String>,
     /// Include raw HTML in output
     pub include_html: Option<bool>,
-    /// JSON schema for structured extraction (returns validated JSON matching schema)
-    pub output_schema: Option<serde_json::Value>,
     /// Apply content cleaning pipeline (remove nav, ads, boilerplate)
     pub clean_content: Option<bool>,
     #[serde(flatten)]
