@@ -22,29 +22,6 @@ cache:
   # These fields are still accepted in settings.yml for backward compat
   # but are no longer read by any code path.
 
-# ─── Web Search Providers ─────────────────────────────────────
-
-# Tavily — AI-powered web search
-# Get API key: https://tavily.com
-tavily:
-  enabled: true
-  apiKey: ${TAVILY_API_KEY}
-  searchDepth: basic
-  defaultTopic: general
-  timeoutMs: 30000
-
-# Firecrawl — Web scraping and crawling API
-# Get API key: https://firecrawl.dev
-firecrawl:
-  enabled: true
-  apiKey: ${FIRECRAWL_API_KEY}
-  timeoutMs: 60000
-  defaultFormats:
-    - markdown
-    - html
-    - screenshot
-    - links
-
 # ─── Obscura Headless Browser ─────────────────────────────────
 obscura:
   enabled: true

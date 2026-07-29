@@ -396,7 +396,7 @@ enum ResearchAction {
 
 #[derive(Subcommand)]
 enum WebAction {
-    /// Web search via Tavily/Firecrawl
+    /// Web search via Obscura + DuckDuckGo (no API keys required)
     Search {
         #[arg(long)]
         query: String,
@@ -408,9 +408,6 @@ enum WebAction {
         include_domains: Option<Vec<String>>,
         #[arg(long, value_delimiter = ',')]
         exclude_domains: Option<Vec<String>>,
-        /// Search provider: auto, tavily, or firecrawl
-        #[arg(long)]
-        provider: Option<String>,
         /// Days back (news topic only)
         #[arg(long)]
         days: Option<i32>,
@@ -456,6 +453,26 @@ enum WebAction {
         limit: i32,
         #[arg(long)]
         search: Option<String>,
+    },
+    /// Extract structured content from a URL using Obscura
+    Extract {
+        #[arg(long)]
+        url: String,
+        /// CSS selectors to extract specific elements
+        #[arg(long, value_delimiter = ',')]
+        selectors: Option<Vec<String>>,
+        /// Extract structured data (JSON-LD, OpenGraph)
+        #[arg(long)]
+        structured_data: bool,
+        /// Extract all links
+        #[arg(long)]
+        extract_links: bool,
+        /// Extract all images
+        #[arg(long)]
+        extract_images: bool,
+        /// Include raw HTML in output
+        #[arg(long)]
+        include_html: bool,
     },
 }
 
@@ -1581,13 +1598,11 @@ async fn main() -> anyhow::Result<()> {
                 topic,
                 include_domains,
                 exclude_domains,
-                provider,
                 days,
                 include_answer,
             } => {
                 let result = r(web::web_search(WebSearchInput {
                     query,
-                    provider,
                     max_results: Some(max_results),
                     topic,
                     include_domains,
@@ -1669,6 +1684,31 @@ async fn main() -> anyhow::Result<()> {
                 print_next_step(&[
                     "igs web crawl --url <site> for full site mapping",
                     "igs web scrape --url <page> for specific page content",
+                ]);
+            }
+            WebAction::Extract {
+                url,
+                selectors,
+                structured_data,
+                extract_links,
+                extract_images,
+                include_html,
+            } => {
+                let result = r(web::web_extract(WebExtractInput {
+                    url,
+                    selectors,
+                    structured_data: Some(structured_data),
+                    extract_links: Some(extract_links),
+                    extract_images: Some(extract_images),
+                    wait_selector: None,
+                    include_html: Some(include_html),
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
+                output(fmt, &result);
+                print_next_step(&[
+                    "igs web scrape --url <page> for full markdown content",
+                    "igs web search --query \"...\" for broader search",
                 ]);
             }
         },

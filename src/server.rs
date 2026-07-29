@@ -1245,7 +1245,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.search",
-        description = "Realtime web search via Tavily or Firecrawl API. Returns results with title, url, content, score."
+        description = "Realtime web search via Obscura + DuckDuckGo. No API keys required. Returns results with title, url, content."
     )]
     async fn web_search(
         &self,
@@ -1300,6 +1300,20 @@ impl IgsMcpServer {
             .unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_map(params.0).await?;
         self.dump("web.map", &_subject, &output);
+        Ok(format_output(&output, &format))
+    }
+
+    #[tool(
+        name = "web.extract",
+        description = "Extract structured content from a URL using Obscura. Supports full extraction (text, metadata, links, images, structured data) or selector-based extraction."
+    )]
+    async fn web_extract(&self, params: Parameters<WebExtractInput>) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0.output);
+        let _subject = url::Url::parse(&params.0.url)
+            .map(|u| u.host_str().unwrap_or("unknown").to_string())
+            .unwrap_or_else(|_| params.0.url.clone());
+        let output = web::web_extract(params.0).await?;
+        self.dump("web.extract", &_subject, &output);
         Ok(format_output(&output, &format))
     }
 

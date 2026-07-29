@@ -151,55 +151,7 @@ fn default_ttl_ms() -> u64 {
 // TimeSettings struct removed — `timezone` field was defined, deserialized, but never
 // read by any code path. The `time:` section in settings.yml is silently ignored.
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TavilySettings {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_key: Option<String>,
-    #[serde(default = "default_tavily_depth")]
-    pub search_depth: String,
-    #[serde(default = "default_tavily_topic")]
-    pub default_topic: String,
-    #[serde(default = "default_tavily_timeout")]
-    pub timeout_ms: u64,
-}
-
-fn default_tavily_depth() -> String {
-    "basic".to_string()
-}
-fn default_tavily_topic() -> String {
-    "general".to_string()
-}
-fn default_tavily_timeout() -> u64 {
-    30000
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct FirecrawlSettings {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_key: Option<String>,
-    #[serde(default = "default_firecrawl_timeout")]
-    pub timeout_ms: u64,
-    #[serde(default = "default_formats")]
-    pub default_formats: Vec<String>,
-}
-
-fn default_firecrawl_timeout() -> u64 {
-    60000
-}
-fn default_formats() -> Vec<String> {
-    vec![
-        "markdown".to_string(),
-        "html".to_string(),
-        "screenshot".to_string(),
-        "links".to_string(),
-    ]
-}
+// Tavily/Firecrawl removed — web.search now uses Obscura + DuckDuckGo (no API keys)
 
 fn default_true() -> bool {
     true
@@ -414,11 +366,6 @@ pub struct RedditSettings {
 pub struct Settings {
     pub http: HttpSettings,
     pub cache: CacheSettings,
-    // Removed YAGNI field: time: TimeSettings — `timezone` was never read
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tavily: Option<TavilySettings>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub firecrawl: Option<FirecrawlSettings>,
     // Removed YAGNI field: time: TimeSettings — `timezone` was never read
     // Removed YAGNI field: pipeline: PipelineSettings — all fields were never read
     #[serde(default)]

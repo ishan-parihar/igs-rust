@@ -1,9 +1,6 @@
 use crate::config;
 use crate::http::{self as http_mod, HttpClient};
-use crate::tools::helpers::*;
 use crate::tools::types::*;
-use std::collections::HashMap;
-
 /// Extract internal links from a parsed HTML document
 fn extract_internal_links(
     doc: &scraper::Html,
@@ -29,182 +26,126 @@ fn extract_internal_links(
         .collect()
 }
 
-/// Search the web in realtime. Uses Tavily or Firecrawl API.
+/// Search the web in realtime. Uses Obscura headless browser to scrape DuckDuckGo.
+/// No API keys required — fully free and self-contained.
 pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String> {
     let settings = config::load_settings()
         .await
         .map_err(|e| format!("Settings: {}", e))?;
-    let provider = input.provider.as_deref().unwrap_or("auto");
+    let obs_settings = &settings.browser.obscura;
 
-    // Try Tavily first
-    if provider == "auto" || provider == "tavily" {
-        if let Some(ref tavily) = settings.tavily {
-            if tavily.enabled {
-                if let Some(ref api_key) = tavily.api_key {
-                    let cache_dir =
-                        http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-                    let http = HttpClient::new(&settings.http, &cache_dir);
+    if !obs_settings.enabled {
+        return Err(
+            "Obscura is not enabled. Set browser.obscura.enabled=true in settings.yml to use web.search"
+                .into(),
+        );
+    }
 
-                    let mut body = serde_json::json!({
-                        "api_key": api_key,
-                        "query": input.query,
-                        "max_results": input.max_results.unwrap_or(10),
-                        "topic": input.topic.as_deref().unwrap_or("general"),
-                    });
+    let obscura = crate::obscura::ObscuraManager::new(obs_settings);
+    let max_results = input.max_results.unwrap_or(10);
+    let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 
-                    if let Some(ref domains) = input.include_domains {
-                        if !domains.is_empty() {
-                            body["include_domains"] = serde_json::json!(domains);
-                        }
-                    }
-                    if let Some(ref domains) = input.exclude_domains {
-                        if !domains.is_empty() {
-                            body["exclude_domains"] = serde_json::json!(domains);
-                        }
-                    }
-                    if let Some(days) = input.days {
-                        body["days"] = serde_json::json!(days);
-                    }
-                    if let Some(answer) = input.include_answer {
-                        body["include_answer"] = serde_json::json!(answer);
-                    }
+    // Use DuckDuckGo HTML version (lightweight, no JS needed, reliable parsing)
+    let search_url = format!("https://html.duckduckgo.com/html/?q={}", query_encoded);
 
-                    match http
-                        .post_json("https://api.tavily.com/search", &body, None)
-                        .await
-                    {
-                        Ok(outcome) => {
-                            if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                                match serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                                    Ok(json) => {
-                                        let results: Vec<WebSearchResult> = json["results"]
-                                            .as_array()
-                                            .map(|arr| {
-                                                arr.iter()
-                                                    .map(|r| WebSearchResult {
-                                                        title: r["title"]
-                                                            .as_str()
-                                                            .unwrap_or("")
-                                                            .to_string(),
-                                                        url: r["url"]
-                                                            .as_str()
-                                                            .unwrap_or("")
-                                                            .to_string(),
-                                                        content: r["content"]
-                                                            .as_str()
-                                                            .map(|s| s.to_string()),
-                                                        score: r["score"].as_f64(),
-                                                        raw_content: r["raw_content"]
-                                                            .as_str()
-                                                            .map(|s| s.to_string()),
-                                                    })
-                                                    .collect()
-                                            })
-                                            .unwrap_or_default();
-                                        let answer = json["answer"].as_str().map(|s| s.to_string());
-                                        let count = results.len();
-                                        return Ok(WebSearchOutput {
-                                            count,
-                                            results,
-                                            answer,
-                                            meta: WebSearchMeta {
-                                                provider: "tavily".into(),
-                                                query: input.query,
-                                            },
-                                        });
-                                    }
-                                    Err(parse_err) => {
-                                        tracing::warn!(
-                                            "Tavily response parse failed (status={}, body_len={}): {}. Falling through to Firecrawl.",
-                                            resp.status,
-                                            resp.body_text.len(),
-                                            parse_err
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            if provider == "tavily" {
-                                return Err(format!("Tavily search failed: {}", e));
-                            }
-                            tracing::warn!("Tavily search failed, trying Firecrawl: {}", e);
+    let html = obscura
+        .fetch_with_all_options(
+            &search_url,
+            "html",
+            false,
+            "load",
+            false,
+            None,
+        )
+        .await
+        .map_err(|e| format!("Obscura search failed: {}", e))?;
+
+    let results = parse_duckduckgo_html(&html, max_results as usize);
+    let count = results.len();
+
+    Ok(WebSearchOutput {
+        count,
+        results,
+        answer: None,
+        meta: WebSearchMeta {
+            provider: "obscura/duckduckgo".into(),
+            query: input.query,
+        },
+    })
+}
+
+/// Parse DuckDuckGo HTML search results page.
+/// Extracts titles, URLs, and snippets from the search results.
+fn parse_duckduckgo_html(html: &str, max_results: usize) -> Vec<WebSearchResult> {
+    let doc = scraper::Html::parse_document(html);
+    let mut results = Vec::new();
+
+    // DuckDuckGo HTML uses .result__body or .web-result for each result
+    // Try multiple selectors for robustness
+    let selectors = [
+        ".result__body",
+        ".web-result",
+        ".results_links",
+        ".result",
+    ];
+
+    for selector_str in &selectors {
+        if let Ok(sel) = scraper::Selector::parse(selector_str) {
+            for element in doc.select(&sel).take(max_results) {
+                // Extract title and URL from the link
+                if let Ok(link_sel) = scraper::Selector::parse("a.result__a, a.result-link, a") {
+                    if let Some(link_el) = element.select(&link_sel).next() {
+                        let title = link_el.text().collect::<String>().trim().to_string();
+                        let raw_href = link_el.attr("href").unwrap_or("").to_string();
+                        // DuckDuckGo wraps URLs in redirect: /l/?uddg=<encoded_url>
+                        let url = extract_ddg_redirect_url(&raw_href).unwrap_or(raw_href);
+
+                        // Extract snippet
+                        let snippet = if let Ok(snippet_sel) =
+                            scraper::Selector::parse(".result__snippet, .result-snippet, .snippet")
+                        {
+                            element
+                                .select(&snippet_sel)
+                                .next()
+                                .map(|el| el.text().collect::<String>().trim().to_string())
+                        } else {
+                            None
+                        };
+
+                        if !url.is_empty() && !title.is_empty() {
+                            results.push(WebSearchResult {
+                                title,
+                                url,
+                                content: snippet,
+                                score: None,
+                                raw_content: None,
+                            });
                         }
                     }
                 }
             }
-        }
-    }
-
-    // Fallback to Firecrawl
-    if let Some(ref firecrawl) = settings.firecrawl {
-        if firecrawl.enabled {
-            if let Some(ref api_key) = firecrawl.api_key {
-                let query_enc = urlencoding(&input.query);
-                let url = format!(
-                    "https://api.firecrawl.dev/v1/search?query={}&limit={}",
-                    query_enc,
-                    input.max_results.unwrap_or(10)
-                );
-                let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-                let http = HttpClient::new(&settings.http, &cache_dir);
-                match http
-                    .fetch(
-                        &url,
-                        Some(&HashMap::from([(
-                            "Authorization".into(),
-                            format!("Bearer {}", api_key),
-                        )])),
-                        "bypass",
-                    )
-                    .await
-                {
-                    Ok(outcome) => {
-                        if let http_mod::FetchOutcome::Response(resp, _, _) = outcome {
-                            if let Ok(json) =
-                                serde_json::from_str::<serde_json::Value>(&resp.body_text)
-                            {
-                                let results: Vec<WebSearchResult> = json["data"]["web"]
-                                    .as_array()
-                                    .map(|arr| {
-                                        arr.iter()
-                                            .map(|r| WebSearchResult {
-                                                title: r["title"]
-                                                    .as_str()
-                                                    .unwrap_or("")
-                                                    .to_string(),
-                                                url: r["url"].as_str().unwrap_or("").to_string(),
-                                                content: r["content"]
-                                                    .as_str()
-                                                    .map(|s| s.to_string()),
-                                                score: r["score"].as_f64(),
-                                                raw_content: None,
-                                            })
-                                            .collect()
-                                    })
-                                    .unwrap_or_default();
-                                let count = results.len();
-                                return Ok(WebSearchOutput {
-                                    count,
-                                    results,
-                                    answer: None,
-                                    meta: WebSearchMeta {
-                                        provider: "firecrawl".into(),
-                                        query: input.query,
-                                    },
-                                });
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Firecrawl search failed: {}", e);
-                    }
-                }
+            if !results.is_empty() {
+                break;
             }
         }
     }
 
-    Err("No web search provider available. Configure Tavily or Firecrawl in settings.yml.".into())
+    results.truncate(max_results);
+    results
+}
+
+/// Extract the real URL from a DuckDuckGo redirect link.
+/// DuckDuckGo wraps all result links in /l/?uddg=<encoded_url>&rut=...
+/// Works for both relative (/l/?uddg=...) and absolute URLs.
+fn extract_ddg_redirect_url(href: &str) -> Option<String> {
+    // Find the uddg= parameter and extract the encoded URL after it
+    let pos = href.find("uddg=")?;
+    let encoded = &href[pos + 5..];
+    let end = encoded.find('&').unwrap_or(encoded.len());
+    // Parse as query string to properly decode percent-encoded values
+    url::form_urlencoded::parse(format!("x={}", &encoded[..end]).as_bytes())
+        .find(|(k, _)| k == "x")
+        .map(|(_, v)| v.to_string())
 }
 
 pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String> {
@@ -707,6 +648,285 @@ async fn web_crawl_obscura(
             include_frames,
         },
     })
+}
+
+/// Extract structured content from a URL using Obscura.
+/// Supports full extraction (text, metadata, links, images, structured data)
+/// or selector-based extraction for specific elements.
+pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+    let obs_settings = &settings.browser.obscura;
+
+    if !obs_settings.enabled {
+        return Err(
+            "Obscura is not enabled. Set browser.obscura.enabled=true in settings.yml to use web.extract"
+                .into(),
+        );
+    }
+
+    let obscura = crate::obscura::ObscuraManager::new(obs_settings);
+    let wait_until = "networkidle";
+
+    // Fetch the page with Obscura (JS rendering)
+    let html = obscura
+        .fetch_with_all_options(
+            &input.url,
+            "html",
+            false,
+            wait_until,
+            false,
+            input.wait_selector.as_deref(),
+        )
+        .await
+        .map_err(|e| format!("Obscura fetch failed: {}", e))?;
+
+    let doc = scraper::Html::parse_document(&html);
+
+    // Extract title
+    let title = scraper::Selector::parse("title")
+        .ok()
+        .and_then(|sel| doc.select(&sel).next())
+        .map(|el| el.text().collect::<String>().trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    // Extract main text content
+    let content = extract_main_text(&doc);
+
+    // Generate markdown
+    let markdown = html_to_markdown_rs::convert(&html, None)
+        .ok()
+        .and_then(|r| r.content)
+        .filter(|s| !s.trim().is_empty());
+
+    // Extract metadata
+    let metadata = extract_page_metadata(&doc);
+
+    // Extract structured data if requested
+    let structured_data = if input.structured_data.unwrap_or(false) {
+        extract_structured_data(&doc)
+    } else {
+        None
+    };
+
+    // Extract links if requested
+    let links = if input.extract_links.unwrap_or(false) {
+        extract_page_links(&doc)
+    } else {
+        None
+    };
+
+    // Extract images if requested
+    let images = if input.extract_images.unwrap_or(false) {
+        extract_page_images(&doc)
+    } else {
+        None
+    };
+
+    // Extract elements by selector if provided
+    let elements = if let Some(selectors) = &input.selectors {
+        extract_by_selectors(&doc, selectors)
+    } else {
+        None
+    };
+
+    // Include raw HTML if requested
+    let html_output = if input.include_html.unwrap_or(false) {
+        Some(html.clone())
+    } else {
+        None
+    };
+
+    Ok(WebExtractOutput {
+        success: true,
+        url: input.url.clone(),
+        title,
+        content: Some(content),
+        markdown,
+        html: html_output,
+        metadata: Some(metadata),
+        structured_data,
+        links,
+        images,
+        elements,
+        meta: ExtractMeta {
+            url: input.url,
+            provider: "obscura".into(),
+            js_rendered: true,
+            elapsed_ms: 0,
+        },
+    })
+}
+
+/// Extract main text content from the document body
+fn extract_main_text(doc: &scraper::Html) -> String {
+    // Try to find main content area first
+    let main_selectors = ["main", "article", "[role='main']", ".content", "#content"];
+    for selector_str in &main_selectors {
+        if let Ok(sel) = scraper::Selector::parse(selector_str) {
+            if let Some(main_el) = doc.select(&sel).next() {
+                let text = main_el.text().collect::<String>();
+                let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                if cleaned.len() > 100 {
+                    return cleaned;
+                }
+            }
+        }
+    }
+    // Fallback to body
+    if let Ok(sel) = scraper::Selector::parse("body") {
+        if let Some(body_el) = doc.select(&sel).next() {
+            let text = body_el.text().collect::<String>();
+            return text.split_whitespace().collect::<Vec<_>>().join(" ");
+        }
+    }
+    // Last resort: root element
+    let text: String = doc.root_element().text().collect();
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Extract page metadata (description, OpenGraph, author, publish date)
+fn extract_page_metadata(doc: &scraper::Html) -> ExtractMetadata {
+    let description = doc.select(&scraper::Selector::parse("meta[name='description']").unwrap())
+        .next()
+        .and_then(|el| el.attr("content"))
+        .map(|s| s.to_string());
+
+    let og_title = doc.select(&scraper::Selector::parse("meta[property='og:title']").unwrap())
+        .next()
+        .and_then(|el| el.attr("content"))
+        .map(|s| s.to_string());
+
+    let og_description = doc.select(&scraper::Selector::parse("meta[property='og:description']").unwrap())
+        .next()
+        .and_then(|el| el.attr("content"))
+        .map(|s| s.to_string());
+
+    let og_image = doc.select(&scraper::Selector::parse("meta[property='og:image']").unwrap())
+        .next()
+        .and_then(|el| el.attr("content"))
+        .map(|s| s.to_string());
+
+    let author = doc.select(&scraper::Selector::parse("meta[name='author']").unwrap())
+        .next()
+        .and_then(|el| el.attr("content"))
+        .map(|s| s.to_string());
+
+    let publish_date = doc.select(&scraper::Selector::parse("meta[property='article:published_time']").unwrap())
+        .next()
+        .and_then(|el| el.attr("content"))
+        .or_else(|| {
+            doc.select(&scraper::Selector::parse("meta[name='date']").unwrap())
+                .next()
+                .and_then(|el| el.attr("content"))
+        })
+        .map(|s| s.to_string());
+
+    let body_text = doc.root_element().text().collect::<String>();
+    let word_count = body_text.split_whitespace().count();
+
+    ExtractMetadata {
+        description,
+        og_title,
+        og_description,
+        og_image,
+        author,
+        publish_date,
+        word_count,
+    }
+}
+
+/// Extract structured data (JSON-LD and OpenGraph)
+fn extract_structured_data(doc: &scraper::Html) -> Option<StructuredData> {
+    // Extract JSON-LD
+    let json_ld: Vec<serde_json::Value> = doc
+        .select(&scraper::Selector::parse("script[type='application/ld+json']").unwrap())
+        .filter_map(|el| {
+            let text = el.text().collect::<String>();
+            serde_json::from_str(&text).ok()
+        })
+        .collect();
+
+    // Extract OpenGraph
+    let mut opengraph = std::collections::HashMap::new();
+    for prop in &["og:title", "og:description", "og:image", "og:url", "og:type", "og:site_name"] {
+        if let Ok(sel) = scraper::Selector::parse(&format!("meta[property='{}']", prop)) {
+            if let Some(el) = doc.select(&sel).next() {
+                if let Some(content) = el.attr("content") {
+                    opengraph.insert(prop.to_string(), content.to_string());
+                }
+            }
+        }
+    }
+
+    if json_ld.is_empty() && opengraph.is_empty() {
+        None
+    } else {
+        Some(StructuredData {
+            json_ld: if json_ld.is_empty() { None } else { Some(json_ld) },
+            opengraph: if opengraph.is_empty() { None } else { Some(opengraph) },
+        })
+    }
+}
+
+/// Extract all links from the page
+fn extract_page_links(doc: &scraper::Html) -> Option<Vec<ExtractedLink>> {
+    let mut links = Vec::new();
+    if let Ok(sel) = scraper::Selector::parse("a[href]") {
+        for el in doc.select(&sel) {
+            if let Some(href) = el.attr("href") {
+                let text = el.text().collect::<String>().trim().to_string();
+                let rel = el.attr("rel").map(|s| s.to_string());
+                links.push(ExtractedLink {
+                    url: href.to_string(),
+                    text,
+                    rel,
+                });
+            }
+        }
+    }
+    if links.is_empty() { None } else { Some(links) }
+}
+
+/// Extract all images from the page
+fn extract_page_images(doc: &scraper::Html) -> Option<Vec<ExtractedImage>> {
+    let mut images = Vec::new();
+    if let Ok(sel) = scraper::Selector::parse("img[src]") {
+        for el in doc.select(&sel) {
+            if let Some(src) = el.attr("src") {
+                let alt = el.attr("alt").map(|s| s.to_string());
+                let width = el.attr("width").map(|s| s.to_string());
+                let height = el.attr("height").map(|s| s.to_string());
+                images.push(ExtractedImage {
+                    url: src.to_string(),
+                    alt,
+                    width,
+                    height,
+                });
+            }
+        }
+    }
+    if images.is_empty() { None } else { Some(images) }
+}
+
+/// Extract elements by CSS selectors
+fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) -> Option<Vec<ExtractedElement>> {
+    let mut elements = Vec::new();
+    for selector_str in selectors {
+        if let Ok(sel) = scraper::Selector::parse(selector_str) {
+            for el in doc.select(&sel) {
+                let html = el.html();
+                let text = el.text().collect::<String>().trim().to_string();
+                elements.push(ExtractedElement {
+                    selector: selector_str.clone(),
+                    html,
+                    text,
+                });
+            }
+        }
+    }
+    if elements.is_empty() { None } else { Some(elements) }
 }
 
 /// Discover URLs on a website by analyzing sitemap and links.

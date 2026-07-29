@@ -39,7 +39,7 @@ pub const TOOL_GROUPS: &[ToolGroup] = &[
         name: "web",
         description: "Search the web, scrape pages, crawl sites, and map website structures. Use browser tools for JavaScript-rendered pages.",
         tools: &[
-            "web.search", "web.scrape", "web.crawl", "web.map",
+            "web.search", "web.scrape", "web.crawl", "web.map", "web.extract",
         ],
     },
     ToolGroup {
@@ -278,6 +278,7 @@ mod tests {
             "web.scrape",
             "web.crawl",
             "web.map",
+            "web.extract",
             "insights.find_connections",
             "insights.trending_entities",
             "insights.index_articles",

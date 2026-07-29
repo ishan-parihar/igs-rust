@@ -575,11 +575,9 @@ pub struct ResearchDownloadOutput {
 pub struct WebSearchInput {
     /// Search query
     pub query: String,
-    /// Provider (default: tavily)
-    pub provider: Option<String>,
-    /// Max results (10-20)
+    /// Max results (default: 10)
     pub max_results: Option<i32>,
-    /// Topic (general|news)
+    /// Topic (general|news) — currently unused, reserved for future use
     pub topic: Option<String>,
     /// Include domains
     pub include_domains: Option<Vec<String>>,
@@ -728,6 +726,91 @@ pub struct WebCrawlOutput {
     pub pages: Vec<CrawledPage>,
     pub count: usize,
     pub meta: WebCrawlMeta,
+}
+
+// ─── Web Extract Types ────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WebExtractInput {
+    /// URL to extract content from
+    pub url: String,
+    /// CSS selectors to extract specific elements (optional)
+    pub selectors: Option<Vec<String>>,
+    /// Extract structured data (JSON-LD, OpenGraph)
+    pub structured_data: Option<bool>,
+    /// Extract all links
+    pub extract_links: Option<bool>,
+    /// Extract all images
+    pub extract_images: Option<bool>,
+    /// Wait for CSS selector before extraction
+    pub wait_selector: Option<String>,
+    /// Include raw HTML in output
+    pub include_html: Option<bool>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WebExtractOutput {
+    pub success: bool,
+    pub url: String,
+    pub title: Option<String>,
+    pub content: Option<String>,
+    pub markdown: Option<String>,
+    pub html: Option<String>,
+    pub metadata: Option<ExtractMetadata>,
+    pub structured_data: Option<StructuredData>,
+    pub links: Option<Vec<ExtractedLink>>,
+    pub images: Option<Vec<ExtractedImage>>,
+    pub elements: Option<Vec<ExtractedElement>>,
+    pub meta: ExtractMeta,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ExtractMetadata {
+    pub description: Option<String>,
+    pub og_title: Option<String>,
+    pub og_description: Option<String>,
+    pub og_image: Option<String>,
+    pub author: Option<String>,
+    pub publish_date: Option<String>,
+    pub word_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct StructuredData {
+    pub json_ld: Option<Vec<serde_json::Value>>,
+    pub opengraph: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ExtractedLink {
+    pub url: String,
+    pub text: String,
+    pub rel: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ExtractedImage {
+    pub url: String,
+    pub alt: Option<String>,
+    pub width: Option<String>,
+    pub height: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ExtractedElement {
+    pub selector: String,
+    pub html: String,
+    pub text: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ExtractMeta {
+    pub url: String,
+    pub provider: String,
+    pub js_rendered: bool,
+    pub elapsed_ms: u64,
 }
 
 // ─── Web Map Types ────────────────────────────────────────────
