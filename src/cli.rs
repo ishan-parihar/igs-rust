@@ -396,7 +396,7 @@ enum ResearchAction {
 
 #[derive(Subcommand)]
 enum WebAction {
-    /// Web search via Obscura + DuckDuckGo (no API keys required)
+    /// Multi-engine web search (DDG, Brave, Wikipedia, GitHub, HackerNews, StackOverflow)
     Search {
         #[arg(long)]
         query: String,
@@ -414,6 +414,12 @@ enum WebAction {
         /// Include LLM-generated answer in results
         #[arg(long)]
         include_answer: bool,
+        /// Content depth: minimal (~100 chars), standard (default ~500 chars), full (~2000 chars)
+        #[arg(long)]
+        content_length: Option<String>,
+        /// Include key sentence highlights matching the query
+        #[arg(long)]
+        include_highlights: bool,
     },
     /// Scrape a URL to structured markdown
     Scrape {
@@ -1600,6 +1606,8 @@ async fn main() -> anyhow::Result<()> {
                 exclude_domains,
                 days,
                 include_answer,
+                content_length,
+                include_highlights,
             } => {
                 let result = r(web::web_search(WebSearchInput {
                     query,
@@ -1607,8 +1615,8 @@ async fn main() -> anyhow::Result<()> {
                     engines: None,
                     depth: None,
                     topic,
-                    content_length: None,
-                    include_highlights: None,
+                    content_length,
+                    include_highlights: Some(include_highlights),
                     include_answer: Some(include_answer),
                     include_domains,
                     exclude_domains,

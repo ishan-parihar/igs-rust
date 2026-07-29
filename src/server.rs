@@ -1245,7 +1245,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.search",
-        description = "Realtime web search via Obscura + DuckDuckGo. No API keys required. Returns results with title, url, content."
+        description = "Multi-engine web search (DDG, Brave, Wikipedia, GitHub, HackerNews, StackOverflow). Supports content depth control, highlight extraction, answer synthesis, and smart engine routing by topic."
     )]
     async fn web_search(
         &self,
