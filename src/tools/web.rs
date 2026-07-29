@@ -69,31 +69,31 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let q = input.query.clone();
                 let obs_settings = settings.browser.obscura.clone();
                 let include_answer = input.include_answer.unwrap_or(false);
+                let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 handles.push(tokio::spawn(async move {
-                    search_duckduckgo(&q, max_results * 2, include_answer, &obs_settings).await
+                    search_duckduckgo(&q, max_results * 2, include_answer, &obs_settings, &http_clone).await
                 }));
             }
             "brave" => {
                 let q = input.query.clone();
-                let http_ref = HttpClient::new(&settings.http, &cache_dir);
-                let include_domains = input.include_domains.clone();
-                let exclude_domains = input.exclude_domains.clone();
+                let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 handles.push(tokio::spawn(async move {
-                    search_brave(&q, max_results * 2, &http_ref, &include_domains, &exclude_domains).await
+                    search_brave(&q, max_results * 2, &http_clone).await
                 }));
             }
             "wikipedia" => {
                 let q = input.query.clone();
-                let http_ref = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 handles.push(tokio::spawn(async move {
-                    search_wikipedia(&q, (max_results / 2).max(3), &http_ref).await
+                    search_wikipedia(&q, (max_results / 2).max(3), &http_clone).await
                 }));
             }
             "github" => {
                 let q = input.query.clone();
-                let http_ref = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let topic_clone = topic.to_string();
                 handles.push(tokio::spawn(async move {
-                    search_github(&q, max_results, &http_ref).await
+                    search_github(&q, max_results, &http_clone, &topic_clone).await
                 }));
             }
             _ => {} // skip unknown engines
@@ -308,6 +308,7 @@ async fn search_duckduckgo(
     max_results: usize,
     include_answer: bool,
     obs_settings: &crate::types::ObscuraSettings,
+    http: &HttpClient,
 ) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
     if !obs_settings.enabled {
         return Err("Obscura not enabled".into());
@@ -327,17 +328,6 @@ async fn search_duckduckgo(
     // Optionally fetch DDG Instant Answer API for a synthesized answer
     let answer = if include_answer {
         let ia_url = format!("https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1", query_encoded);
-        let cache_dir = config::user_config_dir().join("cache");
-        let http_settings = crate::types::HttpSettings {
-            user_agent: "IGS/0.5.5".to_string(),
-            timeout_ms: 10000,
-            retries: 1,
-            backoff_base_ms: 500,
-            backoff_factor: 2.0,
-            concurrency: 6,
-            per_host: 2,
-        };
-        let http = HttpClient::new(&http_settings, &cache_dir);
         match http.fetch(&ia_url, None, "bypass").await {
             Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
                 serde_json::from_str::<serde_json::Value>(&resp.body_text)
@@ -358,12 +348,11 @@ async fn search_duckduckgo(
 // ─── Brave Search API Engine ──────────────────────────────────
 
 /// Search via Brave Search API (free tier: 2000 queries/month). Returns (engine_name, results, answer).
+/// Domain filtering is handled by web_search after dedup.
 async fn search_brave(
     query: &str,
     max_results: usize,
     http: &HttpClient,
-    include_domains: &Option<Vec<String>>,
-    exclude_domains: &Option<Vec<String>>,
 ) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
     let brave_api_key = std::env::var("BRAVE_SEARCH_API_KEY").ok();
 
@@ -403,16 +392,6 @@ async fn search_brave(
                     let age = r["age"].as_str().map(|s| s.to_string());
                     let favicon = r["meta_url"]["favicon"].as_str().map(|s| s.to_string());
                     let domain = extract_domain(&url_str);
-
-                    // Apply domain filters
-                    if let Some(ref include) = include_domains {
-                        let d = domain.as_deref().unwrap_or("").to_lowercase();
-                        if !include.iter().any(|id| d.contains(&id.to_lowercase())) { continue; }
-                    }
-                    if let Some(ref exclude) = exclude_domains {
-                        let d = domain.as_deref().unwrap_or("").to_lowercase();
-                        if exclude.iter().any(|ed| d.contains(&ed.to_lowercase())) { continue; }
-                    }
 
                     if !url_str.is_empty() {
                         results.push(WebSearchResult {
@@ -533,10 +512,12 @@ async fn search_wikipedia(
 // ─── GitHub Search API Engine ──────────────────────────────────
 
 /// Search GitHub via their free REST API. Returns (engine_name, results, answer).
+/// When topic="code", also searches for matching code files.
 async fn search_github(
     query: &str,
     max_results: usize,
     http: &HttpClient,
+    topic: &str,
 ) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let search_url = format!(
@@ -584,7 +565,8 @@ async fn search_github(
         _ => {}
     }
 
-    // Also search code if the query looks like code-related
+    // Also search code when topic is explicitly code-related
+    if topic == "code" {
     let code_url = format!(
         "https://api.github.com/search/code?q={}&per_page={}",
         query_encoded, max_results.min(5)
@@ -620,8 +602,9 @@ async fn search_github(
                 }
             }
         }
-        _ => {}
+        _ => {        }
     }
+    } // end if topic == "code"
 
     Ok(("github".to_string(), results, None))
 }

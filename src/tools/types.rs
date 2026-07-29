@@ -634,6 +634,7 @@ pub struct WebSearchResult {
 pub struct WebSearchOutput {
     pub results: Vec<WebSearchResult>,
     pub count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
     pub meta: WebSearchMeta,
 }
@@ -778,14 +779,22 @@ pub struct WebExtractInput {
 pub struct WebExtractOutput {
     pub success: bool,
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub markdown: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub html: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<ExtractMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub structured_data: Option<StructuredData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub links: Option<Vec<ExtractedLink>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<ExtractedImage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub elements: Option<Vec<ExtractedElement>>,
     pub meta: ExtractMeta,
 }
