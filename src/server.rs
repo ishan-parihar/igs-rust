@@ -1309,10 +1309,9 @@ impl IgsMcpServer {
     )]
     async fn web_extract(&self, params: Parameters<WebExtractInput>) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let _subject = params.0.url.as_ref()
-            .or_else(|| params.0.urls.as_ref().and_then(|u| u.first()))
-            .map(|u| url::Url::parse(u).ok().and_then(|p| p.host_str().map(|s| s.to_string())).unwrap_or_else(|| u.clone()))
-            .unwrap_or_else(|| "unknown".to_string());
+        let _subject = url::Url::parse(&params.0.url)
+            .map(|u| u.host_str().unwrap_or("unknown").to_string())
+            .unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_extract(params.0).await?;
         self.dump("web.extract", &_subject, &output);
         Ok(format_output(&output, &format))

@@ -777,9 +777,7 @@ pub struct WebCrawlOutput {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebExtractInput {
     /// URL to extract content from
-    pub url: Option<String>,
-    /// Multiple URLs for batch extraction (processed in parallel)
-    pub urls: Option<Vec<String>>,
+    pub url: String,
     /// CSS selectors to extract specific elements (optional)
     pub selectors: Option<Vec<String>>,
     /// Extract structured data (JSON-LD, OpenGraph)

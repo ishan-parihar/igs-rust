@@ -1795,25 +1795,11 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         );
     }
 
-    // Determine URLs to process (single or batch)
-    let urls = if let Some(batch_urls) = &input.urls {
-        batch_urls.clone()
-    } else if let Some(ref url) = input.url {
-        vec![url.clone()]
-    } else {
-        return Err("Either 'url' or 'urls' must be provided".into());
-    };
-
     let clean_content = input.clean_content.unwrap_or(false);
     let start = std::time::Instant::now();
-
-    // Process URLs - batch mode processes all in parallel, single mode processes one
-    let url = urls.first().ok_or("No URLs provided")?;
+    let url = &input.url;
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
     let wait_until = "networkidle";
-    
-    // For batch mode, we'll process the first URL for now and return it
-    // Full batch processing would require concurrent Obscura sessions
 
     // Fetch the page with Obscura (JS rendering)
     let html = obscura
