@@ -1700,13 +1700,16 @@ async fn main() -> anyhow::Result<()> {
                 include_html,
             } => {
                 let result = r(web::web_extract(WebExtractInput {
-                    url,
+                    url: Some(url),
+                    urls: None,
                     selectors,
                     structured_data: Some(structured_data),
                     extract_links: Some(extract_links),
                     extract_images: Some(extract_images),
                     wait_selector: None,
                     include_html: Some(include_html),
+                    output_schema: None,
+                    clean_content: None,
                     output: OutputOptions { format: None },
                 })
                 .await)?;

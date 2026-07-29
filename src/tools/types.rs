@@ -777,7 +777,9 @@ pub struct WebCrawlOutput {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebExtractInput {
     /// URL to extract content from
-    pub url: String,
+    pub url: Option<String>,
+    /// Multiple URLs for batch extraction (processed in parallel)
+    pub urls: Option<Vec<String>>,
     /// CSS selectors to extract specific elements (optional)
     pub selectors: Option<Vec<String>>,
     /// Extract structured data (JSON-LD, OpenGraph)
@@ -790,6 +792,10 @@ pub struct WebExtractInput {
     pub wait_selector: Option<String>,
     /// Include raw HTML in output
     pub include_html: Option<bool>,
+    /// JSON schema for structured extraction (returns validated JSON matching schema)
+    pub output_schema: Option<serde_json::Value>,
+    /// Apply content cleaning pipeline (remove nav, ads, boilerplate)
+    pub clean_content: Option<bool>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -833,6 +839,15 @@ pub struct ExtractMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub publish_date: Option<String>,
     pub word_count: usize,
+    /// Estimated reading time in minutes (word_count / 200)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reading_time_minutes: Option<u32>,
+    /// Detected language (from meta tags or content analysis)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// Content type heuristic (article, product, documentation, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

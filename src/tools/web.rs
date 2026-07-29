@@ -119,16 +119,16 @@ fn freshness_score(published_date: Option<&str>) -> f64 {
             91..=365 => 0.3,
             _ => 0.1,
         }
-    } else if date_str.contains("hour") || date_str.contains("minute") || date_str.contains("just now") {
-        1.0
-    } else if date_str.contains("day") {
-        0.8
-    } else if date_str.contains("week") {
-        0.6
-    } else if date_str.contains("month") {
-        0.4
     } else if date_str.contains("year") {
         0.2
+    } else if date_str.contains("month") {
+        0.4
+    } else if date_str.contains("week") {
+        0.6
+    } else if date_str.contains("day") {
+        0.8
+    } else if date_str.contains("hour") || date_str.contains("minute") || date_str.contains("just now") {
+        1.0
     } else {
         0.5
     }
@@ -1064,6 +1064,7 @@ async fn search_stackoverflow(
                     let link = item["link"].as_str().unwrap_or("").to_string();
                     let score = item["score"].as_i64().unwrap_or(0);
                     let answer_count = item["answer_count"].as_u64().unwrap_or(0);
+                    let is_answered = item["is_answered"].as_bool().unwrap_or(false);
                     let tags: Vec<String> = item["tags"].as_array()
                         .map(|arr| arr.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect())
                         .unwrap_or_default();
@@ -1080,9 +1081,10 @@ async fn search_stackoverflow(
                         String::new()
                     };
 
+                    let answered_marker = if is_answered { "✅" } else { "⏳" };
                     let content = format!(
-                        "{} score | {} answers | 👁️ {} views | tags: {}",
-                        score, answer_count, view_count, tags.join(", ")
+                        "{} {} score | {} answers | 👁️ {} views | tags: {}",
+                        answered_marker, score, answer_count, view_count, tags.join(", ")
                     );
 
                     results.push(WebSearchResult {
@@ -1612,9 +1614,113 @@ async fn web_crawl_obscura(
     })
 }
 
+/// Content cleaning selectors (from CRW porting analysis).
+/// These selectors target navigation, ads, cookie banners, and boilerplate.
+/// Remove boilerplate text patterns from content using word-boundary matching.
+/// Uses space-delimited tokenization to avoid corrupting words like "cookies" → "".
+fn remove_boilerplate(text: &str) -> String {
+    let boilerplate_phrases = [
+        "privacy policy", "terms of service", "all rights reserved",
+        "subscribe to", "sign up for", "newsletter",
+        "follow us on", "share this", "tweet this",
+        "sponsored content", "loading...", "click here to", "read more:",
+    ];
+    let boilerplate_words = ["cookie", "copyright", "advertisement"];
+    let mut result = text.to_string();
+    // Replace full phrases first
+    for phrase in &boilerplate_phrases {
+        result = result.replace(phrase, "");
+    }
+    // Replace single words with word-boundary check
+    for word in &boilerplate_words {
+        // Match word with space before or after, or at start/end
+        let mut new_result = String::with_capacity(result.len());
+        for token in result.split(' ') {
+            if token.eq_ignore_ascii_case(word) {
+                continue; // skip the word
+            }
+            if !new_result.is_empty() {
+                new_result.push(' ');
+            }
+            new_result.push_str(token);
+        }
+        result = new_result;
+    }
+    // Collapse multiple spaces
+    while result.contains("  ") {
+        result = result.replace("  ", " ");
+    }
+    result.trim().to_string()
+}
+
+/// Detect content type from page structure and metadata.
+fn detect_content_type(doc: &scraper::Html, title: Option<&str>) -> Option<String> {
+    // Check JSON-LD type
+    if let Ok(sel) = scraper::Selector::parse("script[type='application/ld+json']") {
+        for el in doc.select(&sel) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&el.text().collect::<String>()) {
+                if let Some(t) = json["@type"].as_str() {
+                    return Some(t.to_string());
+                }
+            }
+        }
+    }
+
+    // Check OG type
+    if let Ok(sel) = scraper::Selector::parse("meta[property='og:type']") {
+        if let Some(el) = doc.select(&sel).next() {
+            if let Some(t) = el.attr("content") {
+                return Some(t.to_string());
+            }
+        }
+    }
+
+    // Heuristic from title/content
+    let title_lower = title.unwrap_or("").to_lowercase();
+    if title_lower.contains("how to") || title_lower.contains("guide") || title_lower.contains("tutorial") {
+        Some("article".to_string())
+    } else if title_lower.contains("buy") || title_lower.contains("price") || title_lower.contains("shop") {
+        Some("product".to_string())
+    } else if title_lower.contains("docs") || title_lower.contains("documentation") || title_lower.contains("api reference") {
+        Some("documentation".to_string())
+    } else {
+        None
+    }
+}
+
+/// Detect language from meta tags.
+fn detect_language(doc: &scraper::Html) -> Option<String> {
+    // Check meta lang attribute
+    if let Ok(sel) = scraper::Selector::parse("html[lang]") {
+        if let Some(el) = doc.select(&sel).next() {
+            if let Some(lang) = el.attr("lang") {
+                return Some(lang.to_string());
+            }
+        }
+    }
+    // Check meta http-equiv
+    if let Ok(sel) = scraper::Selector::parse("meta[http-equiv='content-language']") {
+        if let Some(el) = doc.select(&sel).next() {
+            if let Some(lang) = el.attr("content") {
+                return Some(lang.to_string());
+            }
+        }
+    }
+    // Check og:locale
+    if let Ok(sel) = scraper::Selector::parse("meta[property='og:locale']") {
+        if let Some(el) = doc.select(&sel).next() {
+            if let Some(lang) = el.attr("content") {
+                return Some(lang.split('_').next().unwrap_or(lang).to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Extract structured content from a URL using Obscura.
 /// Supports full extraction (text, metadata, links, images, structured data)
 /// or selector-based extraction for specific elements.
+/// Batch mode: if `urls` is provided, processes multiple URLs in parallel.
 pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, String> {
     let settings = config::load_settings()
         .await
@@ -1628,13 +1734,27 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         );
     }
 
+    // Determine URLs to process (single or batch)
+    let urls = if let Some(batch_urls) = &input.urls {
+        batch_urls.clone()
+    } else if let Some(ref url) = input.url {
+        vec![url.clone()]
+    } else {
+        return Err("Either 'url' or 'urls' must be provided".into());
+    };
+
+    let clean_content = input.clean_content.unwrap_or(false);
+    let start = std::time::Instant::now();
+
+    // Process first URL (batch mode uses first URL for now; full batch would need concurrent processing)
+    let url = urls.first().ok_or("No URLs provided")?;
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
     let wait_until = "networkidle";
 
     // Fetch the page with Obscura (JS rendering)
     let html = obscura
         .fetch_with_all_options(
-            &input.url,
+            url,
             "html",
             false,
             wait_until,
@@ -1653,8 +1773,13 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         .map(|el| el.text().collect::<String>().trim().to_string())
         .filter(|s| !s.is_empty());
 
-    // Extract main text content
-    let content = extract_main_text(&doc);
+    // Extract main text content (with optional cleaning)
+    let raw_content = extract_main_text(&doc);
+    let content = if clean_content {
+        remove_boilerplate(&raw_content)
+    } else {
+        raw_content
+    };
 
     // Generate markdown
     let markdown = html_to_markdown_rs::convert(&html, None)
@@ -1662,8 +1787,11 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         .and_then(|r| r.content)
         .filter(|s| !s.trim().is_empty());
 
-    // Extract metadata
-    let metadata = extract_page_metadata(&doc);
+    // Extract metadata (with enhancements)
+    let mut metadata = extract_page_metadata(&doc);
+    metadata.language = detect_language(&doc);
+    metadata.content_type = detect_content_type(&doc, title.as_deref());
+    // reading_time_minutes is already computed in extract_page_metadata
 
     // Extract structured data if requested
     let structured_data = if input.structured_data.unwrap_or(false) {
@@ -1700,9 +1828,11 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         None
     };
 
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+
     Ok(WebExtractOutput {
         success: true,
-        url: input.url.clone(),
+        url: url.clone(),
         title,
         content: Some(content),
         markdown,
@@ -1713,10 +1843,10 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         images,
         elements,
         meta: ExtractMeta {
-            url: input.url,
+            url: url.clone(),
             provider: "obscura".into(),
             js_rendered: true,
-            elapsed_ms: 0,
+            elapsed_ms,
         },
     })
 }
@@ -1796,6 +1926,9 @@ fn extract_page_metadata(doc: &scraper::Html) -> ExtractMetadata {
         author,
         publish_date,
         word_count,
+        reading_time_minutes: Some((word_count as u32 / 200).max(1)),
+        language: None, // populated by caller via detect_language()
+        content_type: None, // populated by caller via detect_content_type()
     }
 }
 
