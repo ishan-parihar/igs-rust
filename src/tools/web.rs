@@ -2,7 +2,49 @@ use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
+
+// ─── In-Memory Search Cache ───────────────────────────────────
+
+type CacheEntry = (WebSearchOutput, Instant);
+
+static SEARCH_CACHE: LazyLock<std::sync::Mutex<HashMap<String, CacheEntry>>> =
+    LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
+/// TTL for search results based on query type
+fn cache_ttl(topic: &str) -> Duration {
+    match topic {
+        "news" => Duration::from_secs(300),       // 5 min for news
+        "code" => Duration::from_secs(43200),     // 12 hours for code
+        _ => Duration::from_secs(3600),            // 1 hour for general
+    }
+}
+
+/// Check cache for a matching query. Returns None if miss or expired.
+fn cache_get(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool) -> Option<WebSearchOutput> {
+    let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
+    let cache = SEARCH_CACHE.lock().ok()?;
+    if let Some((output, inserted_at)) = cache.get(&cache_key) {
+        if inserted_at.elapsed() < cache_ttl(topic) {
+            return Some(output.clone());
+        }
+    }
+    None
+}
+
+/// Store search results in cache.
+fn cache_set(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool, output: &WebSearchOutput) {
+    let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
+    if let Ok(mut cache) = SEARCH_CACHE.lock() {
+        // Evict expired entries periodically (simple: evict if >100 entries)
+        if cache.len() > 100 {
+            let now = Instant::now();
+            cache.retain(|_, (_, _inserted)| now.elapsed() < Duration::from_secs(43200));
+        }
+        cache.insert(cache_key, (output.clone(), Instant::now()));
+    }
+}
 
 /// Extract domain from a URL string
 fn extract_domain(url: &str) -> Option<String> {
@@ -398,6 +440,13 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
     let include_highlights = input.include_highlights.unwrap_or(false);
     let is_deep = depth == "deep";
 
+    // Check cache first (skip for deep mode or explicit engines)
+    if !is_deep && input.engines.is_none() {
+        if let Some(cached) = cache_get(&input.query, topic, max_results, content_length, include_highlights, input.include_answer.unwrap_or(false)) {
+            return Ok(cached);
+        }
+    }
+
     // Determine which engines to use
     let engines = input.engines.clone().unwrap_or_else(|| route_engines(topic, &input.query));
 
@@ -593,20 +642,27 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
         None
     };
 
-    Ok(WebSearchOutput {
+    let output = WebSearchOutput {
         count,
         results: deduped,
         answer,
         confidence,
         meta: WebSearchMeta {
             provider: engines_used.join("+"),
-            query: input.query,
+            query: input.query.clone(),
             engines_used,
             response_time_ms: elapsed_ms,
             total_results: count,
             scored: Some(true),
         },
-    })
+    };
+
+    // Cache the results (skip for deep mode or explicit engines)
+    if !is_deep && input.engines.is_none() {
+        cache_set(&input.query, topic, max_results, content_length, include_highlights, input.include_answer.unwrap_or(false), &output);
+    }
+
+    Ok(output)
 }
 
 /// Extract a semantic excerpt from a page: the longest paragraph that likely contains the main content.

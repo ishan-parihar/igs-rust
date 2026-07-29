@@ -607,7 +607,7 @@ pub struct WebSearchInput {
     pub output: OutputOptions,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchMeta {
     pub provider: String,
     pub query: String,
@@ -619,7 +619,7 @@ pub struct WebSearchMeta {
     pub scored: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchResult {
     pub title: String,
     pub url: String,
@@ -646,7 +646,7 @@ pub struct WebSearchResult {
     pub favicon: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchOutput {
     pub results: Vec<WebSearchResult>,
     pub count: usize,
