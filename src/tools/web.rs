@@ -12,12 +12,19 @@ type CacheEntry = (WebSearchOutput, Instant);
 static SEARCH_CACHE: LazyLock<std::sync::Mutex<HashMap<String, CacheEntry>>> =
     LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
+// Cache TTL constants
+const CACHE_TTL_NEWS: u64 = 300;          // 5 min for news
+const CACHE_TTL_CODE: u64 = 43_200;       // 12 hours for code
+const CACHE_TTL_GENERAL: u64 = 3_600;     // 1 hour for general
+const CACHE_MAX_AGE: u64 = 86_400;         // 24h eviction ceiling
+const CACHE_MAX_ENTRIES: usize = 100;
+
 /// TTL for search results based on query type
 fn cache_ttl(topic: &str) -> Duration {
     match topic {
-        "news" => Duration::from_secs(300),       // 5 min for news
-        "code" => Duration::from_secs(43200),     // 12 hours for code
-        _ => Duration::from_secs(3600),            // 1 hour for general
+        "news" => Duration::from_secs(CACHE_TTL_NEWS),
+        "code" => Duration::from_secs(CACHE_TTL_CODE),
+        _ => Duration::from_secs(CACHE_TTL_GENERAL),
     }
 }
 
@@ -37,10 +44,10 @@ fn cache_get(query: &str, topic: &str, max_results: usize, content_length: &str,
 fn cache_set(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool, output: &WebSearchOutput) {
     let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
     if let Ok(mut cache) = SEARCH_CACHE.lock() {
-        // Evict expired entries periodically (simple: evict if >100 entries)
-        if cache.len() > 100 {
-            let now = Instant::now();
-            cache.retain(|_, (_, _inserted)| now.elapsed() < Duration::from_secs(43200));
+        // Evict expired entries when cache exceeds threshold
+        if cache.len() > CACHE_MAX_ENTRIES {
+            let max_ttl = Duration::from_secs(CACHE_MAX_AGE);
+            cache.retain(|_, (_, inserted_at)| inserted_at.elapsed() < max_ttl);
         }
         cache.insert(cache_key, (output.clone(), Instant::now()));
     }
@@ -1771,7 +1778,7 @@ fn remove_boilerplate(text: &str) -> String {
 }
 
 /// Detect content type from page structure and metadata.
-fn detect_content_type(doc: &scraper::Html, title: Option<&str>) -> Option<String> {
+fn detect_content_type(doc: &scraper::Html) -> Option<String> {
     // Check JSON-LD type
     if let Ok(sel) = scraper::Selector::parse("script[type='application/ld+json']") {
         for el in doc.select(&sel) {
@@ -1792,17 +1799,7 @@ fn detect_content_type(doc: &scraper::Html, title: Option<&str>) -> Option<Strin
         }
     }
 
-    // Heuristic from title/content
-    let title_lower = title.unwrap_or("").to_lowercase();
-    if title_lower.contains("how to") || title_lower.contains("guide") || title_lower.contains("tutorial") {
-        Some("article".to_string())
-    } else if title_lower.contains("buy") || title_lower.contains("price") || title_lower.contains("shop") {
-        Some("product".to_string())
-    } else if title_lower.contains("docs") || title_lower.contains("documentation") || title_lower.contains("api reference") {
-        Some("documentation".to_string())
-    } else {
-        None
-    }
+    None // Only expose structured types from JSON-LD / OG; avoid fragile title heuristics
 }
 
 /// Detect language from meta tags.
@@ -1896,7 +1893,7 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
     // Extract metadata (with enhancements)
     let mut metadata = extract_page_metadata(&doc);
     metadata.language = detect_language(&doc);
-    metadata.content_type = detect_content_type(&doc, title.as_deref());
+    metadata.content_type = detect_content_type(&doc);
     // reading_time_minutes is already computed in extract_page_metadata
 
     // Extract structured data if requested
