@@ -214,11 +214,11 @@ fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
 fn jaccard_similarity(a: &str, b: &str) -> f64 {
     let words_a: HashSet<String> = a.split_whitespace()
         .map(|w| w.to_lowercase())
-        .filter(|w| w.len() > 2)
+        .filter(|w| w.len() > 1)
         .collect();
     let words_b: HashSet<String> = b.split_whitespace()
         .map(|w| w.to_lowercase())
-        .filter(|w| w.len() > 2)
+        .filter(|w| w.len() > 1)
         .collect();
     
     if words_a.is_empty() || words_b.is_empty() {
@@ -244,13 +244,15 @@ fn semantic_dedup(results: &mut Vec<WebSearchResult>) {
             
             let sim = jaccard_similarity(&results[i].title, &results[j].title);
             if sim > threshold {
-                // Keep the one with higher score
+                // Keep the one with higher score (tiebreak: keep earlier result)
                 let score_i = results[i].score.unwrap_or(0.0);
                 let score_j = results[j].score.unwrap_or(0.0);
-                if score_i >= score_j {
+                if score_i > score_j {
                     to_remove.insert(j);
                 } else {
+                    // Equal scores or j is higher: remove i (keep j, which is later)
                     to_remove.insert(i);
+                    break; // i is removed, no need to compare further
                 }
             }
         }
