@@ -1,6 +1,16 @@
 use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
+use std::collections::HashSet;
+use std::time::Instant;
+
+/// Extract domain from a URL string
+fn extract_domain(url: &str) -> Option<String> {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(|s| s.to_string()))
+}
+
 /// Extract internal links from a parsed HTML document
 fn extract_internal_links(
     doc: &scraper::Html,
@@ -26,91 +36,248 @@ fn extract_internal_links(
         .collect()
 }
 
-/// Search the web in realtime. Uses Obscura headless browser to scrape DuckDuckGo.
-/// No API keys required — fully free and self-contained.
+/// Search the web using multiple engines in parallel.
+/// Engines: duckduckgo (Obscura, free), brave (HTTP API, free tier), wikipedia (REST API, free), github (REST API, free).
+/// Supports "fast" mode (snippets only) and "deep" mode (scrape result pages for 500-2000 char excerpts).
 pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String> {
     let settings = config::load_settings()
         .await
         .map_err(|e| format!("Settings: {}", e))?;
-    let obs_settings = &settings.browser.obscura;
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let max_results: usize = input.max_results.unwrap_or(10) as usize;
+    let depth = input.depth.as_deref().unwrap_or("fast");
+    let topic = input.topic.as_deref().unwrap_or("general");
+    let is_deep = depth == "deep";
 
-    if !obs_settings.enabled {
-        return Err(
-            "Obscura is not enabled. Set browser.obscura.enabled=true in settings.yml to use web.search"
-                .into(),
-        );
+    // Determine which engines to use
+    let engines = input.engines.clone().unwrap_or_else(|| {
+        match topic {
+            "code" => vec!["github".to_string(), "duckduckgo".to_string()],
+            "news" => vec!["duckduckgo".to_string(), "brave".to_string()],
+            _ => vec!["duckduckgo".to_string(), "brave".to_string(), "wikipedia".to_string()],
+        }
+    });
+
+    let start = Instant::now();
+
+    // Launch all engine queries in parallel
+    let mut handles = Vec::new();
+
+    for engine in &engines {
+        match engine.as_str() {
+            "duckduckgo" => {
+                let q = input.query.clone();
+                let obs_settings = settings.browser.obscura.clone();
+                let include_answer = input.include_answer.unwrap_or(false);
+                handles.push(tokio::spawn(async move {
+                    search_duckduckgo(&q, max_results * 2, include_answer, &obs_settings).await
+                }));
+            }
+            "brave" => {
+                let q = input.query.clone();
+                let http_ref = HttpClient::new(&settings.http, &cache_dir);
+                let include_domains = input.include_domains.clone();
+                let exclude_domains = input.exclude_domains.clone();
+                handles.push(tokio::spawn(async move {
+                    search_brave(&q, max_results * 2, &http_ref, &include_domains, &exclude_domains).await
+                }));
+            }
+            "wikipedia" => {
+                let q = input.query.clone();
+                let http_ref = HttpClient::new(&settings.http, &cache_dir);
+                handles.push(tokio::spawn(async move {
+                    search_wikipedia(&q, (max_results / 2).max(3), &http_ref).await
+                }));
+            }
+            "github" => {
+                let q = input.query.clone();
+                let http_ref = HttpClient::new(&settings.http, &cache_dir);
+                handles.push(tokio::spawn(async move {
+                    search_github(&q, max_results, &http_ref).await
+                }));
+            }
+            _ => {} // skip unknown engines
+        }
     }
 
-    let obscura = crate::obscura::ObscuraManager::new(obs_settings);
-    let max_results = input.max_results.unwrap_or(10);
-    let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
+    // Collect results from all engines
+    let mut all_results: Vec<WebSearchResult> = Vec::new();
+    let mut engines_used: Vec<String> = Vec::new();
+    let mut answer: Option<String> = None;
 
-    // Use DuckDuckGo HTML version (lightweight, no JS needed, reliable parsing)
-    let search_url = format!("https://html.duckduckgo.com/html/?q={}", query_encoded);
+    for handle in handles {
+        match handle.await {
+            Ok(Ok((engine_name, mut results, engine_answer))) => {
+                engines_used.push(engine_name);
+                all_results.append(&mut results);
+                if answer.is_none() && engine_answer.is_some() {
+                    answer = engine_answer;
+                }
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Search engine error: {}", e);
+            }
+            Err(e) => {
+                tracing::warn!("Search engine task panicked: {}", e);
+            }
+        }
+    }
 
-    let html = obscura
-        .fetch_with_all_options(
-            &search_url,
-            "html",
-            false,
-            "load",
-            false,
-            None,
-        )
-        .await
-        .map_err(|e| format!("Obscura search failed: {}", e))?;
+    // Dedup by URL (keep first occurrence, which has priority ordering)
+    let mut seen_urls: HashSet<String> = HashSet::new();
+    let mut deduped: Vec<WebSearchResult> = Vec::new();
+    for result in all_results {
+        if seen_urls.insert(result.url.clone()) {
+            deduped.push(result);
+        }
+    }
 
-    let results = parse_duckduckgo_html(&html, max_results as usize);
-    let count = results.len();
+    // Apply domain filters
+    if let Some(ref include) = input.include_domains {
+        let include_lower: Vec<String> = include.iter().map(|d| d.to_lowercase()).collect();
+        deduped.retain(|r| {
+            let domain = r.domain.as_deref().unwrap_or("").to_lowercase();
+            include_lower.iter().any(|d| domain.contains(d.as_str()))
+        });
+    }
+    if let Some(ref exclude) = input.exclude_domains {
+        let exclude_lower: Vec<String> = exclude.iter().map(|d| d.to_lowercase()).collect();
+        deduped.retain(|r| {
+            let domain = r.domain.as_deref().unwrap_or("").to_lowercase();
+            !exclude_lower.iter().any(|d| domain.contains(d.as_str()))
+        });
+    }
+
+    // Truncate to max_results
+    deduped.truncate(max_results);
+
+    // Deep mode: scrape each result page for semantic excerpts
+    if is_deep && !deduped.is_empty() {
+        let obs_settings = settings.browser.obscura.clone();
+        if obs_settings.enabled {
+            let obscura = crate::obscura::ObscuraManager::new(&obs_settings);
+            for result in &mut deduped {
+                if let Ok(html) = obscura
+                    .fetch_with_all_options(&result.url, "html", false, "load", false, None)
+                    .await
+                {
+                    let excerpt = extract_semantic_excerpt(&html, &result.title, 1500);
+                    if !excerpt.is_empty() {
+                        result.raw_content = Some(html_to_markdown_rs::convert(&html, None)
+                            .ok()
+                            .and_then(|r| r.content)
+                            .unwrap_or_default());
+                        // Upgrade content if the excerpt is better than the snippet
+                        if excerpt.len() > result.content.as_deref().unwrap_or("").len() {
+                            result.content = Some(excerpt);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let count = deduped.len();
 
     Ok(WebSearchOutput {
         count,
-        results,
-        answer: None,
+        results: deduped,
+        answer,
         meta: WebSearchMeta {
-            provider: "obscura/duckduckgo".into(),
+            provider: engines_used.join("+"),
             query: input.query,
+            engines_used,
+            response_time_ms: elapsed_ms,
+            total_results: count,
         },
     })
 }
 
+/// Extract a semantic excerpt from a page: the longest paragraph that likely contains the main content.
+fn extract_semantic_excerpt(html: &str, title: &str, max_chars: usize) -> String {
+    let doc = scraper::Html::parse_document(html);
+
+    // Try to find main content area
+    let main_selectors = ["article", "main", "[role='main']", ".post-content", ".entry-content", ".article-body"];
+    let container = main_selectors.iter()
+        .find_map(|sel| scraper::Selector::parse(sel).ok().and_then(|s| doc.select(&s).next()))
+        .unwrap_or_else(|| doc.root_element());
+
+    // Collect paragraphs, pick the longest one that's not navigation/boilerplate
+    let mut best = String::new();
+    if let Ok(p_sel) = scraper::Selector::parse("p") {
+        for p in container.select(&p_sel) {
+            let text = p.text().collect::<String>();
+            let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            // Skip very short or very long (likely boilerplate/nav) paragraphs
+            if cleaned.len() > 80 && cleaned.len() < 3000 && cleaned.len() > best.len() {
+                // Skip paragraphs that look like navigation/boilerplate
+                if !cleaned.starts_with("©") && !cleaned.contains("cookie") && !cleaned.contains("privacy policy") {
+                    best = cleaned;
+                }
+            }
+        }
+    }
+
+    // If no good paragraph found, try the title's surrounding text
+    if best.is_empty() {
+        let body_text: String = container.text().collect::<String>();
+        let cleaned = body_text.split_whitespace().collect::<Vec<_>>().join(" ");
+        // Find the title position and extract context around it
+        if let Some(pos) = cleaned.to_lowercase().find(&title.to_lowercase()) {
+            let start = pos.saturating_sub(200);
+            let end = (pos + title.len() + max_chars).min(cleaned.len());
+            best = cleaned[start..end].to_string();
+        } else if cleaned.len() > 80 {
+            best = cleaned.chars().take(max_chars).collect();
+        }
+    }
+
+    best.chars().take(max_chars).collect()
+}
+
+/// Extract the real URL from a DuckDuckGo redirect link.
+/// DuckDuckGo wraps all result links in /l/?uddg=<encoded_url>&rut=...
+/// Works for both relative (/l/?uddg=...) and absolute URLs.
+fn extract_ddg_redirect_url(href: &str) -> Option<String> {
+    let pos = href.find("uddg=")?;
+    let encoded = &href[pos + 5..];
+    let end = encoded.find('&').unwrap_or(encoded.len());
+    url::form_urlencoded::parse(format!("x={}", &encoded[..end]).as_bytes())
+        .find(|(k, _)| k == "x")
+        .map(|(_, v)| v.to_string())
+}
+
+// ─── DuckDuckGo Search Engine ─────────────────────────────────
+
 /// Parse DuckDuckGo HTML search results page.
-/// Extracts titles, URLs, and snippets from the search results.
+/// Domain filtering is handled by web_search after dedup.
 fn parse_duckduckgo_html(html: &str, max_results: usize) -> Vec<WebSearchResult> {
     let doc = scraper::Html::parse_document(html);
     let mut results = Vec::new();
 
-    // DuckDuckGo HTML uses .result__body or .web-result for each result
-    // Try multiple selectors for robustness
-    let selectors = [
-        ".result__body",
-        ".web-result",
-        ".results_links",
-        ".result",
-    ];
+    let selectors = [".result__body", ".web-result", ".results_links", ".result"];
 
     for selector_str in &selectors {
         if let Ok(sel) = scraper::Selector::parse(selector_str) {
-            for element in doc.select(&sel).take(max_results) {
-                // Extract title and URL from the link
-                if let Ok(link_sel) = scraper::Selector::parse("a.result__a, a.result-link, a") {
+            for element in doc.select(&sel).take(max_results * 2) {
+                if let Ok(link_sel) = scraper::Selector::parse("a.result__a") {
                     if let Some(link_el) = element.select(&link_sel).next() {
                         let title = link_el.text().collect::<String>().trim().to_string();
                         let raw_href = link_el.attr("href").unwrap_or("").to_string();
-                        // DuckDuckGo wraps URLs in redirect: /l/?uddg=<encoded_url>
                         let url = extract_ddg_redirect_url(&raw_href).unwrap_or(raw_href);
 
-                        // Extract snippet
-                        let snippet = if let Ok(snippet_sel) =
-                            scraper::Selector::parse(".result__snippet, .result-snippet, .snippet")
-                        {
-                            element
-                                .select(&snippet_sel)
-                                .next()
-                                .map(|el| el.text().collect::<String>().trim().to_string())
-                        } else {
-                            None
-                        };
+                        let snippet = scraper::Selector::parse(".result__snippet")
+                            .ok()
+                            .and_then(|s| element.select(&s).next())
+                            .map(|el| el.text().collect::<String>().trim().to_string());
+
+                        let domain = scraper::Selector::parse(".result__url")
+                            .ok()
+                            .and_then(|s| element.select(&s).next())
+                            .map(|el| el.text().collect::<String>().trim().to_string())
+                            .or_else(|| extract_domain(&url));
 
                         if !url.is_empty() && !title.is_empty() {
                             results.push(WebSearchResult {
@@ -119,33 +286,344 @@ fn parse_duckduckgo_html(html: &str, max_results: usize) -> Vec<WebSearchResult>
                                 content: snippet,
                                 score: None,
                                 raw_content: None,
+                                source: Some("duckduckgo".to_string()),
+                                domain,
+                                published_date: None,
+                                favicon: None,
                             });
                         }
                     }
                 }
             }
-            if !results.is_empty() {
-                break;
-            }
+            if !results.is_empty() { break; }
         }
     }
-
     results.truncate(max_results);
     results
 }
 
-/// Extract the real URL from a DuckDuckGo redirect link.
-/// DuckDuckGo wraps all result links in /l/?uddg=<encoded_url>&rut=...
-/// Works for both relative (/l/?uddg=...) and absolute URLs.
-fn extract_ddg_redirect_url(href: &str) -> Option<String> {
-    // Find the uddg= parameter and extract the encoded URL after it
-    let pos = href.find("uddg=")?;
-    let encoded = &href[pos + 5..];
-    let end = encoded.find('&').unwrap_or(encoded.len());
-    // Parse as query string to properly decode percent-encoded values
-    url::form_urlencoded::parse(format!("x={}", &encoded[..end]).as_bytes())
-        .find(|(k, _)| k == "x")
-        .map(|(_, v)| v.to_string())
+/// Search DuckDuckGo via Obscura headless browser. Returns (engine_name, results, answer).
+async fn search_duckduckgo(
+    query: &str,
+    max_results: usize,
+    include_answer: bool,
+    obs_settings: &crate::types::ObscuraSettings,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    if !obs_settings.enabled {
+        return Err("Obscura not enabled".into());
+    }
+
+    let obscura = crate::obscura::ObscuraManager::new(obs_settings);
+    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
+    let search_url = format!("https://html.duckduckgo.com/html/?q={}", query_encoded);
+
+    let html = obscura
+        .fetch_with_all_options(&search_url, "html", false, "load", false, None)
+        .await
+        .map_err(|e| format!("DDG search failed: {}", e))?;
+
+    let results = parse_duckduckgo_html(&html, max_results);
+
+    // Optionally fetch DDG Instant Answer API for a synthesized answer
+    let answer = if include_answer {
+        let ia_url = format!("https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1", query_encoded);
+        let cache_dir = config::user_config_dir().join("cache");
+        let http_settings = crate::types::HttpSettings {
+            user_agent: "IGS/0.5.5".to_string(),
+            timeout_ms: 10000,
+            retries: 1,
+            backoff_base_ms: 500,
+            backoff_factor: 2.0,
+            concurrency: 6,
+            per_host: 2,
+        };
+        let http = HttpClient::new(&http_settings, &cache_dir);
+        match http.fetch(&ia_url, None, "bypass").await {
+            Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+                serde_json::from_str::<serde_json::Value>(&resp.body_text)
+                    .ok()
+                    .and_then(|j| j["AbstractText"].as_str().map(|s| s.to_string()))
+                    .filter(|s| !s.is_empty())
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    Ok(("duckduckgo".to_string(), results, answer))
+}
+
+
+// ─── Brave Search API Engine ──────────────────────────────────
+
+/// Search via Brave Search API (free tier: 2000 queries/month). Returns (engine_name, results, answer).
+async fn search_brave(
+    query: &str,
+    max_results: usize,
+    http: &HttpClient,
+    include_domains: &Option<Vec<String>>,
+    exclude_domains: &Option<Vec<String>>,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    let brave_api_key = std::env::var("BRAVE_SEARCH_API_KEY").ok();
+
+    // Try to get API key from env or settings
+    let api_key = match brave_api_key {
+        Some(k) if !k.is_empty() => k,
+        _ => return Err("BRAVE_SEARCH_API_KEY not set".into()),
+    };
+
+    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
+    let count = max_results.min(20) as u32;
+    let url = format!(
+        "https://api.search.brave.com/res/v1/web/search?q={}&count={}&text_decorations=false",
+        query_encoded, count
+    );
+
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("Accept".to_string(), "application/json".to_string());
+    headers.insert("Accept-Encoding".to_string(), "gzip".to_string());
+    headers.insert("X-Subscription-Token".to_string(), api_key);
+
+    let outcome = http.fetch(&url, Some(&headers), "bypass").await
+        .map_err(|e| format!("Brave API error: {}", e))?;
+
+    match outcome {
+        http_mod::FetchOutcome::Response(resp, _, _) => {
+            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
+                .map_err(|e| format!("Brave parse error: {}", e))?;
+
+            let mut results = Vec::new();
+
+            if let Some(web_results) = json["web"]["results"].as_array() {
+                for r in web_results.iter().take(max_results) {
+                    let title = r["title"].as_str().unwrap_or("").to_string();
+                    let url_str = r["url"].as_str().unwrap_or("").to_string();
+                    let description = r["description"].as_str().unwrap_or("").to_string();
+                    let age = r["age"].as_str().map(|s| s.to_string());
+                    let favicon = r["meta_url"]["favicon"].as_str().map(|s| s.to_string());
+                    let domain = extract_domain(&url_str);
+
+                    // Apply domain filters
+                    if let Some(ref include) = include_domains {
+                        let d = domain.as_deref().unwrap_or("").to_lowercase();
+                        if !include.iter().any(|id| d.contains(&id.to_lowercase())) { continue; }
+                    }
+                    if let Some(ref exclude) = exclude_domains {
+                        let d = domain.as_deref().unwrap_or("").to_lowercase();
+                        if exclude.iter().any(|ed| d.contains(&ed.to_lowercase())) { continue; }
+                    }
+
+                    if !url_str.is_empty() {
+                        results.push(WebSearchResult {
+                            title,
+                            url: url_str,
+                            content: if description.is_empty() { None } else { Some(description) },
+                            score: None,
+                            raw_content: None,
+                            source: Some("brave".to_string()),
+                            domain,
+                            published_date: age,
+                            favicon,
+                        });
+                    }
+                }
+            }
+
+            // Extract AI summary if available
+            let answer = json["mixed"]["main"]["answer"]
+                .as_str()
+                .map(|s| s.to_string());
+
+            Ok(("brave".to_string(), results, answer))
+        }
+        _ => Err("Brave API: unexpected response".into()),
+    }
+}
+
+// ─── Wikipedia REST API Engine ────────────────────────────────
+
+/// Search Wikipedia via their free REST API. Returns (engine_name, results, answer).
+async fn search_wikipedia(
+    query: &str,
+    max_results: usize,
+    http: &HttpClient,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
+    let search_url = format!(
+        "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
+        query_encoded
+    );
+
+    // Try the summary endpoint first (direct article lookup)
+    let mut results = Vec::new();
+    let mut answer = None;
+
+    match http.fetch(&search_url, None, "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                if let Some(title) = json["title"].as_str() {
+                    let url = json["content_urls"]["desktop"]["page"].as_str().unwrap_or("").to_string();
+                    let extract = json["extract"].as_str().unwrap_or("").to_string();
+                    let thumbnail = json["thumbnail"]["source"].as_str().map(|s| s.to_string());
+
+                    if !url.is_empty() {
+                        answer = Some(extract.clone());
+                        results.push(WebSearchResult {
+                            title: title.to_string(),
+                            url,
+                            content: Some(extract),
+                            score: Some(1.0),
+                            raw_content: None,
+                            source: Some("wikipedia".to_string()),
+                            domain: Some("wikipedia.org".to_string()),
+                            published_date: None,
+                            favicon: thumbnail,
+                        });
+                    }
+                }
+            }
+        }
+        _ => {} // Not a direct article match, continue to search API
+    }
+
+    // Also do a search for related articles
+    let search_api_url = format!(
+        "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={}&format=json&srlimit={}",
+        query_encoded, max_results
+    );
+
+    match http.fetch(&search_api_url, None, "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                if let Some(search_results) = json["query"]["search"].as_array() {
+                    for r in search_results.iter().take(max_results) {
+                        let title = r["title"].as_str().unwrap_or("").to_string();
+                        let snippet = r["snippet"].as_str()
+                            .unwrap_or("")
+                            .replace("<span class=\"searchmatch\">", "")
+                            .replace("</span>", "")
+                            .to_string();
+                        let url = format!("https://en.wikipedia.org/wiki/{}", title.replace(' ', "_"));
+
+                        // Skip if we already have this URL from the summary endpoint
+                        if results.iter().any(|existing| existing.url == url) { continue; }
+
+                        results.push(WebSearchResult {
+                            title,
+                            url,
+                            content: if snippet.is_empty() { None } else { Some(snippet) },
+                            score: Some(0.8),
+                            raw_content: None,
+                            source: Some("wikipedia".to_string()),
+                            domain: Some("wikipedia.org".to_string()),
+                            published_date: None,
+                            favicon: None,
+                        });
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Ok(("wikipedia".to_string(), results, answer))
+}
+
+// ─── GitHub Search API Engine ──────────────────────────────────
+
+/// Search GitHub via their free REST API. Returns (engine_name, results, answer).
+async fn search_github(
+    query: &str,
+    max_results: usize,
+    http: &HttpClient,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
+    let search_url = format!(
+        "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page={}",
+        query_encoded, max_results.min(10)
+    );
+
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("Accept".to_string(), "application/vnd.github.v3+json".to_string());
+
+    let mut results = Vec::new();
+
+    match http.fetch(&search_url, Some(&headers), "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                if let Some(items) = json["items"].as_array() {
+                    for r in items.iter().take(max_results) {
+                        let name = r["full_name"].as_str().unwrap_or("").to_string();
+                        let description = r["description"].as_str().unwrap_or("").to_string();
+                        let html_url = r["html_url"].as_str().unwrap_or("").to_string();
+                        let stars = r["stargazers_count"].as_u64().unwrap_or(0);
+                        let language = r["language"].as_str().unwrap_or("").to_string();
+                        let updated = r["updated_at"].as_str().map(|s| s.to_string());
+
+                        let content = format!(
+                            "⭐ {} stars | 📝 {} | {}",
+                            stars, language, description
+                        );
+
+                        results.push(WebSearchResult {
+                            title: name,
+                            url: html_url,
+                            content: Some(content),
+                            score: Some(stars as f64 / 100000.0).map(|s| s.min(1.0)),
+                            raw_content: None,
+                            source: Some("github".to_string()),
+                            domain: Some("github.com".to_string()),
+                            published_date: updated,
+                            favicon: None,
+                        });
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    // Also search code if the query looks like code-related
+    let code_url = format!(
+        "https://api.github.com/search/code?q={}&per_page={}",
+        query_encoded, max_results.min(5)
+    );
+
+    match http.fetch(&code_url, Some(&headers), "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                if let Some(items) = json["items"].as_array() {
+                    for r in items.iter().take(5) {
+                        let path = r["path"].as_str().unwrap_or("").to_string();
+                        let repo = r["repository"]["full_name"].as_str().unwrap_or("").to_string();
+                        let html_url = r["html_url"].as_str().unwrap_or("").to_string();
+                        let score_val = r["score"].as_f64().unwrap_or(0.0);
+
+                        let title = format!("{}/{}", repo, path);
+                        let content = r["text_matches"].as_array()
+                            .map(|tm| tm.iter().take(2).map(|m| m["fragment"].as_str().unwrap_or("")).collect::<Vec<_>>().join(" ... "))
+                            .unwrap_or_default();
+
+                        results.push(WebSearchResult {
+                            title,
+                            url: html_url,
+                            content: if content.is_empty() { None } else { Some(content) },
+                            score: Some(score_val),
+                            raw_content: None,
+                            source: Some("github".to_string()),
+                            domain: Some("github.com".to_string()),
+                            published_date: None,
+                            favicon: None,
+                        });
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
+    Ok(("github".to_string(), results, None))
 }
 
 pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String> {

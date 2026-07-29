@@ -1604,11 +1604,14 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(web::web_search(WebSearchInput {
                     query,
                     max_results: Some(max_results),
+                    engines: None,
+                    depth: None,
                     topic,
                     include_domains,
                     exclude_domains,
                     days,
                     include_answer: Some(include_answer),
+                    provider: None,
                     output: OutputOptions { format: None },
                 })
                 .await)?;

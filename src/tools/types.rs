@@ -577,16 +577,22 @@ pub struct WebSearchInput {
     pub query: String,
     /// Max results (default: 10)
     pub max_results: Option<i32>,
-    /// Topic (general|news) — currently unused, reserved for future use
+    /// Search engines to use (default: ["duckduckgo"]). Options: duckduckgo, brave, wikipedia, github
+    pub engines: Option<Vec<String>>,
+    /// Search depth: "fast" (DDG snippets only, ~2s) or "deep" (scrape result pages for 500-2000 char excerpts, ~5-10s)
+    pub depth: Option<String>,
+    /// Topic filter: "general", "news", "code" (routes to GitHub for code)
     pub topic: Option<String>,
     /// Include domains
     pub include_domains: Option<Vec<String>>,
     /// Exclude domains
     pub exclude_domains: Option<Vec<String>>,
-    /// Days back (news only)
+    /// Days back (for news topic)
     pub days: Option<i32>,
-    /// Include answer
+    /// Include answer synthesis from DuckDuckGo Instant Answer API
     pub include_answer: Option<bool>,
+    /// Provider (backward compat, ignored)
+    pub provider: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -595,15 +601,33 @@ pub struct WebSearchInput {
 pub struct WebSearchMeta {
     pub provider: String,
     pub query: String,
+    pub engines_used: Vec<String>,
+    pub response_time_ms: u64,
+    pub total_results: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebSearchResult {
     pub title: String,
     pub url: String,
+    /// Clean content snippet (500-2000 chars in deep mode, meta description in fast mode)
     pub content: Option<String>,
+    /// Relevance score 0.0-1.0
     pub score: Option<f64>,
+    /// Full page text (only when include_raw_content=true)
     pub raw_content: Option<String>,
+    /// Source engine that produced this result
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Domain of the result
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+    /// Published/last updated date if available
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_date: Option<String>,
+    /// Favicon URL
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub favicon: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -768,18 +792,26 @@ pub struct WebExtractOutput {
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ExtractMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub og_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub og_description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub og_image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub publish_date: Option<String>,
     pub word_count: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct StructuredData {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub json_ld: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub opengraph: Option<HashMap<String, String>>,
 }
 
@@ -787,14 +819,18 @@ pub struct StructuredData {
 pub struct ExtractedLink {
     pub url: String,
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub rel: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ExtractedImage {
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub alt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<String>,
 }
 
