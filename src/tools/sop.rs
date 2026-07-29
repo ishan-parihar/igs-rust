@@ -58,7 +58,7 @@ fn built_in_chains() -> Vec<SopChain> {
             steps: vec![
                 SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY", "depth": "deep", "max_results": 10, "include_highlights": true, "include_answer": true}), depends_on: None },
                 SopStep { tool: "research.search".into(), params: serde_json::json!({"query": "$QUERY", "limit": 10}), depends_on: None },
-                SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY latest developments 2026", "topic": "news", "max_results": 10}), depends_on: None },
+                SopStep { tool: "web.search".into(), params: serde_json::json!({"query": "$QUERY latest developments", "topic": "news", "max_results": 10}), depends_on: None },
                 SopStep { tool: "insights.find_connections".into(), params: serde_json::json!({"min_domains": 2}), depends_on: Some(0) },
                 SopStep { tool: "insights.trending_entities".into(), params: serde_json::json!({"time_window_hours": 72, "min_current_mentions": 2}), depends_on: Some(2) },
             ],
