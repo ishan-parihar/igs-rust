@@ -998,18 +998,28 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
     match http.fetch(&search_url, None, "bypass").await {
         Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                // Get total count if available
+                // Get total count if available, fallback to pages count
                 if let Some(query_info) = json["query"]["searchinfo"].as_object() {
                     total_available = query_info["totalhits"].as_u64().unwrap_or(0) as usize;
                 }
 
                 if let Some(pages) = json["query"]["pages"].as_object() {
+                    // Only count image MIME types (exclude PDFs, SVGs with no raster, etc.)
+
                     for (_, page) in pages {
                         if results.len() >= max_results {
                             break;
                         }
 
                         let title = page["title"].as_str().unwrap_or("Untitled").to_string();
+
+                        // Skip non-image files (PDFs, documents, etc.)
+                        if title.ends_with(".pdf") || title.ends_with(".PDF")
+                            || title.ends_with(".svg") || title.ends_with(".SVG")
+                            || title.ends_with(".mid") || title.ends_with(".midi")
+                        {
+                            continue;
+                        }
 
                         // Extract image URL from imageinfo
                         if let Some(imageinfo) = page["imageinfo"].as_array() {
@@ -1039,10 +1049,20 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
                             }
                         }
                     }
+
+                    // Fallback: if total_available wasn't set, use pages count
+                    if total_available == 0 {
+                        total_available = results.len();
+                    }
                 }
             }
         }
-        _ => {}
+        Ok(http_mod::FetchOutcome::Cached(_)) => {
+            tracing::warn!("Wikimedia Commons API: unexpected cached response in bypass mode");
+        }
+        Err(e) => {
+            tracing::warn!("Wikimedia Commons API error: {}", e);
+        }
     }
 
     let elapsed_ms = start.elapsed().as_millis() as u64;
