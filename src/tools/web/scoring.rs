@@ -237,10 +237,10 @@ pub fn compute_relevance_score(result: &WebSearchResult, query: &str) -> f64 {
 }
 
 /// Compute per-result confidence score (0.0-1.0).
-/// Combines relevance score with snippet quality and highlight density.
+/// Uses pre-computed relevance score with snippet quality and highlight density.
 /// Higher confidence = more trustworthy and actionable for AI agents.
-pub fn compute_confidence(result: &WebSearchResult, query: &str) -> f64 {
-    let relevance = compute_relevance_score(result, query);
+pub fn compute_confidence(result: &WebSearchResult, _query: &str) -> f64 {
+    let relevance = result.score.unwrap_or(0.5);
 
     // Snippet quality: longer content snippets with more query terms = higher confidence
     let snippet_len = result.content.as_ref().map(|c| c.len()).unwrap_or(0);
@@ -270,7 +270,7 @@ pub fn compute_answer_confidence(results: &[WebSearchResult], query: &str) -> f6
         return 0.0;
     }
 
-    // Average individual confidence
+    // Average individual confidence (uses full confidence signal: relevance + snippet + highlights)
     let avg_confidence: f64 = results.iter()
         .map(|r| compute_confidence(r, query))
         .sum::<f64>() / results.len() as f64;
