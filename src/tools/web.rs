@@ -259,6 +259,132 @@ fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
     }
 }
 
+// ─── BM25 / Cosine TF-IDF Chunk Scoring (CRW-inspired) ────────
+
+/// Tokenize text into lowercase alphanumeric terms (len > 1).
+fn tokenize(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| t.len() > 1)
+        .map(|t| t.to_string())
+        .collect()
+}
+
+/// BM25 chunk scoring constants.
+const BM25_K1: f64 = 1.2;
+const BM25_B: f64 = 0.75;
+
+/// A chunk with its relevance score and original index.
+pub struct ScoredChunk {
+    pub content: String,
+    pub score: f64,
+    pub index: usize,
+}
+
+/// Score and rank chunks by BM25 relevance to a query.
+/// Standard BM25 algorithm (Robertson et al.).
+pub fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
+    if chunks.is_empty() || query.trim().is_empty() {
+        return chunks.iter().enumerate().map(|(i, c)| ScoredChunk {
+            content: c.clone(), score: 0.0, index: i,
+        }).collect();
+    }
+
+    let query_terms = tokenize(query);
+    let tokenized: Vec<Vec<String>> = chunks.iter().map(|c| tokenize(c)).collect();
+    let n = chunks.len() as f64;
+    let avgdl = (tokenized.iter().map(|t| t.len()).sum::<usize>() as f64 / n).max(1.0);
+
+    // Document frequency: how many chunks contain each term
+    let mut df: HashMap<&str, usize> = HashMap::new();
+    for doc in &tokenized {
+        let mut seen: HashMap<&str, bool> = HashMap::new();
+        for term in doc {
+            if seen.insert(term.as_str(), true).is_none() {
+                *df.entry(term.as_str()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let mut scored: Vec<(usize, f64)> = tokenized.iter().enumerate().map(|(i, doc)| {
+        let dl = doc.len() as f64;
+        let mut tf_map: HashMap<&str, usize> = HashMap::new();
+        for term in doc { *tf_map.entry(term.as_str()).or_insert(0) += 1; }
+
+        let score = query_terms.iter().map(|term| {
+            let tf = *tf_map.get(term.as_str()).unwrap_or(&0) as f64;
+            let df_t = *df.get(term.as_str()).unwrap_or(&0) as f64;
+            let idf = ((n - df_t + 0.5) / (df_t + 0.5) + 1.0).ln();
+            let tf_norm = (tf * (BM25_K1 + 1.0)) / (tf + BM25_K1 * (1.0 - BM25_B + BM25_B * dl / avgdl));
+            idf * tf_norm
+        }).sum::<f64>();
+
+        (i, score)
+    }).collect();
+
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(top_k.max(1).min(chunks.len()));
+    scored.into_iter().map(|(i, score)| ScoredChunk {
+        content: chunks[i].clone(), score, index: i,
+    }).collect()
+}
+
+/// Score and rank chunks by Cosine TF-IDF similarity to a query.
+pub fn cosine_tfidf_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
+    if chunks.is_empty() || query.trim().is_empty() {
+        return chunks.iter().enumerate().map(|(i, c)| ScoredChunk {
+            content: c.clone(), score: 0.0, index: i,
+        }).collect();
+    }
+
+    let all_docs: Vec<Vec<String>> = std::iter::once(query.to_string())
+        .chain(chunks.iter().cloned())
+        .map(|s| tokenize(&s))
+        .collect();
+
+    let query_tokens = &all_docs[0];
+    let chunk_tokens = &all_docs[1..];
+
+    // Build vocabulary
+    let mut vocab: Vec<String> = all_docs.iter().flatten().cloned().collect();
+    vocab.sort();
+    vocab.dedup();
+
+    let n_docs = all_docs.len() as f64;
+
+    // IDF for each term
+    let idf: Vec<f64> = vocab.iter().map(|term| {
+        let df = all_docs.iter().filter(|doc| doc.contains(term)).count() as f64;
+        ((n_docs - df + 0.5) / (df + 0.5) + 1.0).ln()
+    }).collect();
+
+    let tfidf = |tokens: &[String]| -> Vec<f64> {
+        let len = tokens.len().max(1) as f64;
+        vocab.iter().enumerate().map(|(i, term)| {
+            let tf = tokens.iter().filter(|t| *t == term).count() as f64 / len;
+            tf * idf[i]
+        }).collect()
+    };
+
+    let q_vec = tfidf(query_tokens);
+    let q_norm: f64 = q_vec.iter().map(|x| x * x).sum::<f64>().sqrt();
+
+    let mut scored: Vec<(usize, f64)> = chunk_tokens.iter().enumerate().map(|(i, tokens)| {
+        let d_vec = tfidf(tokens);
+        let d_norm: f64 = d_vec.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let sim = if q_norm > 0.0 && d_norm > 0.0 {
+            q_vec.iter().zip(d_vec.iter()).map(|(x, y)| x * y).sum::<f64>() / (q_norm * d_norm)
+        } else { 0.0 };
+        (i, sim)
+    }).collect();
+
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(top_k.max(1).min(chunks.len()));
+    scored.into_iter().map(|(i, score)| ScoredChunk {
+        content: chunks[i].clone(), score, index: i,
+    }).collect()
+}
+
 /// Jaccard similarity between two word sets (0.0-1.0).
 fn jaccard_similarity(a: &str, b: &str) -> f64 {
     let words_a: HashSet<String> = a.split_whitespace()
@@ -1294,7 +1420,7 @@ async fn search_github(
         query_encoded, max_results.min(10)
     );
 
-    let mut headers = std::collections::HashMap::new();
+    let mut headers: HashMap<String, String> = HashMap::new();
     headers.insert("Accept".to_string(), "application/vnd.github.v3+json".to_string());
 
     let mut results = Vec::new();
@@ -2334,7 +2460,7 @@ fn extract_structured_data(doc: &scraper::Html) -> Option<StructuredData> {
         .collect();
 
     // Extract OpenGraph
-    let mut opengraph = std::collections::HashMap::new();
+    let mut opengraph: HashMap<String, String> = HashMap::new();
     for prop in &["og:title", "og:description", "og:image", "og:url", "og:type", "og:site_name"] {
         if let Ok(sel) = scraper::Selector::parse(&format!("meta[property='{}']", prop)) {
             if let Some(el) = doc.select(&sel).next() {
