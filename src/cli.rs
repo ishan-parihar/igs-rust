@@ -421,6 +421,15 @@ enum WebAction {
         /// Include key sentence highlights matching the query
         #[arg(long)]
         include_highlights: bool,
+        /// Search depth: "fast" (snippets only, ~2s) or "deep" (scrape pages for 500-2000 char excerpts, ~5-10s)
+        #[arg(long)]
+        depth: Option<String>,
+        /// Time range filter: "day", "week", "month", "year"
+        #[arg(long)]
+        time_range: Option<String>,
+        /// Return top-N BM25-scored chunks per result (chunked content)
+        #[arg(long)]
+        chunks_per_source: Option<i32>,
     },
     /// Scrape a URL to structured markdown
     Scrape {
@@ -1619,12 +1628,15 @@ async fn main() -> anyhow::Result<()> {
                 include_answer,
                 content_length,
                 include_highlights,
+                depth,
+                time_range,
+                chunks_per_source,
             } => {
                 let result = r(web::web_search(WebSearchInput {
                     query,
                     max_results: Some(max_results),
                     engines: None,
-                    depth: None,
+                    depth,
                     topic,
                     content_length,
                     include_highlights: Some(include_highlights),
@@ -1632,8 +1644,8 @@ async fn main() -> anyhow::Result<()> {
                     include_domains,
                     exclude_domains,
                     days,
-                    time_range: None,
-                    chunks_per_source: None,
+                    time_range,
+                    chunks_per_source,
                     provider: None,
                     output: OutputOptions { format: None },
                 })
