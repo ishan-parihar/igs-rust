@@ -100,7 +100,7 @@ impl SemanticIndex {
         let mut doc_term_freqs: Vec<HashMap<String, f64>> = Vec::with_capacity(n);
 
         for doc in &self.documents {
-            let tokens = tokenize(&doc.text);
+            let tokens = tokenize(&doc.text, 3, false);
             let mut tf: HashMap<String, f64> = HashMap::new();
             for token in &tokens {
                 *tf.entry(token.clone()).or_insert(0.0) += 1.0;
@@ -154,7 +154,7 @@ impl SemanticIndex {
         }
 
         // Compute query TF-IDF vector
-        let query_tokens = tokenize(query);
+        let query_tokens = tokenize(query, 3, false);
         let mut query_tf: HashMap<String, f64> = HashMap::new();
         for token in &query_tokens {
             *query_tf.entry(token.clone()).or_insert(0.0) += 1.0;
@@ -229,13 +229,8 @@ impl Default for SemanticIndex {
 
 // ─── Helper Functions ─────────────────────────────────────────
 
-fn tokenize(text: &str) -> Vec<String> {
-    text.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() > 2)
-        .map(|w| w.to_string())
-        .collect()
-}
+use super::nlp::tokenize;
+
 
 fn cosine_similarity(a: &HashMap<String, f64>, b: &HashMap<String, f64>) -> f64 {
     let mut dot = 0.0;

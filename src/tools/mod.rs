@@ -1,5 +1,6 @@
 pub mod helpers;
 pub mod insights;
+pub mod nlp;
 pub mod lp_mcp;
 pub mod monitor;
 pub mod news;

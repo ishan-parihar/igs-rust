@@ -299,14 +299,8 @@ fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
 
 // ─── BM25 / Cosine TF-IDF Chunk Scoring (CRW-inspired) ────────
 
-/// Tokenize text into lowercase alphanumeric terms (len > 1).
-fn tokenize(text: &str) -> Vec<String> {
-    text.to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|t| t.len() > 1)
-        .map(|t| t.to_string())
-        .collect()
-}
+// Reuse consolidated tokenizer from nlp module
+use super::nlp::tokenize;
 
 /// BM25 chunk scoring constants.
 const BM25_K1: f64 = 1.2;
@@ -329,8 +323,8 @@ pub(crate) fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) ->
         }).collect();
     }
 
-    let query_terms = tokenize(query);
-    let tokenized: Vec<Vec<String>> = chunks.iter().map(|c| tokenize(c)).collect();
+    let query_terms = tokenize(query, 2, false);
+    let tokenized: Vec<Vec<String>> = chunks.iter().map(|c| tokenize(c, 2, false)).collect();
     let n = chunks.len() as f64;
     let avgdl = (tokenized.iter().map(|t| t.len()).sum::<usize>() as f64 / n).max(1.0);
 
@@ -2596,7 +2590,7 @@ mod tests {
 
     #[test]
     fn tokenize_basic() {
-        let tokens = tokenize("Hello, World! This is a test.");
+        let tokens = tokenize("Hello, World! This is a test.", 2, false);
         assert!(tokens.contains(&"hello".to_string()));
         assert!(tokens.contains(&"world".to_string()));
         assert!(tokens.contains(&"test".to_string()));

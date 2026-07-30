@@ -20,135 +20,7 @@ pub struct SummaryResult {
     pub top_sentences: Vec<String>,
 }
 
-const STOP_WORDS: &[&str] = &[
-    "a",
-    "about",
-    "above",
-    "after",
-    "again",
-    "against",
-    "all",
-    "am",
-    "an",
-    "and",
-    "any",
-    "are",
-    "as",
-    "at",
-    "be",
-    "because",
-    "been",
-    "before",
-    "being",
-    "below",
-    "between",
-    "both",
-    "but",
-    "by",
-    "can",
-    "did",
-    "do",
-    "does",
-    "doing",
-    "down",
-    "during",
-    "each",
-    "few",
-    "for",
-    "from",
-    "further",
-    "had",
-    "has",
-    "have",
-    "having",
-    "he",
-    "her",
-    "here",
-    "hers",
-    "herself",
-    "him",
-    "himself",
-    "his",
-    "how",
-    "i",
-    "if",
-    "in",
-    "into",
-    "is",
-    "it",
-    "its",
-    "itself",
-    "just",
-    "me",
-    "more",
-    "most",
-    "my",
-    "myself",
-    "no",
-    "nor",
-    "not",
-    "now",
-    "of",
-    "off",
-    "on",
-    "once",
-    "only",
-    "or",
-    "other",
-    "our",
-    "ours",
-    "ourselves",
-    "out",
-    "over",
-    "own",
-    "s",
-    "same",
-    "she",
-    "should",
-    "so",
-    "some",
-    "such",
-    "t",
-    "than",
-    "that",
-    "the",
-    "their",
-    "theirs",
-    "them",
-    "themselves",
-    "then",
-    "there",
-    "these",
-    "they",
-    "this",
-    "those",
-    "through",
-    "to",
-    "too",
-    "under",
-    "until",
-    "up",
-    "very",
-    "was",
-    "we",
-    "were",
-    "what",
-    "when",
-    "where",
-    "which",
-    "while",
-    "who",
-    "whom",
-    "why",
-    "will",
-    "with",
-    "would",
-    "you",
-    "your",
-    "yours",
-    "yourself",
-    "yourselves",
-];
+use super::nlp::tokenize;
 
 /// Split text into sentences using common delimiters.
 fn split_sentences(text: &str) -> Vec<String> {
@@ -156,16 +28,6 @@ fn split_sentences(text: &str) -> Vec<String> {
         .map(|s| s.trim())
         .filter(|s| s.len() > 20) // skip very short fragments
         .map(|s| s.to_string())
-        .collect()
-}
-
-/// Tokenize a sentence into lowercase words, filtering stop words.
-fn tokenize(sentence: &str) -> Vec<String> {
-    sentence
-        .to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() > 2 && !STOP_WORDS.contains(w))
-        .map(|w| w.to_string())
         .collect()
 }
 
@@ -259,7 +121,7 @@ pub fn summarize(text: &str, num_sentences: usize) -> SummaryResult {
     let bow_vectors: Vec<HashMap<String, f64>> = sentences
         .iter()
         .map(|s| {
-            let tokens = tokenize(s);
+            let tokens = tokenize(s, 3, true);
             bow_vector(&tokens)
         })
         .collect();
@@ -338,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_tokenize_filters_stop_words() {
-        let tokens = tokenize("The quick brown fox jumps over the lazy dog");
+        let tokens = tokenize("The quick brown fox jumps over the lazy dog", 3, true);
         assert!(!tokens.contains(&"the".to_string()));
         assert!(tokens.contains(&"quick".to_string()));
         assert!(tokens.contains(&"brown".to_string()));
