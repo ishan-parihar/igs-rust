@@ -584,8 +584,9 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let obs_settings = settings.browser.obscura.clone();
                 let include_answer = input.include_answer.unwrap_or(false);
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
-                    search_duckduckgo(&q, max_results * 2, include_answer, &obs_settings, &http_clone).await
+                    search_duckduckgo(&q, max_results * 2, include_answer, &time_range_clone, &obs_settings, &http_clone).await
                 }));
             }
 
@@ -1200,6 +1201,7 @@ async fn search_duckduckgo(
     query: &str,
     max_results: usize,
     include_answer: bool,
+    time_range: &str,
     obs_settings: &crate::types::ObscuraSettings,
     http: &HttpClient,
 ) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
@@ -1209,7 +1211,15 @@ async fn search_duckduckgo(
 
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
-    let search_url = format!("https://html.duckduckgo.com/html/?q={}", query_encoded);
+    // DDG supports &df= for date filtering: d(day), w(week), m(month), y(year)
+    let df_param = match time_range {
+        "day" => "&df=d",
+        "week" => "&df=w",
+        "month" => "&df=m",
+        "year" => "&df=y",
+        _ => "",
+    };
+    let search_url = format!("https://html.duckduckgo.com/html/?q={}", query_encoded) + df_param;
 
     let html = obscura
         .fetch_with_all_options(&search_url, "html", false, "load", false, None)
