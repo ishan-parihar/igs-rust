@@ -1014,9 +1014,11 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
                         let title = page["title"].as_str().unwrap_or("Untitled").to_string();
 
                         // Skip non-image files (PDFs, documents, etc.)
-                        if title.ends_with(".pdf") || title.ends_with(".PDF")
-                            || title.ends_with(".svg") || title.ends_with(".SVG")
-                            || title.ends_with(".mid") || title.ends_with(".midi")
+                        let title_lower = title.to_lowercase();
+                        if title_lower.ends_with(".pdf")
+                            || title_lower.ends_with(".svg")
+                            || title_lower.ends_with(".mid")
+                            || title_lower.ends_with(".midi")
                         {
                             continue;
                         }
