@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use igs_rust_mcp::server::IgsMcpServer;
 use igs_rust_mcp::tools::types::LimitInput;
 use igs_rust_mcp::tools::types::*;
@@ -395,6 +395,46 @@ enum ResearchAction {
     },
 }
 
+#[derive(Clone, ValueEnum)]
+enum SearchDepth {
+    /// Snippets only, fast (~2s)
+    Fast,
+    /// Scrape pages for 500-2000 char excerpts (~5-10s)
+    Deep,
+}
+
+impl SearchDepth {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Deep => "deep",
+        }
+    }
+}
+
+#[derive(Clone, ValueEnum)]
+enum TimeRange {
+    /// Last 24 hours
+    Day,
+    /// Last 7 days
+    Week,
+    /// Last 30 days
+    Month,
+    /// Last 365 days
+    Year,
+}
+
+impl TimeRange {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Day => "day",
+            Self::Week => "week",
+            Self::Month => "month",
+            Self::Year => "year",
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum WebAction {
     /// Multi-engine web search (DDG, Wikipedia, GitHub, HackerNews, StackOverflow, YouTube)
@@ -405,6 +445,9 @@ enum WebAction {
         max_results: i32,
         #[arg(long)]
         topic: Option<String>,
+        /// Comma-separated list of engines: duckduckgo, wikipedia, github, hackernews, stackoverflow, youtube
+        #[arg(long, value_delimiter = ',')]
+        engines: Option<Vec<String>>,
         #[arg(long, value_delimiter = ',')]
         include_domains: Option<Vec<String>>,
         #[arg(long, value_delimiter = ',')]
@@ -418,12 +461,12 @@ enum WebAction {
         /// Include key sentence highlights matching the query
         #[arg(long)]
         include_highlights: bool,
-        /// Search depth: "fast" (snippets only, ~2s) or "deep" (scrape pages for 500-2000 char excerpts, ~5-10s)
-        #[arg(long)]
-        depth: Option<String>,
-        /// Time range filter: "day", "week", "month", "year"
-        #[arg(long)]
-        time_range: Option<String>,
+        /// Search depth: fast (snippets only) or deep (scrape pages for full excerpts)
+        #[arg(long, value_enum)]
+        depth: Option<SearchDepth>,
+        /// Time range filter
+        #[arg(long, value_enum)]
+        time_range: Option<TimeRange>,
         /// Return top-N BM25-scored chunks per result (chunked content)
         #[arg(long)]
         chunks_per_source: Option<i32>,
@@ -1619,6 +1662,7 @@ async fn main() -> anyhow::Result<()> {
                 query,
                 max_results,
                 topic,
+                engines,
                 include_domains,
                 exclude_domains,
                 include_answer,
@@ -1631,8 +1675,8 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(web::web_search(WebSearchInput {
                     query,
                     max_results: Some(max_results),
-                    engines: None,
-                    depth,
+                    engines,
+                    depth: depth.map(|d| d.as_str().into()),
                     topic,
                     content_length,
                     include_highlights: Some(include_highlights),
@@ -1640,7 +1684,7 @@ async fn main() -> anyhow::Result<()> {
                     include_domains,
                     exclude_domains,
                     days: None,
-                    time_range,
+                    time_range: time_range.map(|tr| tr.as_str().into()),
                     chunks_per_source,
                     provider: None,
                     output: OutputOptions { format: None },
