@@ -483,7 +483,7 @@ enum WebAction {
         #[arg(long)]
         query: Option<String>,
     },
-    /// Search for images via DuckDuckGo (key-free, uses Obscura)
+    /// Search for images via Wikimedia Commons (key-free, no API key)
     ImageSearch {
         #[arg(long)]
         query: String,

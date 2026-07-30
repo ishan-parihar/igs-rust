@@ -971,160 +971,80 @@ async fn search_youtube(
     Ok(("youtube".to_string(), results, None))
 }
 
-// ─── DDG Image Search Engine (Key-Free) ──────────────────────
-
-/// Parse DuckDuckGo Images HTML search results.
-/// DDG Images renders image cards with data-src/src attributes on img elements.
-fn parse_ddg_images_html(html: &str, max_results: usize) -> Vec<WebImageResult> {
-    let doc = scraper::Html::parse_document(html);
-    let mut results = Vec::new();
-    let mut seen_urls: HashSet<String> = HashSet::new();
-
-    // Pre-parse selectors
-    let img_sel = scraper::Selector::parse("img").ok();
-
-    // Strategy 1: Parse DDG HTML result cards — each card has an img thumbnail
-    // and a link with uddg= redirect to the source page
-    let card_selectors = [".result", ".result__body", ".web-result", ".results_links"];
-    for selector_str in &card_selectors {
-        if let Ok(sel) = scraper::Selector::parse(selector_str) {
-            for el in doc.select(&sel).take(max_results * 3) {
-                // Extract image URL from img src/data-src within the card
-                let img_url = img_sel.as_ref().and_then(|s| {
-                    el.select(s).find_map(|img| {
-                        let src = img.attr("data-src")
-                            .or_else(|| img.attr("src"))
-                            .unwrap_or("");
-                        // Only keep actual image URLs (not DDG icons, logos, etc.)
-                        if src.starts_with("http")
-                            && (src.contains(".jpg") || src.contains(".jpeg") || src.contains(".png") || src.contains(".gif") || src.contains(".webp") || src.contains("image"))
-                            && !src.contains("logo")
-                            && !src.contains("icon")
-                        {
-                            Some(src.to_string())
-                        } else {
-                            None
-                        }
-                    })
-                });
-
-                let img_url = match img_url {
-                    Some(u) => u,
-                    None => continue,
-                };
-
-                if seen_urls.contains(&img_url) {
-                    continue;
-                }
-                seen_urls.insert(img_url.clone());
-
-                // Extract title from result link
-                let anchor_sel = match scraper::Selector::parse("a") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let title = el.select(&anchor_sel)
-                    .next()
-                    .map(|a| a.text().collect::<String>().trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "Untitled image".to_string());
-
-                // Extract source page URL
-                let source_url = el.select(&anchor_sel)
-                    .next()
-                    .and_then(|a| a.attr("href"))
-                    .and_then(|href| extract_ddg_redirect_url(href));
-
-                results.push(WebImageResult {
-                    title,
-                    url: img_url.clone(),
-                    thumbnail: Some(img_url),
-                    source_url,
-                    width: None,
-                    height: None,
-                    source: Some("duckduckgo_images".to_string()),
-                });
-
-                if results.len() >= max_results {
-                    break;
-                }
-            }
-            if !results.is_empty() {
-                break;
-            }
-        }
-    }
-
-    // Strategy 2: Extract any image elements with meaningful src
-    if results.is_empty() {
-        if let Ok(img_sel_fallback) = scraper::Selector::parse("img[src]") {
-            for img in doc.select(&img_sel_fallback).take(max_results * 3) {
-                if let Some(src) = img.attr("src") {
-                    if src.starts_with("http")
-                        && (src.contains(".jpg") || src.contains(".jpeg") || src.contains(".png") || src.contains(".gif") || src.contains(".webp") || src.contains("image"))
-                        && !src.contains("logo")
-                        && !src.contains("icon")
-                        && !src.contains("avatar")
-                        && !src.contains("sprite")
-                        && !seen_urls.contains(src)
-                    {
-                        seen_urls.insert(src.to_string());
-                        let alt = img.attr("alt").unwrap_or("Untitled image");
-                        results.push(WebImageResult {
-                            title: alt.trim().to_string(),
-                            url: src.to_string(),
-                            thumbnail: None,
-                            source_url: None,
-                            width: img.attr("width").and_then(|w| w.parse().ok()),
-                            height: img.attr("height").and_then(|h| h.parse().ok()),
-                            source: Some("duckduckgo_images".to_string()),
-                        });
-                        if results.len() >= max_results {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    results.truncate(max_results);
-    results
-}
-
-/// Search for images via DuckDuckGo using Obscura (key-free).
-/// Uses the DDG HTML search endpoint with "images" appended to the query,
-/// then extracts image URLs from the rendered result cards.
+/// Search for images via Wikimedia Commons REST API (key-free).
+/// Uses the Wikimedia Commons API to find freely licensed images.
+/// No API key required — Wikimedia is completely open.
 pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSearchOutput, String> {
     let settings = config::load_settings()
         .await
         .map_err(|e| format!("Settings: {}", e))?;
 
-    if !settings.browser.obscura.enabled {
-        return Err(
-            "Obscura not enabled for image search. Set browser.obscura.enabled=true in settings.yml".into(),
-        );
-    }
-
-    let obscura = crate::obscura::ObscuraManager::new(&settings.browser.obscura);
+    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+    let http = HttpClient::new(&settings.http, &cache_dir);
     let max_results = input.max_results.unwrap_or(10).min(30) as usize;
     let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 
     let start = std::time::Instant::now();
 
-    // Use DDG HTML endpoint — Obscura doesn't render JS on DDG Images page
-    // Search for "query images" to get results that may contain image URLs
+    // Wikimedia Commons API — search for images in namespace 6 (File)
     let search_url = format!(
-        "https://html.duckduckgo.com/html/?q={}+images",
+        "https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=file:{}&gsrnamespace=6&prop=imageinfo&iiprop=url|extmetadata|size&iiurlwidth=800&format=json",
         query_encoded
     );
 
-    let html = obscura
-        .fetch_with_all_options(&search_url, "html", false, "networkidle", false, None)
-        .await
-        .map_err(|e| format!("DDG image search failed: {}", e))?;
+    let mut results = Vec::new();
+    let mut total_available = 0;
 
-    let results = parse_ddg_images_html(&html, max_results);
+    match http.fetch(&search_url, None, "bypass").await {
+        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                // Get total count if available
+                if let Some(query_info) = json["query"]["searchinfo"].as_object() {
+                    total_available = query_info["totalhits"].as_u64().unwrap_or(0) as usize;
+                }
+
+                if let Some(pages) = json["query"]["pages"].as_object() {
+                    for (_, page) in pages {
+                        if results.len() >= max_results {
+                            break;
+                        }
+
+                        let title = page["title"].as_str().unwrap_or("Untitled").to_string();
+
+                        // Extract image URL from imageinfo
+                        if let Some(imageinfo) = page["imageinfo"].as_array() {
+                            if let Some(info) = imageinfo.first() {
+                                let url = info["url"].as_str().unwrap_or("").to_string();
+                                let thumb_url = info["thumburl"].as_str().map(|s| s.to_string());
+                                let width = info["width"].as_u64().map(|w| w as u32);
+                                let height = info["height"].as_u64().map(|h| h as u32);
+
+                                // Source page URL on Wikimedia Commons
+                                let source_url = Some(format!(
+                                    "https://commons.wikimedia.org/wiki/{}",
+                                    title.replace(' ', "_")
+                                ));
+
+                                if !url.is_empty() {
+                                    results.push(WebImageResult {
+                                        title,
+                                        url,
+                                        thumbnail: thumb_url,
+                                        source_url,
+                                        width,
+                                        height,
+                                        source: Some("wikimedia_commons".to_string()),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+
     let elapsed_ms = start.elapsed().as_millis() as u64;
     let count = results.len();
 
@@ -1132,11 +1052,11 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
         results,
         count,
         meta: WebSearchMeta {
-            provider: "duckduckgo_images".to_string(),
+            provider: "wikimedia_commons".to_string(),
             query: input.query.clone(),
-            engines_used: vec!["duckduckgo_images".to_string()],
+            engines_used: vec!["wikimedia_commons".to_string()],
             response_time_ms: elapsed_ms,
-            total_results: count,
+            total_results: total_available.max(count),
             scored: Some(false),
         },
     })

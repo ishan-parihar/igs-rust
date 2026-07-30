@@ -1319,7 +1319,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.image_search",
-        description = "Search for images via DuckDuckGo Images using Obscura headless browser. No API keys required. Returns image URLs, thumbnails, source pages, and dimensions."
+        description = "Search for images via Wikimedia Commons API. No API keys required. Returns freely licensed image URLs, thumbnails, source pages, and dimensions."
     )]
     async fn web_image_search(
         &self,
