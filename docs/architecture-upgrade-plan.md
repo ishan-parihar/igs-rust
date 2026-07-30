@@ -1,8 +1,8 @@
 # IGS Architecture Upgrade Plan
 
-> **Document Version:** 3.0  
+> **Document Version:** 4.0  
 > **Date:** July 30, 2026  
-> **Status:** Phase 1+2 Complete  
+> **Status:** Phase 1+2+3 Complete  
 > **Author:** Buffy (AI Agent)  
 > **Supersedes:** Section 12 of web-tools-upgrade-plan.md
 
@@ -21,7 +21,7 @@ All upgrades maintain the **zero-API-key, self-contained** architecture.
 
 ## 2. Parity Gap Analysis (Updated)
 
-### 2.1 Current Parity Score: ~90%
+### 2.1 Current Parity Score: ~95%
 
 | Feature | IGS | Tavily | Firecrawl | Gap |
 |---------|-----|--------|-----------|-----|
@@ -30,10 +30,11 @@ All upgrades maintain the **zero-API-key, self-contained** architecture.
 | Smart topic routing | ✅ Auto | ✅ Manual | ✅ Basic | ✅ We win |
 | BM25 chunk scoring | ✅ | ❌ | ❌ | ✅ We win |
 | Relevance scoring | ✅ 3-factor | ✅ AI ranker | ✅ Basic | 🟡 Close |
-| **Answer synthesis** | ✅ extractive_answer + DDG IA | ✅ Built-in LLM | ❌ | 🔴 Gap |
-| **Time-range filtering** | ✅ HN + DDG | ✅ day/week/month | ❌ | 🔴 Gap |
-| **Chunked content per URL** | ❌ Single snippet | ✅ chunks_per_source | ❌ | 🔴 Gap |
-| **Image descriptions** | ✅ Wikimedia extmetadata | ✅ include_image_descriptions | ❌ | 🟡 Gap |
+| **Answer synthesis** | ✅ extractive_answer top-5 + DDG IA | ✅ Built-in LLM | ❌ | ✅ Closed |
+| **Time-range filtering** | ✅ HN + DDG + CLI --time-range | ✅ day/week/month | ❌ | ✅ Closed |
+| **Chunked content per URL** | ✅ BM25-scored paragraphs + CLI --chunks-per-source | ✅ chunks_per_source | ❌ | ✅ Closed |
+| **Image descriptions** | ✅ Wikimedia extmetadata + CLI | ✅ include_image_descriptions | ❌ | ✅ Closed |
+| **Deep mode** | ✅ Obscura scrape + CLI --depth deep | ✅ scrape mode | ✅ Firecrawl | ✅ Parity |
 | Reliability/SLA | 🟡 Free APIs | ✅ Enterprise | ✅ Enterprise | 🟡 Structural |
 
 ### 2.2 Highest-Value Upgrades (Ordered by Impact × Feasibility)
@@ -243,15 +244,15 @@ Both can search for news, but serve different purposes:
 
 | Item | Status | Phase |
 |------|--------|-------|
-| Live integration tests | 🔄 Next | Phase 3 |
 | HttpClient passing refactor | ⏳ Deferred | Tech Debt |
 
 ### Pending ⏳
 
 | Item | Priority | Phase |
 |------|----------|-------|
-| Chunked content per source | 🟠 P1 | Phase 1 |
 | HttpClient passing (18+ files) | 🟡 Deferred | Tech Debt |
+| CLI --depth/--time-range value_enum validation | 🟡 Low | Follow-up |
+| CLI --engines flag exposure | 🟡 Low | Follow-up |
 
 ---
 
