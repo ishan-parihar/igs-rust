@@ -265,7 +265,7 @@ pub fn compute_confidence(result: &WebSearchResult) -> f64 {
 /// Compute overall answer confidence from multiple search results.
 /// Higher when results agree (similar scores), are from diverse sources,
 /// and have high individual confidence.
-pub fn compute_answer_confidence(results: &[WebSearchResult], query: &str) -> f64 {
+pub fn compute_answer_confidence(results: &[WebSearchResult]) -> f64 {
     if results.is_empty() {
         return 0.0;
     }

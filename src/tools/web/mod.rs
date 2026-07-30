@@ -247,7 +247,7 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
 
     // Compute answer confidence using per-result scores + diversity + agreement
     let confidence = if answer.is_some() {
-        Some(compute_answer_confidence(&deduped, &input.query))
+        Some(compute_answer_confidence(&deduped))
     } else {
         None
     };
