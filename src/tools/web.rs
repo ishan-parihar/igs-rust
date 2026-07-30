@@ -2180,11 +2180,9 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
             if chunks.len() > 3 {
                 // BM25-score all chunks, keep only those with meaningful relevance
                 let scored = bm25_score_chunks(&chunks, query, chunks.len());
-                let max_score = scored.iter().map(|c| c.score).fold(0.0f64, f64::max);
-                let threshold = max_score * 0.05; // keep chunks with >5% of max score
                 let filtered: Vec<(usize, &str)> = scored
                     .iter()
-                    .filter(|c| c.score > threshold || max_score == 0.0)
+                    .filter(|c| c.score > 0.01) // fixed minimum BM25 score for relevance
                     .map(|c| (c.index, c.content.as_str()))
                     .collect();
                 if !filtered.is_empty() {
