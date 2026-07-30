@@ -36,9 +36,9 @@ fn extractive_answer(results: &[WebSearchResult], query: &str) -> Option<String>
 
     if candidates.is_empty() { return None; }
 
-    // Sort by score, take top 3
+    // Sort by score, take top 5 (matches the 5 results we scan)
     candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    let top: Vec<&str> = candidates.iter().take(3).map(|(_, s)| s.as_str()).collect();
+    let top: Vec<&str> = candidates.iter().take(5).map(|(_, s)| s.as_str()).collect();
     let answer = top.join(". ");
     if answer.is_empty() { None } else { Some(answer) }
 }
@@ -305,7 +305,7 @@ use super::nlp::tokenize;
 /// Split text into paragraphs for BM25 chunk scoring.
 /// Splits on double-newline boundaries, collapses internal single newlines,
 /// and filters out fragments under 40 characters.
-pub(crate) fn split_paragraphs(text: &str) -> Vec<String> {
+fn split_paragraphs(text: &str) -> Vec<String> {
     text.split("\n\n")
         .map(|s| s.replace('\n', " "))
         .map(|s| s.trim().to_string())
