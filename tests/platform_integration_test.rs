@@ -18,7 +18,7 @@ mod platform_tests {
 
         let output = result.unwrap();
         assert!(output.count > 0, "Expected at least 1 result");
-        assert!(output.videos.len() > 0, "Videos vector should not be empty");
+        assert!(!output.videos.is_empty(), "Videos vector should not be empty");
 
         let video = &output.videos[0];
         assert!(!video.id.is_empty(), "Video ID should not be empty");
@@ -123,8 +123,7 @@ mod platform_tests {
         };
 
         let result = twitter::twitter_search(input).await;
-        if result.is_err() {
-            let err = result.unwrap_err();
+        if let Err(err) = result {
             println!("Twitter search error: {}", err);
         }
     }
@@ -163,13 +162,11 @@ mod platform_tests {
         };
 
         let result = reddit::reddit_search(input).await;
-        if result.is_err() {
-            let err = result.unwrap_err();
+        if let Err(err) = result {
             println!("Reddit search error: {}", err);
-        } else {
-            let output = result.unwrap();
+        } else if let Ok(output) = result {
             assert!(output.count > 0, "Expected at least 1 result");
-            assert!(output.posts.len() > 0, "Posts vector should not be empty");
+            assert!(!output.posts.is_empty(), "Posts vector should not be empty");
 
             let post = &output.posts[0];
             assert!(!post.title.is_empty(), "Post title should not be empty");
@@ -193,13 +190,11 @@ mod platform_tests {
         };
 
         let result = reddit::reddit_feed(input).await;
-        if result.is_err() {
-            let err = result.unwrap_err();
+        if let Err(err) = result {
             println!("Reddit feed error: {}", err);
-        } else {
-            let output = result.unwrap();
+        } else if let Ok(output) = result {
             assert!(output.count > 0, "Expected at least 1 post");
-            assert!(output.posts.len() > 0, "Posts vector should not be empty");
+            assert!(!output.posts.is_empty(), "Posts vector should not be empty");
 
             let post = &output.posts[0];
             assert!(!post.title.is_empty(), "Post title should not be empty");

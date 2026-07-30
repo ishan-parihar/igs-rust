@@ -268,6 +268,7 @@ enum SourceAction {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum NewsAction {
     /// Fetch news from configured sources
     Fetch {
@@ -1631,6 +1632,7 @@ async fn main() -> anyhow::Result<()> {
                     include_domains,
                     exclude_domains,
                     days,
+                    time_range: None,
                     provider: None,
                     output: OutputOptions { format: None },
                 })
@@ -2233,8 +2235,7 @@ async fn main() -> anyhow::Result<()> {
                     min_domains,
                     limit,
                 } => {
-                    let result = r(insights::insights_find_connections(
-                        &server.insights(),
+                    let result = r(insights::insights_find_connections(                         server.insights(),
                         InsightFindConnectionsInput {
                             entity,
                             min_domains,
@@ -2254,8 +2255,7 @@ async fn main() -> anyhow::Result<()> {
                     min_growth,
                     min_current_mentions,
                 } => {
-                    let result = r(insights::insights_trending(
-                        &server.insights(),
+                    let result = r(insights::insights_trending(                         server.insights(),
                         InsightTrendingInput {
                             time_window_hours,
                             min_growth,
@@ -2278,8 +2278,7 @@ async fn main() -> anyhow::Result<()> {
                         std::fs::read_to_string(&input_path)?
                     };
                     let articles: Vec<InsightIndexArticle> = serde_json::from_str(&items_json)?;
-                    let result = r(insights::insights_index(
-                        &server.insights(),
+                    let result = r(insights::insights_index(                         server.insights(),
                         InsightIndexInput { articles },
                     )
                     .await)?;
@@ -2288,15 +2287,13 @@ async fn main() -> anyhow::Result<()> {
                         "Run `igs insights stats` to check index status",
                     ]);
                 }
-                InsightsAction::Stats => {
-                    let result = r(insights::insights_stats(&server.insights()).await)?;
+                InsightsAction::Stats => {                     let result = r(insights::insights_stats(server.insights()).await)?;
                     output(fmt, &result);
                     print_next_step(&[
                         "Run `igs insights find-connections` to analyze indexed articles",
                     ]);
                 }
-                InsightsAction::ClearIndex => {
-                    let result = r(insights::insights_clear(&server.insights()).await)?;
+                InsightsAction::ClearIndex => {                     let result = r(insights::insights_clear(server.insights()).await)?;
                     output(fmt, &result);
                     print_next_step(&[
                         "Run `igs news fetch --depth deep` to re-index articles",

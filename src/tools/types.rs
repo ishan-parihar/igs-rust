@@ -601,6 +601,8 @@ pub struct WebSearchInput {
     pub exclude_domains: Option<Vec<String>>,
     /// Days back (for news topic)
     pub days: Option<i32>,
+    /// Time range filter: "day", "week", "month", "year" (applies to HN engine)
+    pub time_range: Option<String>,
     /// Provider (backward compat, ignored)
     pub provider: Option<String>,
     #[serde(flatten)]
@@ -927,6 +929,9 @@ pub struct WebImageResult {
     /// Source engine
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Image description or alt text (from Wikimedia metadata)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

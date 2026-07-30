@@ -5,6 +5,44 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
+// ─── Answer Synthesis (TextRank-based, no external LLM) ───────
+
+/// Generate an answer from search results using extractive summarization.
+/// Takes the top 3 highest-scored results, splits into sentences,
+/// and returns the top-N most query-relevant sentences.
+fn extractive_answer(results: &[WebSearchResult], query: &str) -> Option<String> {
+    if results.is_empty() { return None; }
+
+    // Collect text from top 3 results
+    let query_words: Vec<String> = query.to_lowercase().split_whitespace()
+        .filter(|w| w.len() > 1).map(String::from).collect();
+    if query_words.is_empty() { return None; }
+
+    let mut candidates: Vec<(f64, String)> = Vec::new();
+    for result in results.iter().take(3) {
+        let text = result.content.as_deref().unwrap_or("");
+        // Split into sentences
+        for sentence in text.split(['.', '!', '?']) {
+            let trimmed = sentence.trim();
+            if trimmed.len() < 30 { continue; }
+            // Score by query word overlap
+            let lower = trimmed.to_lowercase();
+            let score: f64 = query_words.iter().map(|w| if lower.contains(w.as_str()) { 1.0 } else { 0.0 }).sum();
+            if score > 0.0 {
+                candidates.push((score, trimmed.to_string()));
+            }
+        }
+    }
+
+    if candidates.is_empty() { return None; }
+
+    // Sort by score, take top 3
+    candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    let top: Vec<&str> = candidates.iter().take(3).map(|(_, s)| s.as_str()).collect();
+    let answer = top.join(". ");
+    if answer.is_empty() { None } else { Some(answer) }
+}
+
 // ─── In-Memory Search Cache ───────────────────────────────────
 
 type CacheEntry = (WebSearchOutput, Instant);
@@ -575,8 +613,9 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
             "hackernews" => {
                 let q = input.query.clone();
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
-                    search_hackernews(&q, max_results, &http_clone).await
+                    search_hackernews(&q, max_results, &http_clone, &time_range_clone).await
                 }));
             }
             "stackoverflow" => {
@@ -720,6 +759,11 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
 
     let elapsed_ms = start.elapsed().as_millis() as u64;
     let count = deduped.len();
+
+    // Answer synthesis: generate from top results if not already provided by engines
+    if answer.is_none() && input.include_answer.unwrap_or(false) {
+        answer = extractive_answer(&deduped, &input.query);
+    }
 
     // Compute answer confidence: based on engine count and result diversity
     let confidence = if answer.is_some() {
@@ -1039,15 +1083,30 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
                                 ));
 
                                 if !url.is_empty() {
-                                    results.push(WebImageResult {
-                                        title,
-                                        url,
-                                        thumbnail: thumb_url,
-                                        source_url,
-                                        width,
-                                        height,
-                                        source: Some("wikimedia_commons".to_string()),
-                                    });
+                                    // Extract image description from Wikimedia extmetadata
+                                let description = info["extmetadata"]
+                                    .as_object()
+                                    .and_then(|em| em.get("ImageDescription"))
+                                    .and_then(|desc| desc.get("value"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| {
+                                        // Strip HTML tags using scraper for clean text extraction
+                                        let doc = scraper::Html::parse_fragment(s);
+                                        doc.root_element().text().collect::<Vec<_>>().join(" ")
+                                    })
+                                    .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+                                    .filter(|s| !s.is_empty());
+
+                                results.push(WebImageResult {
+                                    title,
+                                    url,
+                                    thumbnail: thumb_url,
+                                    source_url,
+                                    width,
+                                    height,
+                                    source: Some("wikimedia_commons".to_string()),
+                                    description,
+                                });
                                 }
                             }
                         }
@@ -1376,13 +1435,29 @@ async fn search_hackernews(
     query: &str,
     max_results: usize,
     http: &HttpClient,
+    time_range: &str,
 ) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let hits = max_results.min(30);
-    let url = format!(
-        "https://hn.algolia.com/api/v1/search?query={}&tags=story&hitsPerPage={}",
-        query_encoded, hits
-    );
+    // Add time range filter via numericFilters (unix timestamp)
+    let time_filter = chrono::Utc::now().timestamp() - match time_range {
+        "day" => 86400,
+        "week" => 604800,
+        "month" => 2592000,
+        "year" => 31536000,
+        _ => 0,
+    };
+    let url = if time_filter > 0 {
+        format!(
+            "https://hn.algolia.com/api/v1/search?query={}&tags=story&hitsPerPage={}&numericFilters=created_at_i>{}",
+            query_encoded, hits, time_filter
+        )
+    } else {
+        format!(
+            "https://hn.algolia.com/api/v1/search?query={}&tags=story&hitsPerPage={}",
+            query_encoded, hits
+        )
+    };
 
     match http.fetch(&url, None, "bypass").await {
         Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
