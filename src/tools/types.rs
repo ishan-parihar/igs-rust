@@ -578,7 +578,7 @@ pub struct WebSearchInput {
     /// Max results (default: 10)
     pub max_results: Option<i32>,
     /// Search engines to use (auto-selected by topic if omitted).
-    /// Options: duckduckgo, brave, wikipedia, github, hackernews, stackoverflow
+    /// Options: duckduckgo, wikipedia, github, hackernews, stackoverflow
     pub engines: Option<Vec<String>>,
     /// Search depth: "fast" (snippets only, ~2s) or "deep" (scrape pages for 500-2000 char excerpts, ~5-10s)
     pub depth: Option<String>,

@@ -1245,7 +1245,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.search",
-        description = "Multi-engine web search (DDG, Brave, Wikipedia, GitHub, HackerNews, StackOverflow). Supports content depth control, highlight extraction, answer synthesis, and smart engine routing by topic."
+        description = "Multi-engine web search (DDG, Wikipedia, GitHub, HackerNews, StackOverflow). Supports content depth control, highlight extraction, answer synthesis, and smart engine routing by topic. Zero API keys required."
     )]
     async fn web_search(
         &self,

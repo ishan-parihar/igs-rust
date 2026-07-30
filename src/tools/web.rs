@@ -414,7 +414,6 @@ fn route_engines(topic: &str, query: &str) -> Vec<String> {
         ],
         "news" => vec![
             "duckduckgo".to_string(),
-            "brave".to_string(),
             "hackernews".to_string(),
         ],
         "academic" => vec![
@@ -424,7 +423,6 @@ fn route_engines(topic: &str, query: &str) -> Vec<String> {
         ],
         _ => vec![ // general
             "duckduckgo".to_string(),
-            "brave".to_string(),
             "wikipedia".to_string(),
             "hackernews".to_string(),
         ],
@@ -473,13 +471,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                     search_duckduckgo(&q, max_results * 2, include_answer, &obs_settings, &http_clone).await
                 }));
             }
-            "brave" => {
-                let q = input.query.clone();
-                let http_clone = HttpClient::new(&settings.http, &cache_dir);
-                handles.push(tokio::spawn(async move {
-                    search_brave(&q, max_results * 2, &http_clone).await
-                }));
-            }
+
             "wikipedia" => {
                 let q = input.query.clone();
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
@@ -824,81 +816,7 @@ async fn search_duckduckgo(
 }
 
 
-// ─── Brave Search API Engine ──────────────────────────────────
 
-/// Search via Brave Search API (free tier: 2000 queries/month). Returns (engine_name, results, answer).
-/// Domain filtering is handled by web_search after dedup.
-async fn search_brave(
-    query: &str,
-    max_results: usize,
-    http: &HttpClient,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
-    let brave_api_key = std::env::var("BRAVE_SEARCH_API_KEY").ok();
-
-    // Try to get API key from env or settings
-    let api_key = match brave_api_key {
-        Some(k) if !k.is_empty() => k,
-        _ => return Err("BRAVE_SEARCH_API_KEY not set".into()),
-    };
-
-    let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
-    let count = max_results.min(20) as u32;
-    let url = format!(
-        "https://api.search.brave.com/res/v1/web/search?q={}&count={}&text_decorations=false",
-        query_encoded, count
-    );
-
-    let mut headers = std::collections::HashMap::new();
-    headers.insert("Accept".to_string(), "application/json".to_string());
-    headers.insert("Accept-Encoding".to_string(), "gzip".to_string());
-    headers.insert("X-Subscription-Token".to_string(), api_key);
-
-    let outcome = http.fetch(&url, Some(&headers), "bypass").await
-        .map_err(|e| format!("Brave API error: {}", e))?;
-
-    match outcome {
-        http_mod::FetchOutcome::Response(resp, _, _) => {
-            let json: serde_json::Value = serde_json::from_str(&resp.body_text)
-                .map_err(|e| format!("Brave parse error: {}", e))?;
-
-            let mut results = Vec::new();
-
-            if let Some(web_results) = json["web"]["results"].as_array() {
-                for r in web_results.iter().take(max_results) {
-                    let title = r["title"].as_str().unwrap_or("").to_string();
-                    let url_str = r["url"].as_str().unwrap_or("").to_string();
-                    let description = r["description"].as_str().unwrap_or("").to_string();
-                    let age = r["age"].as_str().map(|s| s.to_string());
-                    let favicon = r["meta_url"]["favicon"].as_str().map(|s| s.to_string());
-                    let domain = extract_domain(&url_str);
-
-                    if !url_str.is_empty() {
-                        results.push(WebSearchResult {
-                            title,
-                            url: url_str,
-                            content: if description.is_empty() { None } else { Some(description) },
-                            score: None,
-                            highlights: None,
-                            raw_content: None,
-                            source: Some("brave".to_string()),
-                            domain,
-                            published_date: age,
-                            favicon,
-                        });
-                    }
-                }
-            }
-
-            // Extract AI summary if available
-            let answer = json["mixed"]["main"]["answer"]
-                .as_str()
-                .map(|s| s.to_string());
-
-            Ok(("brave".to_string(), results, answer))
-        }
-        _ => Err("Brave API: unexpected response".into()),
-    }
-}
 
 // ─── Wikipedia REST API Engine ────────────────────────────────
 
