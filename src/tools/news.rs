@@ -1,7 +1,7 @@
 use crate::clustering;
 use crate::config;
 use crate::fusion;
-use crate::http::{self as http_mod, HttpClient};
+use crate::http::HttpClient;
 use crate::parsers;
 use crate::server::InsightStorage;
 use crate::tools::helpers::*;
@@ -42,12 +42,7 @@ fn news_item_to_json(item: &NewsItem) -> serde_json::Value {
 }
 
 /// Fetch normalized news items from configured sources
-pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = Arc::new(HttpClient::new(&settings.http, &cache_dir));
+pub async fn news_fetch(input: NewsFetchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> Result<NewsFetchOutput, String> {
     let sf = config::load_sources()
         .await
         .map_err(|e| format!("Sources: {}", e))?;
@@ -269,13 +264,15 @@ pub async fn news_fetch(input: NewsFetchInput) -> Result<NewsFetchOutput, String
 pub async fn fetch_news_intelligent(
     input: NewsFetchInput,
     insights: &Arc<Mutex<InsightStorage>>,
+    http: Arc<HttpClient>,
+    settings: &crate::types::Settings,
 ) -> Result<serde_json::Value, String> {
     // Use json format for internal pipeline steps
     let mut fetch_input = input.clone();
     fetch_input.output.format = Some("json".to_string());
 
     // Step 1: Fetch with regular news_fetch
-    let fetch_output = news_fetch(fetch_input).await?;
+    let fetch_output = news_fetch(fetch_input, http.clone(), settings).await?;
     let fetched = fetch_output.count;
     let fetch_meta = fetch_output.meta;
 
@@ -326,7 +323,7 @@ pub async fn fetch_news_intelligent(
             },
         };
 
-        let enrich_output = news_enrich(enrich_input).await?;
+        let enrich_output = news_enrich(enrich_input, &http, settings).await?;
         enrich_output.items
     };
 
@@ -390,12 +387,7 @@ pub async fn fetch_news_intelligent(
 }
 
 /// Debug helper. Test a single source and return up to 10 items.
-pub async fn news_test_source(input: NewsTestInput) -> Result<NewsTestOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
+pub async fn news_test_source(input: NewsTestInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<NewsTestOutput, String> {
     let sf = config::load_sources()
         .await
         .map_err(|e| format!("Sources: {}", e))?;
@@ -407,7 +399,7 @@ pub async fn news_test_source(input: NewsTestInput) -> Result<NewsTestOutput, St
         .ok_or_else(|| format!("Source not found: {}", input.id))?;
 
     let cache_mode = input.cache_mode.as_deref().unwrap_or("bypass");
-    let items = parsers::parse_by_source(src, &http, cache_mode, None)
+    let items = parsers::parse_by_source(src, http, cache_mode, None)
         .await
         .map_err(|e| format!("Parse error: {}", e))?;
 
@@ -417,7 +409,7 @@ pub async fn news_test_source(input: NewsTestInput) -> Result<NewsTestOutput, St
 }
 
 /// NLP enrichment (offline). Adds basic topics, sentiment, and summary to items.
-pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, String> {
+pub async fn news_enrich(input: NewsEnrichInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<NewsEnrichOutput, String> {
     let extract = input.extract.unwrap_or_else(|| {
         vec![
             "topics".into(),

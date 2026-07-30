@@ -1156,6 +1156,9 @@ async fn main() -> anyhow::Result<()> {
 
                     // AXI §8: Quick news snapshot from first active pool
                     if let Some(first_pool) = pools.pools.first() {
+                        let Ok(axi_settings) = igs_rust_mcp::config::load_settings().await else { return Ok(()); };
+                        let axi_cache = igs_rust_mcp::http::resolve_cache_dir(&axi_settings, &igs_rust_mcp::config::user_config_dir());
+                        let axi_http = std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&axi_settings.http, &axi_cache));
                         if let Ok(result) = news::news_fetch(NewsFetchInput {
                             filters: DiscoveryFilters {
                                 pools: Some(vec![first_pool.id.clone()]),
@@ -1177,7 +1180,7 @@ async fn main() -> anyhow::Result<()> {
                             skip_index: Some(true),
                             depth_opts: DepthOptions { depth: None },
                             output: OutputOptions { format: None },
-                        })
+                        }, axi_http.clone(), &axi_settings)
                         .await
                         {
                             if !result.items.is_empty() {
@@ -1472,6 +1475,9 @@ async fn main() -> anyhow::Result<()> {
                 skip_index,
             } => {
                 let kw = keywords.map(KeywordFilter::Multiple);
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir));
                 let result = r(news::news_fetch(NewsFetchInput {
                     filters: DiscoveryFilters {
                         pools,
@@ -1493,7 +1499,7 @@ async fn main() -> anyhow::Result<()> {
                     skip_index: Some(skip_index),
                     depth_opts: DepthOptions { depth },
                     output: OutputOptions { format: None },
-                })
+                }, http_client.clone(), &settings)
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1503,11 +1509,14 @@ async fn main() -> anyhow::Result<()> {
                 ]);
             }
             NewsAction::Test { id, cache_mode } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(news::news_test_source(NewsTestInput {
                     id,
                     cache_mode: Some(cache_mode),
                     output: OutputOptions { format: None },
-                })
+                }, &http_client, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1529,11 +1538,14 @@ async fn main() -> anyhow::Result<()> {
                     ));
                 };
                 let items: Vec<EnrichItemInput> = serde_json::from_str(&items_json)?;
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(news::news_enrich(NewsEnrichInput {
                     items,
                     extract,
                     output: OutputOptions { format: None },
-                })
+                }, &http_client, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1588,6 +1600,9 @@ async fn main() -> anyhow::Result<()> {
                 year_to,
                 limit,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(research::research_search(ResearchSearchInput {
                     query,
                     sources: Some(srcs),
@@ -1596,7 +1611,7 @@ async fn main() -> anyhow::Result<()> {
                     year_to,
                     limit: Some(limit),
                     output: OutputOptions { format: None },
-                })
+                }, &http_client, &settings)
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1609,12 +1624,15 @@ async fn main() -> anyhow::Result<()> {
                 include_citations,
                 include_references,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(research::research_paper(ResearchPaperInput {
                     paper_id: id,
                     include_citations: Some(include_citations),
                     include_references: Some(include_references),
                     extract_pdf: None,
-                })
+                }, &http_client, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1627,12 +1645,15 @@ async fn main() -> anyhow::Result<()> {
                 output: out,
                 convert_to_markdown,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(research::research_download(ResearchDownloadInput {
                     paper_id: id,
                     output_path: out,
                     output: OutputOptions { format: None },
                     convert_to_markdown: Some(convert_to_markdown),
-                })
+                }, &http_client, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1641,13 +1662,16 @@ async fn main() -> anyhow::Result<()> {
                 ]);
             }
             ResearchAction::PubMedSearch { query, limit } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(research::research_pubmed_search(ResearchPubMedInput {
                     query,
                     limits: LimitInput {
                         limit: Some(limit as u32),
                     },
                     output: OutputOptions { format: None },
-                })
+                }, &http_client, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2696,36 +2720,45 @@ async fn main() -> anyhow::Result<()> {
 
         Some(Commands::Osint { action }) => match action {
             OsintAction::OpenAlex { query, limit } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(igs_rust_mcp::tools::data_sources::openalex_search(
                     igs_rust_mcp::tools::data_sources::OpenAlexSearchInput {
                         query,
                         limit: Some(limit),
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
-                    },
+                    }, &http_client, &settings,
                 )
                 .await)?;
                 output(fmt, &result);
             }
             OsintAction::Shodan { query, api_key } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(igs_rust_mcp::tools::data_sources::shodan_search(
                     igs_rust_mcp::tools::data_sources::ShodanSearchInput {
                         query,
                         api_key,
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
-                    },
+                    }, &http_client, &settings,
                 )
                 .await)?;
                 output(fmt, &result);
             }
             OsintAction::Hibp { email, api_key } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(igs_rust_mcp::tools::data_sources::hibp_check(
                     igs_rust_mcp::tools::data_sources::HibpBreachInput {
                         email,
                         api_key,
                         output: OutputOptions { format: None },
-                    },
+                    }, &http_client, &settings,
                 )
                 .await)?;
                 output(fmt, &result);
@@ -2738,6 +2771,9 @@ async fn main() -> anyhow::Result<()> {
                 api_key,
                 email,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+                let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
                 let result = r(igs_rust_mcp::tools::data_sources::acled_search(
                     igs_rust_mcp::tools::data_sources::AcledSearchInput {
                         country,
@@ -2748,7 +2784,7 @@ async fn main() -> anyhow::Result<()> {
                         email,
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
-                    },
+                    }, &http_client, &settings,
                 )
                 .await)?;
                 output(fmt, &result);

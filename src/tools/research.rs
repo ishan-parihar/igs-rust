@@ -1,4 +1,3 @@
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
@@ -7,18 +6,13 @@ use chrono::Datelike;
 use unpdf;
 
 /// Search academic papers across arXiv and Semantic Scholar
-pub async fn research_search(input: ResearchSearchInput) -> Result<ResearchSearchOutput, String> {
+pub async fn research_search(input: ResearchSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<ResearchSearchOutput, String> {
     let sources = input
         .sources
         .unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
     let limit = input.limit.unwrap_or(25).clamp(1, 100);
     let query_enc = urlencoding(&input.query);
 
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let mut all_papers: Vec<ResearchPaper> = Vec::new();
     let mut total = 0usize;
@@ -297,12 +291,7 @@ type PaperFetchResult = (
 );
 
 /// Get detailed information about a specific paper by ID
-pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
+pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<ResearchPaperOutput, String> {
 
     let paper_id = &input.paper_id;
     let (title, authors, abstract_text, year, citations, references, pdf_url, _content): PaperFetchResult =
@@ -406,7 +395,7 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
 
     // Fetch citations list if requested
     let citations_list = if input.include_citations == Some(true) {
-        Some(fetch_s2_related_papers(&s2_lookup_id, "citations", "citingPaper", &http).await)
+        Some(fetch_s2_related_papers(&s2_lookup_id, "citations", "citingPaper", http).await)
     } else {
         None
     };
@@ -416,7 +405,7 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
         if input.include_citations == Some(true) {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
-        Some(fetch_s2_related_papers(&s2_lookup_id, "references", "citedPaper", &http).await)
+        Some(fetch_s2_related_papers(&s2_lookup_id, "references", "citedPaper", http).await)
     } else {
         None
     };
@@ -441,12 +430,9 @@ pub async fn research_paper(input: ResearchPaperInput) -> Result<ResearchPaperOu
 /// Search PubMed for biomedical and life sciences research papers
 pub async fn research_pubmed_search(
     input: ResearchPubMedInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<ResearchPubMedOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let query = urlencoding(&input.query);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
@@ -538,12 +524,9 @@ pub async fn research_pubmed_search(
 /// Download a research paper PDF
 pub async fn research_download(
     input: ResearchDownloadInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
 ) -> Result<ResearchDownloadOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     // Determine the PDF URL based on the paper ID
     let pdf_url = if input.paper_id.starts_with("arxiv:") {

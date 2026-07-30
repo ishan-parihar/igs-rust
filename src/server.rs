@@ -748,7 +748,7 @@ impl IgsMcpServer {
             .unwrap_or_else(|| "default".to_string());
 
         if depth == "deep" {
-            let output = news::fetch_news_intelligent(params.0, &self.insights).await?;
+            let output = news::fetch_news_intelligent(params.0, &self.insights, self.http_client.clone(), &self.settings).await?;
             // Index fetched articles into the semantic search index
             if let Some(items) = output.get("fetched_items").and_then(|v| v.as_array()) {
                 let mut idx = self.semantic_index.lock().await;
@@ -772,7 +772,7 @@ impl IgsMcpServer {
                 .and_then(|p| p.first())
                 .cloned()
                 .unwrap_or_else(|| "news".to_string());
-            let output = news::news_fetch(params.0).await?;
+            let output = news::news_fetch(params.0, self.http_client.clone(), &self.settings).await?;
             // Index fetched articles into the semantic search index
             {
                 let mut idx = self.semantic_index.lock().await;
@@ -795,7 +795,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.id.clone();
-        let output = news::news_test_source(params.0).await?;
+        let output = news::news_test_source(params.0, &self.http_client, &self.settings).await?;
         self.dump("news.test_source", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -810,7 +810,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = format!("enrich-{}", params.0.items.len());
-        let output = news::news_enrich(params.0).await?;
+        let output = news::news_enrich(params.0, &self.http_client, &self.settings).await?;
         self.dump("news.enrich", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -906,7 +906,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = research::research_search(params.0).await?;
+        let output = research::research_search(params.0, &self.http_client, &self.settings).await?;
         self.dump("research.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -920,7 +920,7 @@ impl IgsMcpServer {
         params: Parameters<ResearchPaperInput>,
     ) -> Result<Json<ResearchPaperOutput>, String> {
         let _subject = params.0.paper_id.clone();
-        let output = research::research_paper(params.0).await?;
+        let output = research::research_paper(params.0, &self.http_client, &self.settings).await?;
         self.dump("research.paper", &_subject, &output);
         Ok(Json(output))
     }
@@ -933,7 +933,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ResearchDownloadInput>,
     ) -> Result<Json<ResearchDownloadOutput>, String> {
-        research::research_download(params.0).await.map(Json)
+        research::research_download(params.0, &self.http_client, &self.settings).await.map(Json)
     }
 
     #[tool(
@@ -945,7 +945,7 @@ impl IgsMcpServer {
         params: Parameters<ResearchPubMedInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = research::research_pubmed_search(params.0).await?;
+        let output = research::research_pubmed_search(params.0, &self.http_client, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1689,7 +1689,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::OpenAlexSearchInput>,
     ) -> Result<Json<crate::tools::data_sources::OpenAlexSearchOutput>, String> {
-        let result = crate::tools::data_sources::openalex_search(params.0).await?;
+        let result = crate::tools::data_sources::openalex_search(params.0, &self.http_client, &self.settings).await?;
         Ok(Json(result))
     }
 
@@ -1701,7 +1701,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::ShodanSearchInput>,
     ) -> Result<Json<crate::tools::data_sources::ShodanSearchOutput>, String> {
-        let result = crate::tools::data_sources::shodan_search(params.0).await?;
+        let result = crate::tools::data_sources::shodan_search(params.0, &self.http_client, &self.settings).await?;
         Ok(Json(result))
     }
 
@@ -1713,7 +1713,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::HibpBreachInput>,
     ) -> Result<Json<crate::tools::data_sources::HibpBreachOutput>, String> {
-        let result = crate::tools::data_sources::hibp_check(params.0).await?;
+        let result = crate::tools::data_sources::hibp_check(params.0, &self.http_client, &self.settings).await?;
         Ok(Json(result))
     }
 
@@ -1725,7 +1725,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::AcledSearchInput>,
     ) -> Result<Json<crate::tools::data_sources::AcledSearchOutput>, String> {
-        let result = crate::tools::data_sources::acled_search(params.0).await?;
+        let result = crate::tools::data_sources::acled_search(params.0, &self.http_client, &self.settings).await?;
         Ok(Json(result))
     }
 
