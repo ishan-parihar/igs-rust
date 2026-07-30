@@ -1285,7 +1285,7 @@ impl IgsMcpServer {
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
-        let output = web::web_crawl(params.0, &self.http_client, &self.settings).await?;
+        let output = web::web_crawl(params.0, &self.settings).await?;
         self.dump("web.crawl", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1313,7 +1313,7 @@ impl IgsMcpServer {
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
-        let output = web::web_extract(params.0, &self.http_client, &self.settings).await?;
+        let output = web::web_extract(params.0, &self.settings).await?;
         self.dump("web.extract", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1328,7 +1328,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = web::web_image_search(params.0, &self.http_client, &self.settings).await?;
+        let output = web::web_image_search(params.0, &self.http_client).await?;
         self.dump("web.image_search", &_subject, &output);
         Ok(format_output(&output, &format))
     }

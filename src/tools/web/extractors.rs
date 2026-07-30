@@ -194,7 +194,7 @@ pub(super) fn extract_scrape_output(
     })
 }
 
-pub async fn web_crawl(input: WebCrawlInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
+pub async fn web_crawl(input: WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
 
     // Use browser.default from settings
     let provider = &settings.browser.default;
@@ -602,7 +602,7 @@ pub(super) fn detect_language(doc: &scraper::Html) -> Option<String> {
 /// Supports full extraction (text, metadata, links, images, structured data)
 /// or selector-based extraction for specific elements.
 /// Batch mode: if `urls` is provided, processes multiple URLs in parallel.
-pub async fn web_extract(input: WebExtractInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<WebExtractOutput, String> {
+pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settings) -> Result<WebExtractOutput, String> {
     let obs_settings = &settings.browser.obscura;
 
     if !obs_settings.enabled {

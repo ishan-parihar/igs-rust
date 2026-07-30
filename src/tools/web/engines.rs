@@ -83,7 +83,7 @@ pub(super) async fn search_youtube(
 /// Search for images via Wikimedia Commons REST API (key-free).
 /// Uses the Wikimedia Commons API to find freely licensed images.
 /// No API key required — Wikimedia is completely open.
-pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<WebImageSearchOutput, String> {
+pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient) -> Result<WebImageSearchOutput, String> {
     let max_results = input.max_results.unwrap_or(10).min(30) as usize;
     let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 

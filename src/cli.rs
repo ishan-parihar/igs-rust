@@ -1758,7 +1758,6 @@ async fn main() -> anyhow::Result<()> {
                 wait_selector,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_crawl(WebCrawlInput {
                     url,
                     provider: None,
@@ -1771,7 +1770,7 @@ async fn main() -> anyhow::Result<()> {
                     wait_selector,
                     strip_mode: None,
                     output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
+                }, &settings)
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1805,7 +1804,6 @@ async fn main() -> anyhow::Result<()> {
                 query,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_extract(WebExtractInput {
                     url,
                     selectors,
@@ -1817,7 +1815,7 @@ async fn main() -> anyhow::Result<()> {
                     clean_content: None,
                     query,
                     output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
+                }, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1837,7 +1835,7 @@ async fn main() -> anyhow::Result<()> {
                     size: None,
                     image_type: None,
                     output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir))
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
