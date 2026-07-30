@@ -1,17 +1,12 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 
 pub async fn env_epa_facilities(
     input: EnvEpaFacilitiesInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<EnvEpaFacilitiesOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let state = input.state.as_deref().unwrap_or("US");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -67,13 +62,9 @@ pub async fn env_epa_facilities(
 
 pub async fn env_epa_emissions(
     input: EnvEpaEmissionsInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<EnvEpaEmissionsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let state = input.state.as_deref().unwrap_or("US");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 

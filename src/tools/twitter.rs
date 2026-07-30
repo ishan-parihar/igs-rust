@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue};
 
-use crate::config;
+use crate::http::HttpClient;
 use crate::tools::types::*;
 
 // ── Constants ───────────────────────────────────────────────
@@ -282,10 +282,7 @@ fn extract_tweets_from_timeline(data: &serde_json::Value) -> Vec<TwitterTweet> {
 
 // ── Public API ─────────────────────────────────────────────
 
-pub async fn twitter_search(input: TwitterSearchInput) -> Result<TwitterSearchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {e}"))?;
+pub async fn twitter_search(input: TwitterSearchInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<TwitterSearchOutput, String> {
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
         return Err(
@@ -337,10 +334,7 @@ pub async fn twitter_search(input: TwitterSearchInput) -> Result<TwitterSearchOu
     })
 }
 
-pub async fn twitter_read(input: TwitterReadInput) -> Result<TwitterReadOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {e}"))?;
+pub async fn twitter_read(input: TwitterReadInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<TwitterReadOutput, String> {
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
         return Err(

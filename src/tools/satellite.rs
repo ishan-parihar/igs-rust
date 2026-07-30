@@ -1,16 +1,11 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 
 pub async fn satellite_firms_fires(
     input: SatelliteFirmsInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<SatelliteFirmsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let west = input.west;
     let south = input.south;
     let east = input.east;

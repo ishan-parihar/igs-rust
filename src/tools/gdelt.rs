@@ -8,7 +8,6 @@
 //! - Article list: query the GDELT DOC 2.0 API for article metadata
 //! - Timeline: get mention volume over time for a topic
 
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::LimitInput;
@@ -84,13 +83,7 @@ pub struct GdeltArticleListOutput {
 }
 
 /// Search GDELT Events 2.0 API for events matching the query.
-pub async fn gdelt_search(input: GdeltSearchInput) -> Result<GdeltSearchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<GdeltSearchOutput, String> {
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);
 
@@ -147,13 +140,9 @@ pub async fn gdelt_search(input: GdeltSearchInput) -> Result<GdeltSearchOutput, 
 /// List articles from GDELT DOC 2.0 API with filtering.
 pub async fn gdelt_article_list(
     input: GdeltArticleListInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<GdeltArticleListOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);
 

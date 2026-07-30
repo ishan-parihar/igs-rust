@@ -1,15 +1,8 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 
-pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn govt_bills(input: GovtBillsInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<GovtBillsOutput, String> {
     let query = urlencoding(&input.query);
     let congress = input.congress.unwrap_or(118);
 
@@ -59,13 +52,9 @@ pub async fn govt_bills(input: GovtBillsInput) -> Result<GovtBillsOutput, String
 
 pub async fn govt_regulations(
     input: GovtRegulationsInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<GovtRegulationsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let query = urlencoding(&input.query);
 
     let url = format!(

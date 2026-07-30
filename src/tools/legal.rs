@@ -1,11 +1,8 @@
 use super::helpers::urlencoding;
 use super::types::*;
-use crate::config;
+use crate::http::HttpClient;
 
-pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
+pub async fn legal_search_cases(input: LegalSearchInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<LegalSearchOutput, String> {
     let api_key = settings
         .courtlistener
         .as_ref()
@@ -82,10 +79,9 @@ pub async fn legal_search_cases(input: LegalSearchInput) -> Result<LegalSearchOu
 
 pub async fn legal_case_details(
     input: LegalCaseDetailsInput,
+    _http: &HttpClient,
+    settings: &crate::types::Settings,
 ) -> Result<LegalCaseDetailsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
     let api_key = settings
         .courtlistener
         .as_ref()

@@ -1,15 +1,8 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 
-pub async fn politics_fec_candidates(input: PoliticsFecInput) -> Result<PoliticsFecOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<PoliticsFecOutput, String> {
     let name = urlencoding(&input.name);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -70,13 +63,9 @@ pub async fn politics_fec_candidates(input: PoliticsFecInput) -> Result<Politics
 
 pub async fn politics_fec_committees(
     input: PoliticsFecCommitteesInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<PoliticsFecCommitteesOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let name = urlencoding(&input.name);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 

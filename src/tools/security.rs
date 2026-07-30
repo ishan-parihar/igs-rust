@@ -1,19 +1,12 @@
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use chrono::{Duration, Utc};
 
-pub async fn security_cve_search(input: CveSearchInput) -> Result<CveSearchOutput, String> {
+pub async fn security_cve_search(input: CveSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<CveSearchOutput, String> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     let days_back = input.days_back.unwrap_or(30);
     let query_enc = urlencoding(&input.query);
-
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let now = Utc::now();
     let start_date = (now - Duration::days(days_back as i64))
@@ -171,14 +164,10 @@ fn extract_affected_products(cve: &serde_json::Value) -> Vec<String> {
 
 pub async fn security_advisories(
     input: SecurityAdvisoriesInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<SecurityAdvisoriesOutput, String> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
-
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let mut url = format!(
         "https://api.github.com/advisories?affects={}&type=reviewed&per_page={}",

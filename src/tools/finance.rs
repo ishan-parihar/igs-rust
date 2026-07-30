@@ -1,13 +1,7 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 
-pub async fn finance_market(input: FinanceMarketInput) -> Result<FinanceMarketOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
+pub async fn finance_market(input: FinanceMarketInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<FinanceMarketOutput, String> {
     let mut quotes = Vec::new();
 
     for symbol in &input.symbols {
@@ -53,13 +47,7 @@ pub async fn finance_market(input: FinanceMarketInput) -> Result<FinanceMarketOu
     Ok(FinanceMarketOutput { quotes })
 }
 
-pub async fn finance_crypto(input: FinanceCryptoInput) -> Result<FinanceCryptoOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn finance_crypto(input: FinanceCryptoInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<FinanceCryptoOutput, String> {
     let ids = if input.ids.is_empty() {
         input.symbols.clone()
     } else {
@@ -100,13 +88,9 @@ pub async fn finance_crypto(input: FinanceCryptoInput) -> Result<FinanceCryptoOu
 
 pub async fn finance_trending(
     _input: FinanceTrendingInput,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<FinanceTrendingOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
     let url = "https://api.coingecko.com/api/v3/search/trending";
     let outcome = http
         .fetch(url, None, "bypass")

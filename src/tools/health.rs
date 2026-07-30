@@ -1,9 +1,8 @@
 use super::helpers::urlencoding;
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 
-pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCdcOutput, String> {
+pub async fn health_cdc_leading_causes(input: HealthCdcInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<HealthCdcOutput, String> {
     let client = reqwest::Client::new();
     let year = input.year.unwrap_or(2021);
     let limit = input.limits.limit.unwrap_or(20).min(100);
@@ -64,13 +63,7 @@ pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCd
     })
 }
 
-pub async fn health_who_gho(input: HealthWhoInput) -> Result<HealthWhoOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<HealthWhoOutput, String> {
     let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 

@@ -6,7 +6,6 @@
 //! - Scheduled report generation: cron-like config for automated briefings
 //! - Export: save articles/reports to file in various formats
 
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
@@ -36,13 +35,7 @@ pub struct WebhookEnrichOutput {
 /// POST articles to an external webhook for enrichment (e.g., an LLM service,
 /// a custom NLP pipeline, or a third-party API). The webhook should return
 /// enriched JSON that replaces the original articles.
-pub async fn webhook_enrich(input: WebhookEnrichInput) -> Result<WebhookEnrichOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn webhook_enrich(input: WebhookEnrichInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<WebhookEnrichOutput, String> {
     let body = serde_json::json!({
         "articles": serde_json::from_str::<serde_json::Value>(&input.articles_json)
             .map_err(|e| format!("Invalid articles_json: {}", e))?,
@@ -113,7 +106,7 @@ pub struct ScriptHookOutput {
 /// respects single and double quotes, so commands like
 /// `python3 -c 'print("hello")'` are correctly split into
 /// `["python3", "-c", 'print("hello")']`.
-pub async fn script_hook(input: ScriptHookInput) -> Result<ScriptHookOutput, String> {
+pub async fn script_hook(input: ScriptHookInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<ScriptHookOutput, String> {
     let parts = shell_split(&input.command);
     if parts.is_empty() {
         return Err("Empty command".into());
@@ -177,7 +170,7 @@ pub struct ExportOutput {
 }
 
 /// Export data to a file in the specified format.
-pub async fn export_data(input: ExportInput) -> Result<ExportOutput, String> {
+pub async fn export_data(input: ExportInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<ExportOutput, String> {
     let format = input.format.as_deref().unwrap_or("json");
     let content = match format {
         "toon" => {

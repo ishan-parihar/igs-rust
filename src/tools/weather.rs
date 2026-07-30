@@ -1,14 +1,12 @@
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
 
 /// Get weather forecast for a location using OpenWeatherMap 5-day/3-hour forecast API.
 pub async fn weather_forecast(
     input: WeatherForecastInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
 ) -> Result<WeatherForecastOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
     let api_key = settings
         .openweather
         .as_ref()
@@ -21,9 +19,6 @@ pub async fn weather_forecast(
     let location = input.location.clone();
     let days = input.days.unwrap_or(3).clamp(1, 5);
     let limit = days * 8; // 3-hour intervals, 8 per day
-
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let url = format!(
         "https://api.openweathermap.org/data/2.5/forecast?q={}&appid={}&units=metric&cnt={}",
@@ -95,10 +90,7 @@ pub async fn weather_forecast(
 }
 
 /// Get current weather for a location using OpenWeatherMap current weather API.
-pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurrentOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
+pub async fn weather_current(input: WeatherCurrentInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<WeatherCurrentOutput, String> {
     let api_key = settings
         .openweather
         .as_ref()
@@ -109,9 +101,6 @@ pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurren
         })?;
 
     let location = input.location.clone();
-
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?q={}&appid={}&units=metric",
@@ -167,10 +156,7 @@ pub async fn weather_current(input: WeatherCurrentInput) -> Result<WeatherCurren
 }
 
 /// Get weather alerts for a lat/lon location using OpenWeatherMap One Call API.
-pub async fn weather_alerts(input: WeatherAlertsInput) -> Result<WeatherAlertsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
+pub async fn weather_alerts(input: WeatherAlertsInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<WeatherAlertsOutput, String> {
     let api_key = settings
         .openweather
         .as_ref()
@@ -179,9 +165,6 @@ pub async fn weather_alerts(input: WeatherAlertsInput) -> Result<WeatherAlertsOu
             "OpenWeatherMap API key not configured. Set openweather.apiKey in settings.yml."
                 .to_string()
         })?;
-
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let url = format!(
         "https://api.openweathermap.org/data/2.5/onecall?lat={}&lon={}&appid={}&exclude=minutely,hourly,daily",

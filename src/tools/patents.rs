@@ -1,15 +1,8 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 
-pub async fn patents_search(input: PatentSearchInput) -> Result<PatentSearchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn patents_search(input: PatentSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<PatentSearchOutput, String> {
     let office = input.office.as_deref().unwrap_or("USPTO");
     let limit = input.years_back.unwrap_or(20).clamp(1, 100);
 
@@ -69,13 +62,7 @@ pub async fn patents_search(input: PatentSearchInput) -> Result<PatentSearchOutp
     }
 }
 
-pub async fn patents_details(input: PatentDetailsInput) -> Result<PatentDetailsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
-
+pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<PatentDetailsOutput, String> {
     let query_json = serde_json::json!({"patent_number": input.patent_id});
     let fields =
         r#"["patent_number","patent_title","patent_date","patent_abstract","patent_claims"]"#;

@@ -1,15 +1,13 @@
 use super::types::*;
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use std::collections::HashMap;
 
 pub async fn climate_noaa_observations(
     input: ClimateNoaaInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
 ) -> Result<ClimateNoaaOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
     let api_key = settings
         .noaa
         .as_ref()
@@ -17,9 +15,6 @@ pub async fn climate_noaa_observations(
         .ok_or_else(|| {
             "NOAA API token not configured. Set noaa.apiKey in settings.yml.".to_string()
         })?;
-
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let dataset = input.dataset.as_deref().unwrap_or("GHCND");
     let location = input.location.as_deref().unwrap_or("FIPS:US");
@@ -77,10 +72,9 @@ pub async fn climate_noaa_observations(
 
 pub async fn climate_noaa_stations(
     input: ClimateNoaaStationsInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
 ) -> Result<ClimateNoaaStationsOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
     let api_key = settings
         .noaa
         .as_ref()
@@ -88,9 +82,6 @@ pub async fn climate_noaa_stations(
         .ok_or_else(|| {
             "NOAA API token not configured. Set noaa.apiKey in settings.yml.".to_string()
         })?;
-
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let location = input.location.as_deref().unwrap_or("FIPS:US");
     let limit = input.limit.unwrap_or(20).clamp(1, 1000);

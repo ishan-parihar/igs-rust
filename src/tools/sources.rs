@@ -23,7 +23,7 @@ pub async fn sources_list(params: SourceListInput) -> Result<SourceListOutput, S
 }
 
 /// Create or update a source
-pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutput, String> {
+pub async fn sources_upsert(input: SourceUpsertInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<SourceUpsertOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {
             let id = input.id.unwrap_or_else(|| {
@@ -63,7 +63,7 @@ pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutp
 }
 
 /// Delete a source by id
-pub async fn sources_delete(input: SourceDeleteInput) -> Result<SourceDeleteOutput, String> {
+pub async fn sources_delete(input: SourceDeleteInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<SourceDeleteOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {
             let before = sf.sources.len();
@@ -79,52 +79,47 @@ pub async fn sources_delete(input: SourceDeleteInput) -> Result<SourceDeleteOutp
 }
 
 /// Auto-discover feeds/selectors from a homepage URL
-pub async fn sources_autodiscover(input: AutodiscoverInput) -> Result<AutodiscoverOutput, String> {
-    match config::load_settings().await {
-        Ok(settings) => {
-            let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-            let http = HttpClient::new(&settings.http, &cache_dir);
-            match http.fetch(&input.url, None, "bypass").await {
-                Ok(outcome) => {
-                    let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                        unreachable!("bypass cache mode never returns Cached")
-                    };
-                    let body = resp.body_text;
-                    let feed_url = find_feed_url(&body, &input.url);
+pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<AutodiscoverOutput, String> {
+    match http.fetch(&input.url, None, "bypass").await {
+        Ok(outcome) => {
+            let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
+                unreachable!("bypass cache mode never returns Cached")
+            };
+            let body = resp.body_text;
+            let feed_url = find_feed_url(&body, &input.url);
 
-                    if let Some(feed) = feed_url {
-                        Ok(AutodiscoverOutput {
-                            kind: "rss".into(),
-                            url: Some(feed),
-                            sample: vec![],
-                        })
-                    } else {
-                        let sitemap_url =
-                            format!("{}/sitemap.xml", input.url.trim_end_matches('/'));
-                        match http.fetch(&sitemap_url, None, "bypass").await {
-                            Ok(_) => Ok(AutodiscoverOutput {
-                                kind: "sitemap".into(),
-                                url: Some(sitemap_url),
-                                sample: vec![],
-                            }),
-                            Err(_) => Ok(AutodiscoverOutput {
-                                kind: "none".into(),
-                                url: None,
-                                sample: vec![],
-                            }),
-                        }
-                    }
+            if let Some(feed) = feed_url {
+                Ok(AutodiscoverOutput {
+                    kind: "rss".into(),
+                    url: Some(feed),
+                    sample: vec![],
+                })
+            } else {
+                let sitemap_url =
+                    format!("{}/sitemap.xml", input.url.trim_end_matches('/'));
+                match http.fetch(&sitemap_url, None, "bypass").await {
+                    Ok(_) => Ok(AutodiscoverOutput {
+                        kind: "sitemap".into(),
+                        url: Some(sitemap_url),
+                        sample: vec![],
+                    }),
+                    Err(_) => Ok(AutodiscoverOutput {
+                        kind: "none".into(),
+                        url: None,
+                        sample: vec![],
+                    }),
                 }
-                Err(e) => Err(format!("Fetch failed: {}", e)),
             }
         }
-        Err(e) => Err(format!("Settings load failed: {}", e)),
+        Err(e) => Err(format!("Fetch failed: {}", e)),
     }
 }
 
 /// Enable generic HTML scraping for a source
 pub async fn sources_enable_scraper(
     input: EnableScraperInput,
+    _http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<EnableScraperOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {
