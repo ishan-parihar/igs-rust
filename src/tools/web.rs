@@ -8,18 +8,18 @@ use std::time::{Duration, Instant};
 // ─── Answer Synthesis (TextRank-based, no external LLM) ───────
 
 /// Generate an answer from search results using extractive summarization.
-/// Takes the top 3 highest-scored results, splits into sentences,
+/// Takes the top 5 highest-scored results, splits into sentences,
 /// and returns the top-N most query-relevant sentences.
 fn extractive_answer(results: &[WebSearchResult], query: &str) -> Option<String> {
     if results.is_empty() { return None; }
 
-    // Collect text from top 3 results
+    // Collect text from top 5 results (up from 3 for better coverage)
     let query_words: Vec<String> = query.to_lowercase().split_whitespace()
         .filter(|w| w.len() > 1).map(String::from).collect();
     if query_words.is_empty() { return None; }
 
     let mut candidates: Vec<(f64, String)> = Vec::new();
-    for result in results.iter().take(3) {
+    for result in results.iter().take(5) {
         let text = result.raw_content.as_deref().or(result.content.as_deref()).unwrap_or("");
         // Split into sentences
         for sentence in text.split(['.', '!', '?']) {
@@ -2895,6 +2895,11 @@ mod tests {
     #[test]
     fn route_engines_video_intent() {
         let engines = route_engines("general", "how to make a video tutorial");
+        // Base engines must still be present
+        assert!(engines.contains(&"duckduckgo".to_string()));
+        assert!(engines.contains(&"wikipedia".to_string()));
+        assert!(engines.contains(&"hackernews".to_string()));
+        // YouTube added on top for video intent
         assert!(engines.contains(&"youtube".to_string()));
     }
 
@@ -2903,5 +2908,154 @@ mod tests {
         assert_eq!(cache_ttl("news"), Duration::from_secs(300));
         assert_eq!(cache_ttl("code"), Duration::from_secs(43_200));
         assert_eq!(cache_ttl("general"), Duration::from_secs(3_600));
+    }
+
+    // ─── extract_highlights tests ─────────────────────────────
+
+    #[test]
+    fn extract_highlights_empty_text() {
+        let hl = extract_highlights("", "rust programming", 5);
+        assert!(hl.is_empty());
+    }
+
+    #[test]
+    fn extract_highlights_empty_query() {
+        let hl = extract_highlights("This is some text.", "", 5);
+        assert!(hl.is_empty());
+    }
+
+    #[test]
+    fn extract_highlights_scoring() {
+        let text = "Rust programming language is fast and safe. Python is also good. Rust has memory safety. Java is older.";
+        let hl = extract_highlights(text, "rust programming", 5);
+        // Sentences containing 'rust' or 'programming' should rank higher
+        assert!(!hl.is_empty());
+        assert!(hl[0].to_lowercase().contains("rust") || hl[0].to_lowercase().contains("programming"));
+    }
+
+    #[test]
+    fn extract_highlights_max_limit() {
+        let text = "First sentence about rust. Second sentence about rust. Third sentence about rust. Fourth sentence about rust. Fifth sentence about rust. Sixth sentence about rust.";
+        let hl = extract_highlights(text, "rust", 2);
+        assert!(hl.len() <= 2);
+    }
+
+    #[test]
+    fn extract_highlights_filters_short_sentences() {
+        // Sentences shorter than 30 chars are excluded
+        let text = "Short. This is a longer sentence about rust programming that should be included.";
+        let hl = extract_highlights(text, "rust", 5);
+        assert!(!hl.is_empty());
+        assert!(hl.iter().all(|s| s.len() > 30));
+    }
+
+    // ─── domain_dedup tests ───────────────────────────────────
+
+    #[test]
+    fn domain_dedup_removes_duplicates() {
+        use super::WebSearchResult;
+        let mut results = vec![
+            WebSearchResult {
+                title: "Article 1".into(),
+                url: "https://www.bbc.com/news/1".into(),
+                content: Some("content1".into()),
+                score: Some(0.5),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("bbc.com".into()),
+                published_date: None, favicon: None,
+            },
+            WebSearchResult {
+                title: "Article 2".into(),
+                url: "https://www.bbc.com/news/2".into(),
+                content: Some("content2".into()),
+                score: Some(0.8),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("bbc.com".into()),
+                published_date: None, favicon: None,
+            },
+        ];
+        domain_dedup(&mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Article 2"); // higher score wins
+    }
+
+    #[test]
+    fn domain_dedup_preserves_different_domains() {
+        use super::WebSearchResult;
+        let mut results = vec![
+            WebSearchResult {
+                title: "From BBC".into(),
+                url: "https://bbc.com/1".into(),
+                content: Some("c".into()),
+                score: Some(0.5),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("bbc.com".into()),
+                published_date: None, favicon: None,
+            },
+            WebSearchResult {
+                title: "From Reuters".into(),
+                url: "https://reuters.com/1".into(),
+                content: Some("c".into()),
+                score: Some(0.6),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("reuters.com".into()),
+                published_date: None, favicon: None,
+            },
+        ];
+        domain_dedup(&mut results);
+        assert_eq!(results.len(), 2); // different domains kept
+    }
+
+    #[test]
+    fn domain_dedup_multipart_tld() {
+        use super::WebSearchResult;
+        let mut results = vec![
+            WebSearchResult {
+                title: "BBC UK 1".into(),
+                url: "https://www.bbc.co.uk/news/1".into(),
+                content: Some("c".into()),
+                score: Some(0.4),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("www.bbc.co.uk".into()),
+                published_date: None, favicon: None,
+            },
+            WebSearchResult {
+                title: "BBC UK 2".into(),
+                url: "https://bbc.co.uk/sport/1".into(),
+                content: Some("c".into()),
+                score: Some(0.9),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("bbc.co.uk".into()),
+                published_date: None, favicon: None,
+            },
+        ];
+        domain_dedup(&mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "BBC UK 2"); // higher score
+    }
+
+    #[test]
+    fn domain_dedup_no_domain() {
+        use super::WebSearchResult;
+        let mut results = vec![
+            WebSearchResult {
+                title: "No domain".into(),
+                url: "https://example.com/1".into(),
+                content: Some("c".into()),
+                score: Some(0.5),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: None,
+                published_date: None, favicon: None,
+            },
+        ];
+        domain_dedup(&mut results);
+        assert_eq!(results.len(), 1); // no domain = no dedup
     }
 }

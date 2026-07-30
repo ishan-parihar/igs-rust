@@ -9,11 +9,12 @@
 //!
 //! All other modules should use this module instead of local implementations.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 /// Unified stop words list (merged from helpers.rs and summarize.rs).
 /// 130+ common English words that carry little semantic meaning.
-pub const STOP_WORDS: &[&str] = &[
+const STOP_WORDS_LIST: &[&str] = &[
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any",
     "are", "as", "at", "be", "because", "been", "before", "being", "below", "between",
     "both", "but", "by", "can", "could", "dare", "did", "do", "does", "doing", "down",
@@ -29,6 +30,12 @@ pub const STOP_WORDS: &[&str] = &[
     "will", "with", "would", "you", "your", "yours", "yourself", "yourselves",
 ];
 
+/// Lazy-initialized HashSet for O(1) stop word lookups.
+/// Avoids O(n) linear scan per token in hot paths like extract_topics and tokenize.
+pub static STOP_WORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    STOP_WORDS_LIST.iter().copied().collect()
+});
+
 /// Tokenize text into lowercase alphanumeric terms.
 ///
 /// # Arguments
@@ -39,7 +46,7 @@ pub fn tokenize(text: &str, min_len: usize, filter_stop_words: bool) -> Vec<Stri
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|t| t.len() >= min_len)
-        .filter(|t| !filter_stop_words || !STOP_WORDS.contains(t))
+        .filter(|t| !filter_stop_words || !STOP_WORDS.contains(*t))
         .map(|t| t.to_string())
         .collect()
 }
@@ -267,5 +274,13 @@ mod tests {
     fn stop_words_count() {
         // Verify we have a comprehensive stop words list
         assert!(STOP_WORDS.len() >= 100);
+    }
+
+    #[test]
+    fn stop_words_o1_lookup() {
+        // Verify HashSet provides O(1) lookups (compile-time check only)
+        assert!(STOP_WORDS.contains("the"));
+        assert!(STOP_WORDS.contains("is"));
+        assert!(!STOP_WORDS.contains("rust"));
     }
 }
