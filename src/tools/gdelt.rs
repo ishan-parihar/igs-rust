@@ -83,7 +83,7 @@ pub struct GdeltArticleListOutput {
 }
 
 /// Search GDELT Events 2.0 API for events matching the query.
-pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<GdeltSearchOutput, String> {
+pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient) -> Result<GdeltSearchOutput, String> {
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);
 
@@ -141,7 +141,6 @@ pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient, _settings:
 pub async fn gdelt_article_list(
     input: GdeltArticleListInput,
     http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<GdeltArticleListOutput, String> {
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);

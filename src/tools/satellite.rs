@@ -4,7 +4,6 @@ use crate::http::{self as http_mod, HttpClient};
 pub async fn satellite_firms_fires(
     input: SatelliteFirmsInput,
     http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<SatelliteFirmsOutput, String> {
     let west = input.west;
     let south = input.south;

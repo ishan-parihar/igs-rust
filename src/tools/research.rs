@@ -6,7 +6,7 @@ use chrono::Datelike;
 use unpdf;
 
 /// Search academic papers across arXiv and Semantic Scholar
-pub async fn research_search(input: ResearchSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<ResearchSearchOutput, String> {
+pub async fn research_search(input: ResearchSearchInput, http: &HttpClient) -> Result<ResearchSearchOutput, String> {
     let sources = input
         .sources
         .unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
@@ -431,7 +431,6 @@ pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settin
 pub async fn research_pubmed_search(
     input: ResearchPubMedInput,
     http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<ResearchPubMedOutput, String> {
 
     let query = urlencoding(&input.query);

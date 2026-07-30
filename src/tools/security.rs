@@ -3,7 +3,7 @@ use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use chrono::{Duration, Utc};
 
-pub async fn security_cve_search(input: CveSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<CveSearchOutput, String> {
+pub async fn security_cve_search(input: CveSearchInput, http: &HttpClient) -> Result<CveSearchOutput, String> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     let days_back = input.days_back.unwrap_or(30);
     let query_enc = urlencoding(&input.query);
@@ -165,7 +165,6 @@ fn extract_affected_products(cve: &serde_json::Value) -> Vec<String> {
 pub async fn security_advisories(
     input: SecurityAdvisoriesInput,
     http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<SecurityAdvisoriesOutput, String> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 

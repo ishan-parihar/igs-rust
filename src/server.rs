@@ -612,7 +612,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceUpsertInput>,
     ) -> Result<Json<SourceUpsertOutput>, String> {
-        sources::sources_upsert(params.0, &self.http_client, &self.settings).await.map(Json)
+        sources::sources_upsert(params.0).await.map(Json)
     }
 
     #[tool(
@@ -623,7 +623,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceDeleteInput>,
     ) -> Result<Json<SourceDeleteOutput>, String> {
-        sources::sources_delete(params.0, &self.http_client, &self.settings).await.map(Json)
+        sources::sources_delete(params.0).await.map(Json)
     }
 
     #[tool(
@@ -634,7 +634,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<AutodiscoverInput>,
     ) -> Result<Json<AutodiscoverOutput>, String> {
-        sources::sources_autodiscover(params.0, &self.http_client, &self.settings).await.map(Json)
+        sources::sources_autodiscover(params.0, &self.http_client).await.map(Json)
     }
 
     #[tool(
@@ -645,7 +645,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<EnableScraperInput>,
     ) -> Result<Json<EnableScraperOutput>, String> {
-        sources::sources_enable_scraper(params.0, &self.http_client, &self.settings).await.map(Json)
+        sources::sources_enable_scraper(params.0).await.map(Json)
     }
 
     #[tool(
@@ -795,7 +795,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.id.clone();
-        let output = news::news_test_source(params.0, &self.http_client, &self.settings).await?;
+        let output = news::news_test_source(params.0, &self.http_client).await?;
         self.dump("news.test_source", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -810,7 +810,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = format!("enrich-{}", params.0.items.len());
-        let output = news::news_enrich(params.0, &self.http_client, &self.settings).await?;
+        let output = news::news_enrich(params.0).await?;
         self.dump("news.enrich", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -906,7 +906,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = research::research_search(params.0, &self.http_client, &self.settings).await?;
+        let output = research::research_search(params.0, &self.http_client).await?;
         self.dump("research.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -945,7 +945,7 @@ impl IgsMcpServer {
         params: Parameters<ResearchPubMedInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = research::research_pubmed_search(params.0, &self.http_client, &self.settings).await?;
+        let output = research::research_pubmed_search(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -961,7 +961,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.symbols.join(",");
-        let output = finance::finance_market(params.0, &self.http_client, &self.settings).await?;
+        let output = finance::finance_market(params.0, &self.http_client).await?;
         self.dump("finance.market", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -976,7 +976,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.symbols.join(",");
-        let output = finance::finance_crypto(params.0, &self.http_client, &self.settings).await?;
+        let output = finance::finance_crypto(params.0, &self.http_client).await?;
         self.dump("finance.crypto", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -990,7 +990,7 @@ impl IgsMcpServer {
         params: Parameters<FinanceTrendingInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = finance::finance_trending(params.0, &self.http_client, &self.settings).await?;
+        let output = finance::finance_trending(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1006,7 +1006,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = security::security_cve_search(params.0, &self.http_client, &self.settings).await?;
+        let output = security::security_cve_search(params.0, &self.http_client).await?;
         self.dump("security.cve", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1021,7 +1021,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.ecosystem.clone();
-        let output = security::security_advisories(params.0, &self.http_client, &self.settings).await?;
+        let output = security::security_advisories(params.0, &self.http_client).await?;
         self.dump("security.advisories", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1038,7 +1038,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = govt::govt_bills(params.0, &self.http_client, &self.settings).await?;
+        let output = govt::govt_bills(params.0, &self.http_client).await?;
         self.dump("govt.bills", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1053,7 +1053,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = govt::govt_regulations(params.0, &self.http_client, &self.settings).await?;
+        let output = govt::govt_regulations(params.0, &self.http_client).await?;
         self.dump("govt.regulations", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1069,7 +1069,7 @@ impl IgsMcpServer {
         params: Parameters<PoliticsFecInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = politics::politics_fec_candidates(params.0, &self.http_client, &self.settings).await?;
+        let output = politics::politics_fec_candidates(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1082,7 +1082,7 @@ impl IgsMcpServer {
         params: Parameters<PoliticsFecCommitteesInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = politics::politics_fec_committees(params.0, &self.http_client, &self.settings).await?;
+        let output = politics::politics_fec_committees(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1098,7 +1098,7 @@ impl IgsMcpServer {
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
-        let output = patents::patents_search(params.0, &self.http_client, &self.settings).await?;
+        let output = patents::patents_search(params.0, &self.http_client).await?;
         self.dump("patents.search", &_subject, &output);
         Ok(format_output(&output, &format))
     }
@@ -1112,7 +1112,7 @@ impl IgsMcpServer {
         params: Parameters<PatentDetailsInput>,
     ) -> Result<Json<PatentDetailsOutput>, String> {
         let _subject = params.0.patent_id.clone();
-        let output = patents::patents_details(params.0, &self.http_client, &self.settings).await?;
+        let output = patents::patents_details(params.0, &self.http_client).await?;
         self.dump("patents.details", &_subject, &output);
         Ok(Json(output))
     }
@@ -1128,7 +1128,7 @@ impl IgsMcpServer {
         params: Parameters<SatelliteFirmsInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = satellite::satellite_firms_fires(params.0, &self.http_client, &self.settings).await?;
+        let output = satellite::satellite_firms_fires(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1143,7 +1143,7 @@ impl IgsMcpServer {
         params: Parameters<EnvEpaFacilitiesInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = env::env_epa_facilities(params.0, &self.http_client, &self.settings).await?;
+        let output = env::env_epa_facilities(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1156,7 +1156,7 @@ impl IgsMcpServer {
         params: Parameters<EnvEpaEmissionsInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = env::env_epa_emissions(params.0, &self.http_client, &self.settings).await?;
+        let output = env::env_epa_emissions(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1171,7 +1171,7 @@ impl IgsMcpServer {
         params: Parameters<LegalSearchInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = legal::legal_search_cases(params.0, &self.http_client, &self.settings).await?;
+        let output = legal::legal_search_cases(params.0, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1183,7 +1183,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LegalCaseDetailsInput>,
     ) -> Result<Json<LegalCaseDetailsOutput>, String> {
-        legal::legal_case_details(params.0, &self.http_client, &self.settings).await.map(Json)
+        legal::legal_case_details(params.0, &self.settings).await.map(Json)
     }
 
     // ── Health Tools ─────────────────────────────────────────
@@ -1197,7 +1197,7 @@ impl IgsMcpServer {
         params: Parameters<HealthCdcInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = health::health_cdc_leading_causes(params.0, &self.http_client, &self.settings).await?;
+        let output = health::health_cdc_leading_causes(params.0).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1210,7 +1210,7 @@ impl IgsMcpServer {
         params: Parameters<HealthWhoInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = health::health_who_gho(params.0, &self.http_client, &self.settings).await?;
+        let output = health::health_who_gho(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1521,7 +1521,7 @@ impl IgsMcpServer {
             end_date: params.0.end_date,
             limits: params.0.limits.clone(),
             output: params.0.output.clone(),
-        }, &self.http_client, &self.settings)
+        }, &self.http_client)
         .await?;
         Ok(Json(GdeltOutput {
             query: result.query,
@@ -1651,7 +1651,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::plugins::WebhookEnrichInput>,
     ) -> Result<Json<crate::tools::plugins::WebhookEnrichOutput>, String> {
-        let result = crate::tools::plugins::webhook_enrich(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::plugins::webhook_enrich(params.0, &self.http_client).await?;
         Ok(Json(result))
     }
 
@@ -1663,7 +1663,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::plugins::ScriptHookInput>,
     ) -> Result<Json<crate::tools::plugins::ScriptHookOutput>, String> {
-        let result = crate::tools::plugins::script_hook(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::plugins::script_hook(params.0).await?;
         Ok(Json(result))
     }
 
@@ -1675,7 +1675,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::plugins::ExportInput>,
     ) -> Result<Json<crate::tools::plugins::ExportOutput>, String> {
-        let result = crate::tools::plugins::export_data(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::plugins::export_data(params.0).await?;
         Ok(Json(result))
     }
 
@@ -1689,7 +1689,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::OpenAlexSearchInput>,
     ) -> Result<Json<crate::tools::data_sources::OpenAlexSearchOutput>, String> {
-        let result = crate::tools::data_sources::openalex_search(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::data_sources::openalex_search(params.0, &self.http_client).await?;
         Ok(Json(result))
     }
 
@@ -1701,7 +1701,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::ShodanSearchInput>,
     ) -> Result<Json<crate::tools::data_sources::ShodanSearchOutput>, String> {
-        let result = crate::tools::data_sources::shodan_search(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::data_sources::shodan_search(params.0, &self.http_client).await?;
         Ok(Json(result))
     }
 
@@ -1713,7 +1713,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::HibpBreachInput>,
     ) -> Result<Json<crate::tools::data_sources::HibpBreachOutput>, String> {
-        let result = crate::tools::data_sources::hibp_check(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::data_sources::hibp_check(params.0, &self.http_client).await?;
         Ok(Json(result))
     }
 
@@ -1725,7 +1725,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<crate::tools::data_sources::AcledSearchInput>,
     ) -> Result<Json<crate::tools::data_sources::AcledSearchOutput>, String> {
-        let result = crate::tools::data_sources::acled_search(params.0, &self.http_client, &self.settings).await?;
+        let result = crate::tools::data_sources::acled_search(params.0, &self.http_client).await?;
         Ok(Json(result))
     }
 
@@ -1901,7 +1901,7 @@ impl IgsMcpServer {
         params: Parameters<TwitterSearchInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = twitter::twitter_search(params.0, &self.http_client, &self.settings).await?;
+        let output = twitter::twitter_search(params.0, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
 
@@ -1914,7 +1914,7 @@ impl IgsMcpServer {
         params: Parameters<TwitterReadInput>,
     ) -> Result<CallToolResult, String> {
         let format = Self::resolve_format(&params.0.output);
-        let output = twitter::twitter_read(params.0, &self.http_client, &self.settings).await?;
+        let output = twitter::twitter_read(params.0, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
 }

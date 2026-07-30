@@ -5,7 +5,6 @@ use crate::tools::helpers::urlencoding;
 pub async fn env_epa_facilities(
     input: EnvEpaFacilitiesInput,
     http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<EnvEpaFacilitiesOutput, String> {
     let state = input.state.as_deref().unwrap_or("US");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
@@ -63,7 +62,6 @@ pub async fn env_epa_facilities(
 pub async fn env_epa_emissions(
     input: EnvEpaEmissionsInput,
     http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<EnvEpaEmissionsOutput, String> {
     let state = input.state.as_deref().unwrap_or("US");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);

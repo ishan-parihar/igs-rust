@@ -125,7 +125,7 @@ mod platform_tests {
         let Ok(settings) = igs_rust_mcp::config::load_settings().await else { return; };
         let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
         let http = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
-        let result = twitter::twitter_search(input, &http, &settings).await;
+        let result = twitter::twitter_search(input, &settings).await;
         if let Err(err) = result {
             println!("Twitter search error: {}", err);
         }
@@ -141,7 +141,7 @@ mod platform_tests {
         let Ok(settings) = igs_rust_mcp::config::load_settings().await else { return; };
         let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
         let http = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
-        let result = twitter::twitter_read(input, &http, &settings).await;
+        let result = twitter::twitter_read(input, &settings).await;
         assert!(result.is_err(), "Twitter read without cookie should fail");
         let err = result.unwrap_err();
         assert!(

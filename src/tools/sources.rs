@@ -23,7 +23,7 @@ pub async fn sources_list(params: SourceListInput) -> Result<SourceListOutput, S
 }
 
 /// Create or update a source
-pub async fn sources_upsert(input: SourceUpsertInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<SourceUpsertOutput, String> {
+pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {
             let id = input.id.unwrap_or_else(|| {
@@ -63,7 +63,7 @@ pub async fn sources_upsert(input: SourceUpsertInput, _http: &HttpClient, _setti
 }
 
 /// Delete a source by id
-pub async fn sources_delete(input: SourceDeleteInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<SourceDeleteOutput, String> {
+pub async fn sources_delete(input: SourceDeleteInput) -> Result<SourceDeleteOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {
             let before = sf.sources.len();
@@ -79,7 +79,7 @@ pub async fn sources_delete(input: SourceDeleteInput, _http: &HttpClient, _setti
 }
 
 /// Auto-discover feeds/selectors from a homepage URL
-pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<AutodiscoverOutput, String> {
+pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -> Result<AutodiscoverOutput, String> {
     match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
@@ -118,8 +118,6 @@ pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient, _
 /// Enable generic HTML scraping for a source
 pub async fn sources_enable_scraper(
     input: EnableScraperInput,
-    _http: &HttpClient,
-    _settings: &crate::types::Settings,
 ) -> Result<EnableScraperOutput, String> {
     match config::load_sources().await {
         Ok(mut sf) => {

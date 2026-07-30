@@ -323,7 +323,7 @@ pub async fn fetch_news_intelligent(
             },
         };
 
-        let enrich_output = news_enrich(enrich_input, &http, settings).await?;
+        let enrich_output = news_enrich(enrich_input).await?;
         enrich_output.items
     };
 
@@ -387,7 +387,7 @@ pub async fn fetch_news_intelligent(
 }
 
 /// Debug helper. Test a single source and return up to 10 items.
-pub async fn news_test_source(input: NewsTestInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<NewsTestOutput, String> {
+pub async fn news_test_source(input: NewsTestInput, http: &HttpClient) -> Result<NewsTestOutput, String> {
     let sf = config::load_sources()
         .await
         .map_err(|e| format!("Sources: {}", e))?;
@@ -409,7 +409,7 @@ pub async fn news_test_source(input: NewsTestInput, http: &HttpClient, _settings
 }
 
 /// NLP enrichment (offline). Adds basic topics, sentiment, and summary to items.
-pub async fn news_enrich(input: NewsEnrichInput, _http: &HttpClient, _settings: &crate::types::Settings) -> Result<NewsEnrichOutput, String> {
+pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, String> {
     let extract = input.extract.unwrap_or_else(|| {
         vec![
             "topics".into(),

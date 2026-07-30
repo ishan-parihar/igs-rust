@@ -45,7 +45,7 @@ pub struct OpenAlexSearchOutput {
 }
 
 /// Search OpenAlex for 250M+ academic works. Free API, no key required.
-pub async fn openalex_search(input: OpenAlexSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<OpenAlexSearchOutput, String> {
+pub async fn openalex_search(input: OpenAlexSearchInput, http: &HttpClient) -> Result<OpenAlexSearchOutput, String> {
 
     let limit = input.limit.unwrap_or(25).min(200);
     let query_enc = urlencoding(&input.query);
@@ -155,7 +155,7 @@ pub struct ShodanSearchOutput {
 }
 
 /// Search Shodan for exposed services. Requires API key.
-pub async fn shodan_search(input: ShodanSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<ShodanSearchOutput, String> {
+pub async fn shodan_search(input: ShodanSearchInput, http: &HttpClient) -> Result<ShodanSearchOutput, String> {
 
     let limit = input.limits.limit.unwrap_or(25).min(100);
     let query_enc = urlencoding(&input.query);
@@ -243,7 +243,7 @@ pub struct HibpBreachOutput {
 }
 
 /// Check if an email has been in any known data breach via HaveIBeenPwned.
-pub async fn hibp_check(input: HibpBreachInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<HibpBreachOutput, String> {
+pub async fn hibp_check(input: HibpBreachInput, http: &HttpClient) -> Result<HibpBreachOutput, String> {
 
     let url = format!(
         "https://haveibeenpwned.com/api/v3/breachedaccount/{}",
@@ -344,7 +344,7 @@ pub struct AcledSearchOutput {
 }
 
 /// Search ACLED for armed conflict events. Requires free API key + email.
-pub async fn acled_search(input: AcledSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<AcledSearchOutput, String> {
+pub async fn acled_search(input: AcledSearchInput, http: &HttpClient) -> Result<AcledSearchOutput, String> {
 
     let limit = input.limits.limit.unwrap_or(50).min(500);
     let mut url = format!(
