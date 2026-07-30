@@ -978,92 +978,70 @@ async fn search_youtube(
 fn parse_ddg_images_html(html: &str, max_results: usize) -> Vec<WebImageResult> {
     let doc = scraper::Html::parse_document(html);
     let mut results = Vec::new();
+    let mut seen_urls: HashSet<String> = HashSet::new();
 
-    // Pre-parse selectors once
-    let img_sel = match scraper::Selector::parse("img") {
-        Ok(s) => s,
-        Err(_) => return results,
-    };
-    let anchor_sel = match scraper::Selector::parse("a") {
-        Ok(s) => s,
-        Err(_) => return results,
-    };
+    // Pre-parse selectors
+    let img_sel = scraper::Selector::parse("img").ok();
 
-    // Image-specific selectors for DDG Images page
-    let card_selectors = [
-        ".tile--img",
-        ".image-card",
-        ".result--img",
-        "[data-testid=mainline-image-result]",
-        ".imgbox",
-        ".tile",
-    ];
-
+    // Strategy 1: Parse DDG HTML result cards — each card has an img thumbnail
+    // and a link with uddg= redirect to the source page
+    let card_selectors = [".result", ".result__body", ".web-result", ".results_links"];
     for selector_str in &card_selectors {
         if let Ok(sel) = scraper::Selector::parse(selector_str) {
-            for el in doc.select(&sel).take(max_results * 2) {
-                // Extract image URL from img src or data-src
-                let url = el
-                    .select(&img_sel)
-                    .next()
-                    .and_then(|img| {
-                        img.attr("data-src")
+            for el in doc.select(&sel).take(max_results * 3) {
+                // Extract image URL from img src/data-src within the card
+                let img_url = img_sel.as_ref().and_then(|s| {
+                    el.select(s).find_map(|img| {
+                        let src = img.attr("data-src")
                             .or_else(|| img.attr("src"))
-                            .map(|s| s.to_string())
-                    });
+                            .unwrap_or("");
+                        // Only keep actual image URLs (not DDG icons, logos, etc.)
+                        if src.starts_with("http")
+                            && (src.contains(".jpg") || src.contains(".jpeg") || src.contains(".png") || src.contains(".gif") || src.contains(".webp") || src.contains("image"))
+                            && !src.contains("logo")
+                            && !src.contains("icon")
+                        {
+                            Some(src.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                });
 
-                let url = match url {
-                    Some(u) if u.starts_with("http") => u,
-                    _ => continue,
+                let img_url = match img_url {
+                    Some(u) => u,
+                    None => continue,
                 };
 
-                // Extract title/alt text
-                let title = el
-                    .select(&img_sel)
+                if seen_urls.contains(&img_url) {
+                    continue;
+                }
+                seen_urls.insert(img_url.clone());
+
+                // Extract title from result link
+                let anchor_sel = match scraper::Selector::parse("a") {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                let title = el.select(&anchor_sel)
                     .next()
-                    .and_then(|img| img.attr("alt"))
-                    .map(|s| s.trim().to_string())
+                    .map(|a| a.text().collect::<String>().trim().to_string())
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| "Untitled image".to_string());
 
-                // Extract source page URL from parent anchor
-                let source_url = el
-                    .select(&anchor_sel)
+                // Extract source page URL
+                let source_url = el.select(&anchor_sel)
                     .next()
                     .and_then(|a| a.attr("href"))
-                    .map(|s| s.to_string());
-
-                // Extract thumbnail (smaller image)
-                let thumbnail = el
-                    .select(&img_sel)
-                    .next()
-                    .and_then(|img| {
-                        img.attr("data-thumb")
-                            .or_else(|| img.attr("data-src"))
-                            .or_else(|| img.attr("src"))
-                            .map(|s| s.to_string())
-                    });
-
-                // Extract dimensions if available
-                let width = el
-                    .select(&img_sel)
-                    .next()
-                    .and_then(|img| img.attr("width"))
-                    .and_then(|w| w.parse::<u32>().ok());
-
-                let height = el
-                    .select(&img_sel)
-                    .next()
-                    .and_then(|img| img.attr("height"))
-                    .and_then(|h| h.parse::<u32>().ok());
+                    .and_then(|href| extract_ddg_redirect_url(href));
 
                 results.push(WebImageResult {
                     title,
-                    url,
-                    thumbnail,
+                    url: img_url.clone(),
+                    thumbnail: Some(img_url),
                     source_url,
-                    width,
-                    height,
+                    width: None,
+                    height: None,
                     source: Some("duckduckgo_images".to_string()),
                 });
 
@@ -1077,17 +1055,20 @@ fn parse_ddg_images_html(html: &str, max_results: usize) -> Vec<WebImageResult> 
         }
     }
 
-    // Fallback: try to extract any img elements with meaningful src
+    // Strategy 2: Extract any image elements with meaningful src
     if results.is_empty() {
-        if let Ok(img_fallback_sel) = scraper::Selector::parse("img[src]") {
-            for img in doc.select(&img_fallback_sel).take(max_results * 3) {
+        if let Ok(img_sel_fallback) = scraper::Selector::parse("img[src]") {
+            for img in doc.select(&img_sel_fallback).take(max_results * 3) {
                 if let Some(src) = img.attr("src") {
                     if src.starts_with("http")
+                        && (src.contains(".jpg") || src.contains(".jpeg") || src.contains(".png") || src.contains(".gif") || src.contains(".webp") || src.contains("image"))
                         && !src.contains("logo")
                         && !src.contains("icon")
                         && !src.contains("avatar")
                         && !src.contains("sprite")
+                        && !seen_urls.contains(src)
                     {
+                        seen_urls.insert(src.to_string());
                         let alt = img.attr("alt").unwrap_or("Untitled image");
                         results.push(WebImageResult {
                             title: alt.trim().to_string(),
@@ -1131,14 +1112,15 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
 
     let start = std::time::Instant::now();
 
-    // Use the real DDG Images page — Obscura renders JS so the image tiles appear
+    // Use DDG HTML endpoint — Obscura doesn't render JS on DDG Images page
+    // Search for "query images" to get results that may contain image URLs
     let search_url = format!(
-        "https://duckduckgo.com/?q={}&iar=images&iax=images&ia=images",
+        "https://html.duckduckgo.com/html/?q={}+images",
         query_encoded
     );
 
     let html = obscura
-        .fetch_with_all_options(&search_url, "html", false, "load", false, None)
+        .fetch_with_all_options(&search_url, "html", false, "networkidle", false, None)
         .await
         .map_err(|e| format!("DDG image search failed: {}", e))?;
 
