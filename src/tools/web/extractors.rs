@@ -817,7 +817,7 @@ async fn extract_single_url(
     };
 
     // Extract structured data via output_schema (P2.1)
-    let extracted_data = if let Some(ref schema) = input.output_schema {
+    let _extracted_data = if let Some(ref schema) = input.output_schema {
         Some(extract_by_schema(&doc, schema))
     } else {
         None
