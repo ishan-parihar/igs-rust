@@ -1,7 +1,6 @@
 //! Search engine implementations (DDG, Wikipedia, GitHub, HN, SO, YouTube).
 //! All engines are free, no API keys required.
 
-use crate::config;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
 use super::scoring::extract_domain;
@@ -84,13 +83,7 @@ pub(super) async fn search_youtube(
 /// Search for images via Wikimedia Commons REST API (key-free).
 /// Uses the Wikimedia Commons API to find freely licensed images.
 /// No API key required — Wikimedia is completely open.
-pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSearchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
+pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient, _settings: &crate::types::Settings) -> Result<WebImageSearchOutput, String> {
     let max_results = input.max_results.unwrap_or(10).min(30) as usize;
     let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 

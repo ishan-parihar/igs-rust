@@ -10,28 +10,24 @@ use std::collections::HashMap;
 
 
 
-pub async fn web_scrape(input: WebScrapeInput) -> Result<WebScrapeOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
+pub async fn web_scrape(input: WebScrapeInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
 
     // Determine provider: explicit input, or browser.default from settings
     let provider = input.provider.as_deref().unwrap_or(&settings.browser.default);
 
     match provider {
-        "lightpanda" => web_scrape_lightpanda(&input, &settings).await,
-        "obscura" => web_scrape_obscura(&input, &settings).await,
-        _ => web_scrape_default(&input, &settings).await,
+        "lightpanda" => web_scrape_lightpanda(&input, settings).await,
+        "obscura" => web_scrape_obscura(&input, settings).await,
+        _ => web_scrape_default(&input, http, settings).await,
     }
 }
 
 /// Scrape using plain HTTP + html-to-markdown-rs (default provider)
 pub(super) async fn web_scrape_default(
     input: &WebScrapeInput,
-    settings: &crate::types::Settings,
+    http: &HttpClient,
+    _settings: &crate::types::Settings,
 ) -> Result<WebScrapeOutput, String> {
-    let cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
 
     let body = match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
@@ -198,17 +194,14 @@ pub(super) fn extract_scrape_output(
     })
 }
 
-pub async fn web_crawl(input: WebCrawlInput) -> Result<WebCrawlOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
+pub async fn web_crawl(input: WebCrawlInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
 
     // Use browser.default from settings
     let provider = &settings.browser.default;
 
     match provider.as_str() {
-        "lightpanda" => web_crawl_lightpanda(&input, &settings).await,
-        "obscura" => web_crawl_obscura(&input, &settings).await,
+        "lightpanda" => web_crawl_lightpanda(&input, settings).await,
+        "obscura" => web_crawl_obscura(&input, settings).await,
         _ => Err(
             "web.crawl requires a headless browser. Set browser.default to 'lightpanda' or 'obscura' in settings.yml"
                 .into(),
@@ -609,10 +602,7 @@ pub(super) fn detect_language(doc: &scraper::Html) -> Option<String> {
 /// Supports full extraction (text, metadata, links, images, structured data)
 /// or selector-based extraction for specific elements.
 /// Batch mode: if `urls` is provided, processes multiple URLs in parallel.
-pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
+pub async fn web_extract(input: WebExtractInput, _http: &HttpClient, settings: &crate::types::Settings) -> Result<WebExtractOutput, String> {
     let obs_settings = &settings.browser.obscura;
 
     if !obs_settings.enabled {
@@ -938,12 +928,8 @@ pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) ->
 }
 
 /// Discover URLs on a website by analyzing sitemap and links.
-pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-    let http = HttpClient::new(&settings.http, &cache_dir);
+pub async fn web_map(input: WebMapInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<WebMapOutput, String> {
+    let _cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
 
     let base_url = input.url.trim_end_matches('/');
     let sitemap_url = format!("{}/sitemap.xml", base_url);

@@ -1672,6 +1672,8 @@ async fn main() -> anyhow::Result<()> {
                 time_range,
                 chunks_per_source,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_search(WebSearchInput {
                     query,
                     max_results: Some(max_results),
@@ -1688,7 +1690,7 @@ async fn main() -> anyhow::Result<()> {
                     chunks_per_source,
                     provider: None,
                     output: OutputOptions { format: None },
-                })
+                }, std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)), &settings)
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1704,6 +1706,8 @@ async fn main() -> anyhow::Result<()> {
                 wait_until,
                 include_frames,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_scrape(WebScrapeInput {
                     url,
                     provider: Some(provider),
@@ -1714,7 +1718,7 @@ async fn main() -> anyhow::Result<()> {
                     include_frames: Some(include_frames),
                     wait_until,
                     output: OutputOptions { format: None },
-                })
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1730,6 +1734,8 @@ async fn main() -> anyhow::Result<()> {
                 dump_format,
                 wait_selector,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_crawl(WebCrawlInput {
                     url,
                     provider: None,
@@ -1742,7 +1748,7 @@ async fn main() -> anyhow::Result<()> {
                     wait_selector,
                     strip_mode: None,
                     output: OutputOptions { format: None },
-                })
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1750,13 +1756,15 @@ async fn main() -> anyhow::Result<()> {
                 ]);
             }
             WebAction::Map { url, limit, search } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_map(WebMapInput {
                     url,
                     provider: None,
                     limit: Some(limit),
                     search,
                     output: OutputOptions { format: None },
-                })
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1773,6 +1781,8 @@ async fn main() -> anyhow::Result<()> {
                 include_html,
                 query,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_extract(WebExtractInput {
                     url,
                     selectors,
@@ -1784,7 +1794,7 @@ async fn main() -> anyhow::Result<()> {
                     clean_content: None,
                     query,
                     output: OutputOptions { format: None },
-                })
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1796,13 +1806,15 @@ async fn main() -> anyhow::Result<()> {
                 query,
                 max_results,
             } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
                 let result = r(web::web_image_search(WebImageSearchInput {
                     query,
                     max_results: Some(max_results),
                     size: None,
                     image_type: None,
                     output: OutputOptions { format: None },
-                })
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[

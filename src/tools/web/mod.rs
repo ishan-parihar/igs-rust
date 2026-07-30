@@ -1,7 +1,7 @@
-use crate::config;
-use crate::http::{self as http_mod, HttpClient};
+use crate::http::HttpClient;
 use crate::tools::types::*;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Instant;
 
 mod scoring;
@@ -13,11 +13,8 @@ pub use readability::{extract_semantic_excerpt, extract_ddg_redirect_url};
 pub use engines::web_image_search;
 pub use extractors::{web_scrape, web_crawl, web_extract, web_map};
 
-pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String> {
-    let settings = config::load_settings()
-        .await
-        .map_err(|e| format!("Settings: {}", e))?;
-    let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
+pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> Result<WebSearchOutput, String> {
+
     let max_results: usize = input.max_results.unwrap_or(10) as usize;
     let depth = input.depth.as_deref().unwrap_or("fast");
     let topic = input.topic.as_deref().unwrap_or("general");
@@ -46,7 +43,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let q = input.query.clone();
                 let obs_settings = settings.browser.obscura.clone();
                 let include_answer = input.include_answer.unwrap_or(false);
-                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = http.clone();
                 let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
                     engines::search_duckduckgo(&q, max_results * 2, include_answer, &time_range_clone, &obs_settings, &http_clone).await
@@ -55,14 +52,14 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
 
             "wikipedia" => {
                 let q = input.query.clone();
-                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = http.clone();
                 handles.push(tokio::spawn(async move {
                     engines::search_wikipedia(&q, (max_results / 2).max(3), &http_clone).await
                 }));
             }
             "github" => {
                 let q = input.query.clone();
-                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = http.clone();
                 let topic_clone = topic.to_string();
                 handles.push(tokio::spawn(async move {
                     engines::search_github(&q, max_results, &http_clone, &topic_clone).await
@@ -70,7 +67,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
             }
             "hackernews" => {
                 let q = input.query.clone();
-                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = http.clone();
                 let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
                     engines::search_hackernews(&q, max_results, &http_clone, &time_range_clone).await
@@ -78,7 +75,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
             }
             "stackoverflow" => {
                 let q = input.query.clone();
-                let http_clone = HttpClient::new(&settings.http, &cache_dir);
+                let http_clone = http.clone();
                 handles.push(tokio::spawn(async move {
                     engines::search_stackoverflow(&q, max_results, &http_clone).await
                 }));
