@@ -275,7 +275,7 @@ const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
 
 /// A chunk with its relevance score and original index.
-pub struct ScoredChunk {
+pub(crate) struct ScoredChunk {
     pub content: String,
     pub score: f64,
     pub index: usize,
@@ -283,7 +283,7 @@ pub struct ScoredChunk {
 
 /// Score and rank chunks by BM25 relevance to a query.
 /// Standard BM25 algorithm (Robertson et al.).
-pub fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
+pub(crate) fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
     if chunks.is_empty() || query.trim().is_empty() {
         return chunks.iter().enumerate().map(|(i, c)| ScoredChunk {
             content: c.clone(), score: 0.0, index: i,
@@ -330,7 +330,7 @@ pub fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<Sc
 }
 
 /// Score and rank chunks by Cosine TF-IDF similarity to a query.
-pub fn cosine_tfidf_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
+pub(crate) fn cosine_tfidf_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
     if chunks.is_empty() || query.trim().is_empty() {
         return chunks.iter().enumerate().map(|(i, c)| ScoredChunk {
             content: c.clone(), score: 0.0, index: i,
@@ -659,7 +659,9 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
     for handle in handles {
         match handle.await {
             Ok(Ok((engine_name, mut results, engine_answer))) => {
-                engines_used.push(engine_name);
+                if !results.is_empty() {
+                    engines_used.push(engine_name);
+                }
                 all_results.append(&mut results);
                 if answer.is_none() && engine_answer.is_some() {
                     answer = engine_answer;
