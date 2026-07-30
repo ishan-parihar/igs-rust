@@ -329,62 +329,6 @@ pub(crate) fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) ->
     }).collect()
 }
 
-/// Score and rank chunks by Cosine TF-IDF similarity to a query.
-pub(crate) fn cosine_tfidf_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
-    if chunks.is_empty() || query.trim().is_empty() {
-        return chunks.iter().enumerate().map(|(i, c)| ScoredChunk {
-            content: c.clone(), score: 0.0, index: i,
-        }).collect();
-    }
-
-    let all_docs: Vec<Vec<String>> = std::iter::once(query.to_string())
-        .chain(chunks.iter().cloned())
-        .map(|s| tokenize(&s))
-        .collect();
-
-    let query_tokens = &all_docs[0];
-    let chunk_tokens = &all_docs[1..];
-
-    // Build vocabulary
-    let mut vocab: Vec<String> = all_docs.iter().flatten().cloned().collect();
-    vocab.sort();
-    vocab.dedup();
-
-    let n_docs = all_docs.len() as f64;
-
-    // IDF for each term
-    let idf: Vec<f64> = vocab.iter().map(|term| {
-        let df = all_docs.iter().filter(|doc| doc.contains(term)).count() as f64;
-        ((n_docs - df + 0.5) / (df + 0.5) + 1.0).ln()
-    }).collect();
-
-    let tfidf = |tokens: &[String]| -> Vec<f64> {
-        let len = tokens.len().max(1) as f64;
-        vocab.iter().enumerate().map(|(i, term)| {
-            let tf = tokens.iter().filter(|t| *t == term).count() as f64 / len;
-            tf * idf[i]
-        }).collect()
-    };
-
-    let q_vec = tfidf(query_tokens);
-    let q_norm: f64 = q_vec.iter().map(|x| x * x).sum::<f64>().sqrt();
-
-    let mut scored: Vec<(usize, f64)> = chunk_tokens.iter().enumerate().map(|(i, tokens)| {
-        let d_vec = tfidf(tokens);
-        let d_norm: f64 = d_vec.iter().map(|x| x * x).sum::<f64>().sqrt();
-        let sim = if q_norm > 0.0 && d_norm > 0.0 {
-            q_vec.iter().zip(d_vec.iter()).map(|(x, y)| x * y).sum::<f64>() / (q_norm * d_norm)
-        } else { 0.0 };
-        (i, sim)
-    }).collect();
-
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(top_k.max(1).min(chunks.len()));
-    scored.into_iter().map(|(i, score)| ScoredChunk {
-        content: chunks[i].clone(), score, index: i,
-    }).collect()
-}
-
 /// Jaccard similarity between two word sets (0.0-1.0).
 fn jaccard_similarity(a: &str, b: &str) -> f64 {
     let words_a: HashSet<String> = a.split_whitespace()
@@ -1187,9 +1131,9 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
 
     let start = std::time::Instant::now();
 
-    // Use DDG HTML endpoint — more reliable for scraping than the JS-heavy images page
+    // Use the real DDG Images page — Obscura renders JS so the image tiles appear
     let search_url = format!(
-        "https://html.duckduckgo.com/html/?q={}+images",
+        "https://duckduckgo.com/?q={}&iar=images&iax=images&ia=images",
         query_encoded
     );
 
@@ -2299,6 +2243,44 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
         raw_content
     };
 
+    // If a query is provided, chunk-score the content with BM25 for relevance ranking
+    let content = if let Some(ref query) = input.query {
+        if !query.trim().is_empty() && !content.is_empty() {
+            // Split content into paragraph chunks on double-newlines
+            let chunks: Vec<String> = content
+                .split("\n\n")
+                .map(|s| s.trim().to_string())
+                .filter(|s| s.len() > 50)
+                .collect();
+
+            if chunks.len() > 3 {
+                // BM25-score all chunks, keep only those with meaningful relevance
+                let scored = bm25_score_chunks(&chunks, query, chunks.len());
+                let max_score = scored.iter().map(|c| c.score).fold(0.0f64, f64::max);
+                let threshold = max_score * 0.05; // keep chunks with >5% of max score
+                let filtered: Vec<(usize, &str)> = scored
+                    .iter()
+                    .filter(|c| c.score > threshold || max_score == 0.0)
+                    .map(|c| (c.index, c.content.as_str()))
+                    .collect();
+                if !filtered.is_empty() {
+                    // Reassemble in original reading order
+                    let mut ordered = filtered;
+                    ordered.sort_by_key(|(i, _)| *i);
+                    ordered.into_iter().map(|(_, c)| c).collect::<Vec<_>>().join("\n\n")
+                } else {
+                    content
+                }
+            } else {
+                content
+            }
+        } else {
+            content
+        }
+    } else {
+        content
+    };
+
     // Generate markdown
     let markdown = html_to_markdown_rs::convert(&html, None)
         .ok()
@@ -2618,4 +2600,122 @@ pub async fn web_map(input: WebMapInput) -> Result<WebMapOutput, String> {
             limit,
         },
     })
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokenize_basic() {
+        let tokens = tokenize("Hello, World! This is a test.");
+        assert!(tokens.contains(&"hello".to_string()));
+        assert!(tokens.contains(&"world".to_string()));
+        assert!(tokens.contains(&"test".to_string()));
+        assert!(tokens.contains(&"is".to_string())); // 2-char tokens are kept
+        // Single-char tokens filtered out
+        assert!(!tokens.contains(&"a".to_string()));
+    }
+
+    #[test]
+    fn bm25_returns_sorted_by_relevance() {
+        let chunks = vec![
+            "Rust is a systems programming language".to_string(),
+            "Python is great for machine learning".to_string(),
+            "Rust async runtime tokio for concurrent programs".to_string(),
+        ];
+        let scored = bm25_score_chunks(&chunks, "rust async", 2);
+        assert_eq!(scored.len(), 2);
+        // First result should mention both "rust" and "async"
+        assert!(scored[0].content.contains("Rust"));
+        assert!(scored[0].score >= scored[1].score);
+    }
+
+    #[test]
+    fn bm25_empty_input() {
+        let scored = bm25_score_chunks(&[], "test", 5);
+        assert!(scored.is_empty());
+    }
+
+    #[test]
+    fn bm25_empty_query() {
+        let chunks = vec!["hello".to_string()];
+        let scored = bm25_score_chunks(&chunks, "", 5);
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].score, 0.0);
+    }
+
+    #[test]
+    fn jaccard_similarity_identical() {
+        assert!((jaccard_similarity("hello world", "hello world") - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn jaccard_similarity_disjoint() {
+        assert!((jaccard_similarity("hello", "world") - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn jaccard_similarity_partial() {
+        let sim = jaccard_similarity("hello world foo", "hello world bar");
+        assert!(sim > 0.3 && sim < 0.8);
+    }
+
+    #[test]
+    fn keyword_relevance_basic() {
+        let score = keyword_relevance("Rust async tutorial", "Learn about async in Rust", "rust async");
+        assert!(score > 0.5);
+    }
+
+    #[test]
+    fn domain_authority_known() {
+        assert!(domain_authority("github.com") > 0.9);
+        assert!(domain_authority("stackoverflow.com") > 0.85);
+    }
+
+    #[test]
+    fn domain_authority_unknown() {
+        assert_eq!(domain_authority("random-blog.example.com"), 0.5);
+    }
+
+    #[test]
+    fn semantic_dedup_removes_similar() {
+        let mut results = vec![
+            WebSearchResult {
+                title: "How to learn Rust programming".to_string(),
+                url: "https://a.com".to_string(),
+                content: None, score: Some(0.9), highlights: None,
+                raw_content: None, source: None, domain: None,
+                published_date: None, favicon: None,
+            },
+            WebSearchResult {
+                title: "How to learn Rust programming language".to_string(),
+                url: "https://b.com".to_string(),
+                content: None, score: Some(0.7), highlights: None,
+                raw_content: None, source: None, domain: None,
+                published_date: None, favicon: None,
+            },
+        ];
+        semantic_dedup(&mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].url, "https://a.com");
+    }
+
+    #[test]
+    fn text_density_basic() {
+        let html = "<html><body><p>This is some text content.</p></body></html>";
+        let density = text_density(html);
+        assert!(density > 0.0 && density <= 1.0);
+    }
+
+    #[test]
+    fn ddg_redirect_url_parses() {
+        let url = "/l/?uddg=https%3A%2F%2Fexample.com%2Fpage&rut=abc123";
+        let result = extract_ddg_redirect_url(url);
+        assert_eq!(result.as_deref(), Some("https://example.com/page"));
+    }
+
+    #[test]
+    fn ddg_redirect_url_none_for_normal() {
+        assert!(extract_ddg_redirect_url("https://normal-url.com").is_none());
+    }
 }

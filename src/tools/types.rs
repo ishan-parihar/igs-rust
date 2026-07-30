@@ -792,6 +792,8 @@ pub struct WebExtractInput {
     pub include_html: Option<bool>,
     /// Apply content cleaning pipeline (remove nav, ads, boilerplate)
     pub clean_content: Option<bool>,
+    /// Optional query for BM25/Cosine chunk ranking (enables scored extraction)
+    pub query: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }

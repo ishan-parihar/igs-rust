@@ -396,7 +396,7 @@ enum ResearchAction {
 
 #[derive(Subcommand)]
 enum WebAction {
-    /// Multi-engine web search (DDG, Brave, Wikipedia, GitHub, HackerNews, StackOverflow)
+    /// Multi-engine web search (DDG, Wikipedia, GitHub, HackerNews, StackOverflow, YouTube)
     Search {
         #[arg(long)]
         query: String,
@@ -1723,6 +1723,7 @@ async fn main() -> anyhow::Result<()> {
                     wait_selector: None,
                     include_html: Some(include_html),
                     clean_content: None,
+                    query: None,
                     output: OutputOptions { format: None },
                 })
                 .await)?;
