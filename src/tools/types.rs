@@ -799,6 +799,9 @@ pub struct WebCrawlOutput {
 pub struct WebExtractInput {
     /// URL to extract content from
     pub url: String,
+    /// Multiple URLs for batch extraction (parallel, with concurrency limit)
+    #[serde(default)]
+    pub urls: Option<Vec<String>>,
     /// CSS selectors to extract specific elements (optional)
     pub selectors: Option<Vec<String>>,
     /// Extract structured data (JSON-LD, OpenGraph)

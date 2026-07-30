@@ -1806,6 +1806,7 @@ async fn main() -> anyhow::Result<()> {
                 let settings = igs_rust_mcp::config::load_settings().await?;
                 let result = r(web::web_extract(WebExtractInput {
                     url,
+                    urls: None,
                     selectors,
                     structured_data: Some(structured_data),
                     extract_links: Some(extract_links),

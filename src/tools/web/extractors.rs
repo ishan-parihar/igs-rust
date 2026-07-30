@@ -598,10 +598,10 @@ pub(super) fn detect_language(doc: &scraper::Html) -> Option<String> {
     None
 }
 
-/// Extract structured content from a URL using Obscura.
-/// Supports full extraction (text, metadata, links, images, structured data)
-/// or selector-based extraction for specific elements.
-/// Batch mode: if `urls` is provided, processes multiple URLs in parallel.
+/// Extract structured content from one or more URLs using Obscura.
+/// Single-URL mode: extracts content from `input.url`.
+/// Batch mode: if `input.urls` has multiple entries, processes them in parallel
+/// (capped at 5 concurrent extractions) and returns the first successful result.
 pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settings) -> Result<WebExtractOutput, String> {
     let obs_settings = &settings.browser.obscura;
 
@@ -612,11 +612,99 @@ pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settin
         );
     }
 
-    let clean_content = input.clean_content.unwrap_or(false);
+    // Determine URLs to process
+    if let Some(ref batch_urls) = input.urls {
+        if batch_urls.len() > 1 {
+            // Batch mode: parallel extraction with concurrency cap
+            let urls_clone = batch_urls.clone();
+            return web_extract_batch(input, &urls_clone, settings).await;
+        }
+    }
+
+    extract_single_url(&input.url, &input, settings).await
+}
+
+/// Batch-extract multiple URLs in parallel (max 5 concurrent).
+async fn web_extract_batch(
+    input: WebExtractInput,
+    urls: &[String],
+    settings: &crate::types::Settings,
+) -> Result<WebExtractOutput, String> {
     let start = std::time::Instant::now();
-    let url = &input.url;
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+
+    let mut handles = Vec::with_capacity(urls.len());
+    for url in urls {
+        let url = url.clone();
+        let settings = settings.clone();
+        let sem = semaphore.clone();
+        let clean_content = input.clean_content;
+        let structured_data = input.structured_data;
+        let extract_links = input.extract_links;
+        let extract_images = input.extract_images;
+        let include_html = input.include_html;
+        let query = input.query.clone();
+        let selectors = input.selectors.clone();
+        let wait_selector = input.wait_selector.clone();
+
+        handles.push(tokio::spawn(async move {
+            let _permit = sem.acquire().await.unwrap();
+            let batch_input = WebExtractInput {
+                url,
+                urls: None,
+                selectors,
+                structured_data,
+                extract_links,
+                extract_images,
+                wait_selector,
+                include_html,
+                clean_content: clean_content,
+                query,
+                output: crate::tools::types_base::OutputOptions { format: None },
+            };
+            extract_single_url(&batch_input.url, &batch_input, &settings).await
+        }));
+    }
+
+    let mut results = Vec::with_capacity(handles.len());
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(result)) => results.push(result),
+            Ok(Err(e)) => {
+                // Log error but continue with other results
+                eprintln!("Batch extract error: {}", e);
+            }
+            Err(e) => {
+                eprintln!("Batch extract task panicked: {}", e);
+            }
+        }
+    }
+
+    if results.is_empty() {
+        return Err("All batch extractions failed".into());
+    }
+
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let count = results.len();
+
+    // Return first successful result with batch metadata
+    let mut first = results.into_iter().next().unwrap();
+    first.meta.elapsed_ms = elapsed_ms;
+    first.meta.provider = format!("obscura (batch: {} urls, {} succeeded)", urls.len(), count);
+    Ok(first)
+}
+
+/// Extract content from a single URL using Obscura.
+async fn extract_single_url(
+    url: &str,
+    input: &WebExtractInput,
+    settings: &crate::types::Settings,
+) -> Result<WebExtractOutput, String> {
+    let start = std::time::Instant::now();
+    let obs_settings = &settings.browser.obscura;
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
     let wait_until = "networkidle";
+    let clean_content = input.clean_content.unwrap_or(false);
 
     // Fetch the page with Obscura (JS rendering)
     let html = obscura
@@ -735,7 +823,7 @@ pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settin
 
     Ok(WebExtractOutput {
         success: true,
-        url: url.clone(),
+        url: url.to_string(),
         title,
         content: Some(content),
         markdown,
@@ -746,7 +834,7 @@ pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settin
         images,
         elements,
         meta: ExtractMeta {
-            url: url.clone(),
+            url: url.to_string(),
             provider: "obscura".into(),
             js_rendered: true,
             elapsed_ms,
