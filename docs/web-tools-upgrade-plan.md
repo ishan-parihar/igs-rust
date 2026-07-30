@@ -577,6 +577,10 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 | 4.3 | Video search routing (YouTube via yt-dlp) | ✅ Done | fd8363a |
 | B | BM25 chunk scoring (CRW-inspired) | ✅ Done | 78ea83e |
 | B | BM25 integrated into web.extract | ✅ Done | 78ea83e |
+| P5 | web.rs split into web/ directory module (scoring, readability, engines, extractors) | ✅ Done | 02646c2+ |
+| P1 | Thread HttpClient through all tool files + CLI + server dispatch | ✅ Done | 6a79bc9+ |
+| P4 | YAGNI cleanup — remove unused _http/_settings from 47 functions + web/ module | ✅ Done | 2b9bc18+ |
+| CLI | Extract cli_http_client() helper, eliminate 3-line boilerplate (35 call sites) | ✅ Done | 0b0efc8 |
 
 ### Remaining ❌
 
@@ -599,7 +603,23 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 5. **pub(crate) for internals** — BM25/Cosine types scoped to crate, not public API.
 6. **Wikimedia Commons for images** — Replaced broken DDG Images HTML scraping with structured REST API.
 
-### Commits This Session
+### Commits This Session (Architecture + YAGNI)
+
+```
+1e39752 refactor(web): complete YAGNI cleanup — remove unused params from web/ module
+0b0efc8 refactor(cli): extract cli_http_client() helper, eliminate 3-line boilerplate
+2b9bc18 refactor(tools): YAGNI cleanup — remove unused _http/_settings params from 44 functions
+e54b7db refactor(tools): thread HttpClient through all 15 remaining tool files (P1b batch 2-5)
+e54dee9 refactor(tools): thread shared HttpClient through news, research, data_sources (P1b batch 1)
+6a79bc9 refactor(web): thread shared HttpClient through web module + CLI dispatch (P1)
+8c392d4 polish(web): narrow re-exports per code review
+2ac8bb2 refactor(web): extract extractors.rs from mod.rs (P5 step 3)
+cea2741 refactor(web): extract readability.rs + engines.rs from mod.rs (P5 step 2)
+a31ba1e refactor(web): extract scoring.rs from web/mod.rs (P5 step 1)
+02646c2 refactor(web): convert web.rs to web/ directory module
+```
+
+### Commits This Session (Features)
 
 ```
 9bddfa3 fix(web): image search polish — error logging, PDF filtering, total fallback
