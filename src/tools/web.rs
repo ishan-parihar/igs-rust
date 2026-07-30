@@ -273,6 +273,7 @@ fn tokenize(text: &str) -> Vec<String> {
 /// BM25 chunk scoring constants.
 const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
+const BM25_MIN_THRESHOLD: f64 = 0.01;
 
 /// A chunk with its relevance score and original index.
 pub(crate) struct ScoredChunk {
@@ -1052,10 +1053,13 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
                         }
                     }
 
-                    // Fallback: if total_available wasn't set, use pages count
-                    if total_available == 0 {
-                        total_available = results.len();
-                    }
+                }
+
+                // Fallback: if total_available wasn't set, use results count
+                // Runs outside pages block to handle edge case where API
+                // returns searchinfo but no pages object
+                if total_available == 0 {
+                    total_available = results.len();
                 }
             }
         }
@@ -2182,7 +2186,7 @@ pub async fn web_extract(input: WebExtractInput) -> Result<WebExtractOutput, Str
                 let scored = bm25_score_chunks(&chunks, query, chunks.len());
                 let filtered: Vec<(usize, &str)> = scored
                     .iter()
-                    .filter(|c| c.score > 0.01) // fixed minimum BM25 score for relevance
+                    .filter(|c| c.score > BM25_MIN_THRESHOLD)
                     .map(|c| (c.index, c.content.as_str()))
                     .collect();
                 if !filtered.is_empty() {
