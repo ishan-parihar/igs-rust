@@ -1819,6 +1819,8 @@ async fn main() -> anyhow::Result<()> {
                     include_html: Some(include_html),
                     clean_content: None,
                     query,
+                    output_schema: None,
+                    extract_prompt: None,
                     output: OutputOptions { format: None },
                 }, &settings)
                 .await)?;

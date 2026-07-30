@@ -646,6 +646,8 @@ async fn web_extract_batch(
         let query = input.query.clone();
         let selectors = input.selectors.clone();
         let wait_selector = input.wait_selector.clone();
+        let output_schema = input.output_schema.clone();
+        let extract_prompt = input.extract_prompt.clone();
 
         handles.push(tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -660,6 +662,8 @@ async fn web_extract_batch(
                 include_html,
                 clean_content: clean_content,
                 query,
+                output_schema: output_schema.clone(),
+                extract_prompt: extract_prompt.clone(),
                 output: crate::tools::types_base::OutputOptions { format: None },
             };
             extract_single_url(&batch_input.url, &batch_input, &settings).await
@@ -812,6 +816,13 @@ async fn extract_single_url(
         None
     };
 
+    // Extract structured data via output_schema (P2.1)
+    let extracted_data = if let Some(ref schema) = input.output_schema {
+        Some(extract_by_schema(&doc, schema))
+    } else {
+        None
+    };
+
     // Include raw HTML if requested
     let html_output = if input.include_html.unwrap_or(false) {
         Some(html.clone())
@@ -833,6 +844,7 @@ async fn extract_single_url(
         links,
         images,
         elements,
+        extracted_data: None,
         meta: ExtractMeta {
             url: url.to_string(),
             provider: "obscura".into(),
@@ -1013,6 +1025,84 @@ pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) ->
         }
     }
     if elements.is_empty() { None } else { Some(elements) }
+}
+
+/// Extract structured data by matching a JSON schema to CSS selectors.
+/// The schema can have two forms:
+/// 1. Object with field names as keys and CSS selectors as string values:
+///    `{"title": "h1", "description": "meta[name='description']"}`
+/// 2. Object with field names as keys and objects with `selector` + `attr` + `mode`:
+///    `{"title": {"selector": "h1", "attr": "text"}}`
+/// Modes: "text" (default, inner text), "html" (inner HTML), "attr" (attribute value)
+pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value) -> serde_json::Value {
+    let Some(obj) = schema.as_object() else {
+        return serde_json::json!({});
+    };
+
+    let mut result = serde_json::Map::new();
+
+    for (field_name, field_spec) in obj {
+        match field_spec {
+            // Simple form: {"title": "h1"} — CSS selector as string value
+            serde_json::Value::String(selector_str) => {
+                if let Ok(sel) = scraper::Selector::parse(selector_str) {
+                    let values: Vec<String> = doc.select(&sel)
+                        .map(|el| el.text().collect::<String>().trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    if values.len() == 1 {
+                        result.insert(field_name.clone(), serde_json::json!(values[0]));
+                    } else if values.len() > 1 {
+                        result.insert(field_name.clone(), serde_json::json!(values));
+                    } else {
+                        result.insert(field_name.clone(), serde_json::Value::Null);
+                    }
+                } else {
+                    result.insert(field_name.clone(), serde_json::Value::Null);
+                }
+            }
+            // Detailed form: {"title": {"selector": "h1", "attr": "href", "mode": "attr"}}
+            serde_json::Value::Object(spec) => {
+                let selector_str = spec.get("selector").and_then(|v| v.as_str()).unwrap_or("");
+                let attr = spec.get("attr").and_then(|v| v.as_str());
+                let mode = spec.get("mode").and_then(|v| v.as_str()).unwrap_or("text");
+                let multi = spec.get("multi").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                if selector_str.is_empty() {
+                    result.insert(field_name.clone(), serde_json::Value::Null);
+                    continue;
+                }
+
+                if let Ok(sel) = scraper::Selector::parse(selector_str) {
+                    let values: Vec<String> = doc.select(&sel)
+                        .filter_map(|el| {
+                            match mode {
+                                "html" => Some(el.html()),
+                                "attr" => attr.and_then(|a| el.attr(a)).map(|s| s.to_string()),
+                                _ => Some(el.text().collect::<String>().trim().to_string()),
+                            }
+                        })
+                        .filter(|s| !s.is_empty())
+                        .collect();
+
+                    if multi {
+                        result.insert(field_name.clone(), serde_json::json!(values));
+                    } else if let Some(first) = values.into_iter().next() {
+                        result.insert(field_name.clone(), serde_json::json!(first));
+                    } else {
+                        result.insert(field_name.clone(), serde_json::Value::Null);
+                    }
+                } else {
+                    result.insert(field_name.clone(), serde_json::Value::Null);
+                }
+            }
+            _ => {
+                result.insert(field_name.clone(), field_spec.clone());
+            }
+        }
+    }
+
+    serde_json::Value::Object(result)
 }
 
 /// Discover URLs on a website by analyzing sitemap and links.

@@ -818,6 +818,12 @@ pub struct WebExtractInput {
     pub clean_content: Option<bool>,
     /// Optional query for BM25/Cosine chunk ranking (enables scored extraction)
     pub query: Option<String>,
+    /// JSON schema for structured extraction (returns validated JSON conforming to schema)
+    #[serde(default)]
+    pub output_schema: Option<serde_json::Value>,
+    /// Natural language extraction prompt (used with output_schema for schema-based extraction)
+    #[serde(default)]
+    pub extract_prompt: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -843,6 +849,9 @@ pub struct WebExtractOutput {
     pub images: Option<Vec<ExtractedImage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elements: Option<Vec<ExtractedElement>>,
+    /// Structured data extracted via output_schema (P2.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extracted_data: Option<serde_json::Value>,
     pub meta: ExtractMeta,
 }
 
