@@ -1317,6 +1317,21 @@ impl IgsMcpServer {
         Ok(format_output(&output, &format))
     }
 
+    #[tool(
+        name = "web.image_search",
+        description = "Search for images via DuckDuckGo Images using Obscura headless browser. No API keys required. Returns image URLs, thumbnails, source pages, and dimensions."
+    )]
+    async fn web_image_search(
+        &self,
+        params: Parameters<WebImageSearchInput>,
+    ) -> Result<CallToolResult, String> {
+        let format = Self::resolve_format(&params.0.output);
+        let _subject = params.0.query.clone();
+        let output = web::web_image_search(params.0).await?;
+        self.dump("web.image_search", &_subject, &output);
+        Ok(format_output(&output, &format))
+    }
+
     // ── Insight Tools ───────────────────────────────────────────
 
     #[tool(

@@ -888,6 +888,52 @@ pub struct ExtractMeta {
     pub elapsed_ms: u64,
 }
 
+// ─── Web Image Search Types ──────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WebImageSearchInput {
+    /// Search query
+    pub query: String,
+    /// Max results (default: 10, max: 30)
+    pub max_results: Option<i32>,
+    /// Image size filter: "small", "medium", "large", "wallpaper"
+    pub size: Option<String>,
+    /// Image type filter: "photo", "illustration", "clipart"
+    pub image_type: Option<String>,
+    #[serde(flatten)]
+    pub output: OutputOptions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct WebImageResult {
+    /// Image title or alt text
+    pub title: String,
+    /// Full-size image URL
+    pub url: String,
+    /// Thumbnail URL (smaller, faster to load)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thumbnail: Option<String>,
+    /// Source page URL containing the image
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    /// Image width in pixels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    /// Image height in pixels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    /// Source engine
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WebImageSearchOutput {
+    pub results: Vec<WebImageResult>,
+    pub count: usize,
+    pub meta: WebSearchMeta,
+}
+
 // ─── Web Map Types ────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

@@ -480,6 +480,13 @@ enum WebAction {
         #[arg(long)]
         include_html: bool,
     },
+    /// Search for images via DuckDuckGo (key-free, uses Obscura)
+    ImageSearch {
+        #[arg(long)]
+        query: String,
+        #[arg(long, default_value = "10")]
+        max_results: i32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1723,6 +1730,23 @@ async fn main() -> anyhow::Result<()> {
                 print_next_step(&[
                     "igs web scrape --url <page> for full markdown content",
                     "igs web search --query \"...\" for broader search",
+                ]);
+            }
+            WebAction::ImageSearch {
+                query,
+                max_results,
+            } => {
+                let result = r(web::web_image_search(WebImageSearchInput {
+                    query,
+                    max_results: Some(max_results),
+                    size: None,
+                    image_type: None,
+                    output: OutputOptions { format: None },
+                })
+                .await)?;
+                output(fmt, &result);
+                print_next_step(&[
+                    "igs web scrape --url <image_source_page> for full page content",
                 ]);
             }
         },

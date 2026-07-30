@@ -405,7 +405,14 @@ fn route_engines(topic: &str, query: &str) -> Vec<String> {
         "general"
     };
 
-    match effective_topic {
+    // Detect video intent from query keywords
+    let has_video_intent = query_lower.contains("video")
+        || query_lower.contains("tutorial")
+        || query_lower.contains("watch")
+        || query_lower.contains("how to")
+        || query_lower.contains("demo");
+
+    let mut engines = match effective_topic {
         "code" => vec![
             "github".to_string(),
             "stackoverflow".to_string(),
@@ -426,7 +433,14 @@ fn route_engines(topic: &str, query: &str) -> Vec<String> {
             "wikipedia".to_string(),
             "hackernews".to_string(),
         ],
+    };
+
+    // Add YouTube when video intent is detected
+    if has_video_intent {
+        engines.push("youtube".to_string());
     }
+
+    engines
 }
 
 /// Search the web using multiple engines in parallel.
@@ -499,6 +513,12 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 handles.push(tokio::spawn(async move {
                     search_stackoverflow(&q, max_results, &http_clone).await
+                }));
+            }
+            "youtube" => {
+                let q = input.query.clone();
+                handles.push(tokio::spawn(async move {
+                    search_youtube(&q, max_results).await
                 }));
             }
             _ => {} // skip unknown engines
@@ -805,6 +825,261 @@ fn extract_ddg_redirect_url(href: &str) -> Option<String> {
     url::form_urlencoded::parse(format!("x={}", &encoded[..end]).as_bytes())
         .find(|(k, _)| k == "x")
         .map(|(_, v)| v.to_string())
+}
+
+// ─── YouTube Search Engine (via yt-dlp) ──────────────────────
+
+/// Search YouTube via yt-dlp (already available on the system).
+/// Returns (engine_name, results, answer). Key-free.
+async fn search_youtube(
+    query: &str,
+    max_results: usize,
+) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+    let limit = max_results.min(10);
+    let search_term = format!("ytsearch{}:{}", limit, query);
+
+    let output = tokio::process::Command::new("yt-dlp")
+        .args([
+            &search_term,
+            "--flat-playlist",
+            "--print",
+            "%(id)s|||%(title)s|||%(channel)s|||%(duration_string)s",
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("yt-dlp not found: {}. Install with: pip install yt-dlp", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ERROR") {
+            return Err(format!("yt-dlp error: {}", stderr.trim()));
+        }
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut results = Vec::new();
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() { continue; }
+        let parts: Vec<&str> = line.splitn(4, "|||").collect();
+        if parts.len() < 3 { continue; }
+
+        let video_id = parts[0];
+        let title = parts[1];
+        let channel = parts[2];
+        let duration = if parts.len() > 3 && !parts[3].is_empty() {
+            Some(parts[3].to_string())
+        } else {
+            None
+        };
+
+        let url = format!("https://www.youtube.com/watch?v={}", video_id);
+        let content = format!("📺 {} | {}", channel, duration.unwrap_or_default());
+
+        results.push(WebSearchResult {
+            title: title.to_string(),
+            url,
+            content: Some(content),
+            score: Some(0.7),
+            highlights: None,
+            raw_content: None,
+            source: Some("youtube".to_string()),
+            domain: Some("youtube.com".to_string()),
+            published_date: None,
+            favicon: None,
+        });
+    }
+
+    Ok(("youtube".to_string(), results, None))
+}
+
+// ─── DDG Image Search Engine (Key-Free) ──────────────────────
+
+/// Parse DuckDuckGo Images HTML search results.
+/// DDG Images renders image cards with data-src/src attributes on img elements.
+fn parse_ddg_images_html(html: &str, max_results: usize) -> Vec<WebImageResult> {
+    let doc = scraper::Html::parse_document(html);
+    let mut results = Vec::new();
+
+    // Pre-parse selectors once
+    let img_sel = match scraper::Selector::parse("img") {
+        Ok(s) => s,
+        Err(_) => return results,
+    };
+    let anchor_sel = match scraper::Selector::parse("a") {
+        Ok(s) => s,
+        Err(_) => return results,
+    };
+
+    // DDG Images uses various selectors for image cards
+    let card_selectors = [
+        ".tile--img",
+        ".image-card",
+        ".result--img",
+        "[data-testid=mainline-image-result]",
+        ".imgbox",
+        ".tile",
+    ];
+
+    for selector_str in &card_selectors {
+        if let Ok(sel) = scraper::Selector::parse(selector_str) {
+            for el in doc.select(&sel).take(max_results * 2) {
+                // Extract image URL from img src or data-src
+                let url = el
+                    .select(&img_sel)
+                    .next()
+                    .and_then(|img| {
+                        img.attr("data-src")
+                            .or_else(|| img.attr("src"))
+                            .map(|s| s.to_string())
+                    });
+
+                let url = match url {
+                    Some(u) if u.starts_with("http") => u,
+                    _ => continue,
+                };
+
+                // Extract title/alt text
+                let title = el
+                    .select(&img_sel)
+                    .next()
+                    .and_then(|img| img.attr("alt"))
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "Untitled image".to_string());
+
+                // Extract source page URL from parent anchor
+                let source_url = el
+                    .select(&anchor_sel)
+                    .next()
+                    .and_then(|a| a.attr("href"))
+                    .map(|s| s.to_string());
+
+                // Extract thumbnail (smaller image)
+                let thumbnail = el
+                    .select(&img_sel)
+                    .next()
+                    .and_then(|img| {
+                        img.attr("data-thumb")
+                            .or_else(|| img.attr("data-src"))
+                            .or_else(|| img.attr("src"))
+                            .map(|s| s.to_string())
+                    });
+
+                // Extract dimensions if available
+                let width = el
+                    .select(&img_sel)
+                    .next()
+                    .and_then(|img| img.attr("width"))
+                    .and_then(|w| w.parse::<u32>().ok());
+
+                let height = el
+                    .select(&img_sel)
+                    .next()
+                    .and_then(|img| img.attr("height"))
+                    .and_then(|h| h.parse::<u32>().ok());
+
+                results.push(WebImageResult {
+                    title,
+                    url,
+                    thumbnail,
+                    source_url,
+                    width,
+                    height,
+                    source: Some("duckduckgo_images".to_string()),
+                });
+
+                if results.len() >= max_results {
+                    break;
+                }
+            }
+            if !results.is_empty() {
+                break;
+            }
+        }
+    }
+
+    // Fallback: try to extract any img elements with meaningful src
+    if results.is_empty() {
+        if let Ok(img_fallback_sel) = scraper::Selector::parse("img[src]") {
+            for img in doc.select(&img_fallback_sel).take(max_results * 3) {
+                if let Some(src) = img.attr("src") {
+                    if src.starts_with("http")
+                        && !src.contains("logo")
+                        && !src.contains("icon")
+                        && !src.contains("avatar")
+                        && !src.contains("sprite")
+                    {
+                        let alt = img.attr("alt").unwrap_or("Untitled image");
+                        results.push(WebImageResult {
+                            title: alt.trim().to_string(),
+                            url: src.to_string(),
+                            thumbnail: None,
+                            source_url: None,
+                            width: img.attr("width").and_then(|w| w.parse().ok()),
+                            height: img.attr("height").and_then(|h| h.parse().ok()),
+                            source: Some("duckduckgo_images".to_string()),
+                        });
+                        if results.len() >= max_results {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    results.truncate(max_results);
+    results
+}
+
+/// Search for images via DuckDuckGo Images using Obscura (key-free).
+/// DDG Images provides millions of indexed images without any API key.
+pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSearchOutput, String> {
+    let settings = config::load_settings()
+        .await
+        .map_err(|e| format!("Settings: {}", e))?;
+
+    if !settings.browser.obscura.enabled {
+        return Err(
+            "Obscura not enabled for image search. Set browser.obscura.enabled=true in settings.yml".into(),
+        );
+    }
+
+    let obscura = crate::obscura::ObscuraManager::new(&settings.browser.obscura);
+    let max_results = input.max_results.unwrap_or(10).min(30) as usize;
+    let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
+
+    // DDG Images search URL
+    let search_url = format!(
+        "https://duckduckgo.com/?q={}&iar=images&iax=images&ia=images",
+        query_encoded
+    );
+
+    let start = std::time::Instant::now();
+
+    let html = obscura
+        .fetch_with_all_options(&search_url, "html", false, "load", false, None)
+        .await
+        .map_err(|e| format!("DDG image search failed: {}", e))?;
+
+    let results = parse_ddg_images_html(&html, max_results);
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let count = results.len();
+
+    Ok(WebImageSearchOutput {
+        results,
+        count,
+        meta: WebSearchMeta {
+            provider: "duckduckgo_images".to_string(),
+            query: input.query.clone(),
+            engines_used: vec!["duckduckgo_images".to_string()],
+            response_time_ms: elapsed_ms,
+            total_results: count,
+            scored: Some(false),
+        },
+    })
 }
 
 // ─── DuckDuckGo Search Engine ─────────────────────────────────
