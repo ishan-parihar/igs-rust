@@ -672,10 +672,10 @@ async fn web_extract_batch(
             Ok(Ok(result)) => results.push(result),
             Ok(Err(e)) => {
                 // Log error but continue with other results
-                eprintln!("Batch extract error: {}", e);
+                tracing::warn!("Batch extract error: {}", e);
             }
             Err(e) => {
-                eprintln!("Batch extract task panicked: {}", e);
+                tracing::warn!("Batch extract task panicked: {}", e);
             }
         }
     }

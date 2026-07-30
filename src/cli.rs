@@ -532,6 +532,9 @@ enum WebAction {
         /// Query for BM25 relevance scoring (chunks ranked by query)
         #[arg(long)]
         query: Option<String>,
+        /// Additional URLs for batch extraction (parallel, max 5 concurrent)
+        #[arg(long, value_delimiter = ',')]
+        urls: Option<Vec<String>>,
     },
     /// Search for images via Wikimedia Commons (key-free, no API key)
     ImageSearch {
@@ -1802,11 +1805,12 @@ async fn main() -> anyhow::Result<()> {
                 extract_images,
                 include_html,
                 query,
+                urls,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
                 let result = r(web::web_extract(WebExtractInput {
                     url,
-                    urls: None,
+                    urls,
                     selectors,
                     structured_data: Some(structured_data),
                     extract_links: Some(extract_links),
