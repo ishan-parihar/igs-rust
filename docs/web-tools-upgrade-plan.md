@@ -553,3 +553,63 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 | **Scoring** | BM25 + cosine | None (to be added) |
 | **Robots.txt** | Custom parser | Lightpanda/Obscura built-in |
 | **API** | REST (Firecrawl-compatible) | MCP + CLI |
+
+---
+
+## 12. Implementation Status (Updated July 30, 2026)
+
+### Completed ✅
+
+| Phase | Item | Status | Commit |
+|-------|------|--------|--------|
+| 1.1 | Relevance scoring (keyword 50% + freshness 20% + authority 30%) | ✅ Done | 359cc97 |
+| 1.2 | Content depth control (minimal/standard/full) | ✅ Done | 359cc97 |
+| 1.3 | Highlight extraction | ✅ Done | 359cc97 |
+| 1.4 | Answer synthesis (DDG Instant Answer + Wikipedia) | ✅ Done | 359cc97 |
+| 1.5 | Hacker News engine (Algolia API, key-free) | ✅ Done | 359cc97 |
+| 1.6 | Stack Overflow engine (StackExchange API, key-free) | ✅ Done | 359cc97 |
+| 2.3 | Content cleaning (CRW readability extractor) | ✅ Done | afe9c8e |
+| 2.4 | Metadata enrichment (language, content type, reading time) | ✅ Done | afe9c8e |
+| 3.1 | Smart engine routing by topic | ✅ Done | 359cc97 |
+| 3.2 | Cross-source semantic dedup (Jaccard similarity) | ✅ Done | 9da08f2 |
+| 3.3 | Result caching with topic-based TTL | ✅ Done | afe9c8e |
+| 4.2 | Image search (Wikimedia Commons API, key-free) | ✅ Done | 4e27422 |
+| 4.3 | Video search routing (YouTube via yt-dlp) | ✅ Done | fd8363a |
+| B | BM25 chunk scoring (CRW-inspired) | ✅ Done | 78ea83e |
+| B | BM25 integrated into web.extract | ✅ Done | 78ea83e |
+
+### Remaining ❌
+
+| Phase | Item | Priority | Effort |
+|-------|------|----------|--------|
+| 2.1 | Structured JSON extraction (schema enforcement) | P2 | Medium |
+| 2.2 | Screenshot capture via Obscura | P2 | Medium |
+| 2.5 | Batch processing (multiple URLs) | P2 | Medium |
+| 3.4 | Streaming mode (SSE) | P3 | High |
+| 3.5 | Per-result confidence scoring | P3 | Low |
+| 4.1 | Research mode (multi-hop) | P4 | High |
+| 4.4 | Local search | P4 | Medium |
+
+### Architecture Decisions
+
+1. **Zero API keys** — All engines are key-free. Removed Brave, Tavily, Firecrawl entirely.
+2. **Obscura as primary browser** — All JS-rendering goes through Obscura. Lightpanda is fallback.
+3. **Graceful degradation** — Each engine fails independently. YouTube returns empty results if yt-dlp missing.
+4. **YAGNI enforced** — Removed incomplete batch processing, unused types, dead constants.
+5. **pub(crate) for internals** — BM25/Cosine types scoped to crate, not public API.
+6. **Wikimedia Commons for images** — Replaced broken DDG Images HTML scraping with structured REST API.
+
+### Commits This Session
+
+```
+9bddfa3 fix(web): image search polish — error logging, PDF filtering, total fallback
+4e27422 feat(web): replace broken DDG Images with Wikimedia Commons API
+b63d13a fix(web): image search compilation fix + HTML endpoint rewrite
+9a36b4c feat(cli): expose --query flag on web extract for BM25 chunk scoring
+78ea83e feat(web): BM25 integration, image search fix, unit tests, YAGNI cleanup
+a3fffdb fix(web): code review cleanup — pub(crate), engines_used, unused warnings
+490dc0a feat(web): BM25 + Cosine TF-IDF chunk scoring from CRW
+1ec91df fix(web): image search + video routing polish
+fd8363a feat(web): image search + video routing — all key-free
+ecbed0c fix(web): Rust 2024 let-chain compat + cleanup
+```
