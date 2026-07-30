@@ -2711,4 +2711,197 @@ mod tests {
     fn ddg_redirect_url_none_for_normal() {
         assert!(extract_ddg_redirect_url("https://normal-url.com").is_none());
     }
+
+    #[test]
+    fn extractive_answer_empty_results() {
+        let results = vec![];
+        assert!(extractive_answer(&results, "test query").is_none());
+    }
+
+    #[test]
+    fn extractive_answer_empty_query() {
+        let results = vec![WebSearchResult {
+            title: "Test".to_string(),
+            url: "https://example.com".to_string(),
+            content: Some("This is a long sentence about the test topic with enough content to score above the minimum threshold.".to_string()),
+            score: Some(0.8),
+            highlights: None,
+            raw_content: None,
+            source: None,
+            domain: None,
+            published_date: None,
+            favicon: None,
+        }];
+        assert!(extractive_answer(&results, "").is_none());
+    }
+
+    #[test]
+    fn extractive_answer_returns_relevant_sentences() {
+        let results = vec![WebSearchResult {
+            title: "Rust Programming".to_string(),
+            url: "https://example.com".to_string(),
+            content: Some("Rust is a systems programming language focused on safety and performance. Rust provides memory safety without garbage collection. The Rust compiler catches many bugs at compile time.".to_string()),
+            score: Some(0.9),
+            highlights: None,
+            raw_content: None,
+            source: None,
+            domain: None,
+            published_date: None,
+            favicon: None,
+        }];
+        let answer = extractive_answer(&results, "rust programming language");
+        assert!(answer.is_some());
+        let text = answer.unwrap();
+        assert!(text.to_lowercase().contains("rust"));
+    }
+
+    #[test]
+    fn extractive_answer_prefers_raw_content() {
+        let results = vec![WebSearchResult {
+            title: "Test".to_string(),
+            url: "https://example.com".to_string(),
+            content: Some("Short snippet.".to_string()),
+            score: Some(0.8),
+            highlights: None,
+            raw_content: Some("This is the full raw content with much more detail about the test topic that should be preferred over the short snippet because it has more sentences to score from.".to_string()),
+            source: None,
+            domain: None,
+            published_date: None,
+            favicon: None,
+        }];
+        let answer = extractive_answer(&results, "test topic");
+        assert!(answer.is_some());
+        // Should use raw_content, not the short snippet
+        assert!(answer.unwrap().len() > 50);
+    }
+
+    #[test]
+    fn jaccard_similarity_three_identical() {
+        let sim = jaccard_similarity("hello world test", "hello world test");
+        assert!((sim - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn jaccard_similarity_completely_different() {
+        let sim = jaccard_similarity("hello world", "foo bar baz");
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn jaccard_similarity_partial_overlap() {
+        let sim = jaccard_similarity("hello world test", "hello world foo");
+        assert!(sim > 0.0 && sim < 1.0);
+    }
+
+    #[test]
+    fn bm25_empty_query_zero_score() {
+        let chunks = vec!["hello".to_string()];
+        let scored = bm25_score_chunks(&chunks, "", 5);
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].score, 0.0);
+    }
+
+    #[test]
+    fn bm25_no_chunks() {
+        let chunks: Vec<String> = vec![];
+        let scored = bm25_score_chunks(&chunks, "test query", 5);
+        assert!(scored.is_empty());
+    }
+
+    #[test]
+    fn bm25_scores_relevant_higher() {
+        let chunks = vec![
+            "Rust is a programming language for systems programming".to_string(),
+            "The weather is sunny today with clear skies".to_string(),
+        ];
+        let scored = bm25_score_chunks(&chunks, "rust programming", 2);
+        assert_eq!(scored.len(), 2);
+        // First chunk should score higher (contains both query terms)
+        assert!(scored[0].score >= scored[1].score);
+    }
+
+    #[test]
+    fn keyword_relevance_title_match() {
+        let score = keyword_relevance("Rust Programming Guide", "Some content", "rust programming");
+        assert!(score > 0.8); // Title match counts double
+    }
+
+    #[test]
+    fn keyword_relevance_no_match() {
+        let score = keyword_relevance("Weather Forecast", "Sunny skies", "rust programming");
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn freshness_score_iso_date() {
+        // Today's date should get 1.0
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        assert_eq!(freshness_score(Some(&today)), 1.0);
+    }
+
+    #[test]
+    fn freshness_score_unknown() {
+        assert_eq!(freshness_score(None), 0.5);
+    }
+
+    #[test]
+    fn freshness_score_relative_time() {
+        assert_eq!(freshness_score(Some("2 hours ago")), 1.0);
+        assert_eq!(freshness_score(Some("last week")), 0.6);
+        assert_eq!(freshness_score(Some("last month")), 0.4);
+    }
+
+    #[test]
+    fn truncate_content_none() {
+        assert!(truncate_content(None, "standard").is_none());
+    }
+
+    #[test]
+    fn truncate_content_short() {
+        let text = "Short text.";
+        let result = truncate_content(Some(text), "standard").unwrap();
+        assert_eq!(result, text);
+    }
+
+    #[test]
+    fn truncate_content_long() {
+        let text = "This is a very long text that should be truncated to a shorter version when using standard mode. It needs to be over 150 characters to actually trigger truncation in minimal mode. Adding more filler text to ensure we exceed the threshold. Even more padding here to make sure the test is robust. Extra words for safety.";
+        let result = truncate_content(Some(text), "minimal").unwrap();
+        assert!(result.len() < text.len());
+        assert!(result.ends_with("..."));
+    }
+
+    #[test]
+    fn route_engines_code_query() {
+        let engines = route_engines("general", "rust compiler error");
+        assert!(engines.contains(&"github".to_string()));
+        assert!(engines.contains(&"stackoverflow".to_string()));
+    }
+
+    #[test]
+    fn route_engines_news_query() {
+        let engines = route_engines("general", "breaking news today");
+        assert!(engines.contains(&"duckduckgo".to_string()));
+        assert!(engines.contains(&"hackernews".to_string()));
+    }
+
+    #[test]
+    fn route_engines_explicit_topic() {
+        let engines = route_engines("news", "anything");
+        assert!(engines.contains(&"duckduckgo".to_string()));
+        assert!(engines.contains(&"hackernews".to_string()));
+    }
+
+    #[test]
+    fn route_engines_video_intent() {
+        let engines = route_engines("general", "how to make a video tutorial");
+        assert!(engines.contains(&"youtube".to_string()));
+    }
+
+    #[test]
+    fn cache_ttl_by_topic() {
+        assert_eq!(cache_ttl("news"), Duration::from_secs(300));
+        assert_eq!(cache_ttl("code"), Duration::from_secs(43_200));
+        assert_eq!(cache_ttl("general"), Duration::from_secs(3_600));
+    }
 }
