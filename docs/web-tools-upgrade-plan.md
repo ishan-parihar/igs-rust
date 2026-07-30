@@ -581,6 +581,9 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 | P1 | Thread HttpClient through all tool files + CLI + server dispatch | ✅ Done | 6a79bc9+ |
 | P4 | YAGNI cleanup — remove unused _http/_settings from 47 functions + web/ module | ✅ Done | 2b9bc18+ |
 | CLI | Extract cli_http_client() helper, eliminate 3-line boilerplate (35 call sites) | ✅ Done | 0b0efc8 |
+| 2.5 | Batch parallel extraction (tokio::spawn + Semaphore(5), CLI --urls flag) | ✅ Done | f7e7890 + f5ae99c |
+
+| 2.5 | Batch processing (multiple URLs) | ✅ Done | f7e7890 + f5ae99c |
 
 ### Remaining ❌
 
@@ -588,7 +591,6 @@ CRW (fastCRW) is a Rust-based open-source web scraping API that is a Firecrawl a
 |-------|------|----------|--------|
 | 2.1 | Structured JSON extraction (schema enforcement) | P2 | Medium |
 | 2.2 | Screenshot capture via Obscura | P2 | Medium |
-| 2.5 | Batch processing (multiple URLs) | P2 | Medium |
 | 3.4 | Streaming mode (SSE) | P3 | High |
 | 3.5 | Per-result confidence scoring | P3 | Low |
 | 4.1 | Research mode (multi-hop) | P4 | High |
