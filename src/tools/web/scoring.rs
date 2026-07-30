@@ -236,6 +236,71 @@ pub fn compute_relevance_score(result: &WebSearchResult, query: &str) -> f64 {
     keyword * 0.5 + freshness * 0.2 + authority * 0.3
 }
 
+/// Compute per-result confidence score (0.0-1.0).
+/// Combines relevance score with snippet quality and highlight density.
+/// Higher confidence = more trustworthy and actionable for AI agents.
+pub fn compute_confidence(result: &WebSearchResult, query: &str) -> f64 {
+    let relevance = compute_relevance_score(result, query);
+
+    // Snippet quality: longer content snippets with more query terms = higher confidence
+    let snippet_len = result.content.as_ref().map(|c| c.len()).unwrap_or(0);
+    let snippet_quality = match snippet_len {
+        0..=50 => 0.1,   // no snippet or very short
+        51..=200 => 0.4,  // DDG-style short snippet
+        201..=500 => 0.7, // standard excerpt
+        501..=2000 => 0.9, // full excerpt (deep mode)
+        _ => 1.0,          // very detailed
+    };
+
+    // Highlight density: more highlights = more relevant content found
+    let highlight_count = result.highlights.as_ref().map(|h| h.len()).unwrap_or(0);
+    let highlight_bonus = (highlight_count as f64 / 5.0).min(0.15);
+
+    // Source diversity bonus: having a known domain = more trustworthy
+    let domain_bonus = if result.domain.is_some() { 0.05 } else { 0.0 };
+
+    (relevance * 0.6 + snippet_quality * 0.3 + highlight_bonus + domain_bonus).min(1.0)
+}
+
+/// Compute overall answer confidence from multiple search results.
+/// Higher when results agree (similar scores), are from diverse sources,
+/// and have high individual confidence.
+pub fn compute_answer_confidence(results: &[WebSearchResult], query: &str) -> f64 {
+    if results.is_empty() {
+        return 0.0;
+    }
+
+    // Average individual confidence
+    let avg_confidence: f64 = results.iter()
+        .map(|r| compute_confidence(r, query))
+        .sum::<f64>() / results.len() as f64;
+
+    // Source diversity: unique domains = more trustworthy
+    let unique_domains: usize = results.iter()
+        .filter_map(|r| r.domain.as_ref())
+        .collect::<HashSet<_>>()
+        .len();
+    let diversity_bonus = (unique_domains as f64 / results.len() as f64).min(0.2);
+
+    // Score agreement: if top 3 results have similar scores, higher confidence
+    let top_scores: Vec<f64> = results.iter().take(3)
+        .filter_map(|r| r.score)
+        .collect();
+    let agreement_bonus = if top_scores.len() >= 2 {
+        let spread = top_scores.iter().fold((f64::MAX, f64::MIN), |(min, max), &s| {
+            (min.min(s), max.max(s))
+        });
+        let range = spread.1 - spread.0;
+        if range < 0.1 { 0.15 } // high agreement
+        else if range < 0.3 { 0.08 } // moderate agreement
+        else { 0.0 } // low agreement
+    } else {
+        0.0
+    };
+
+    (avg_confidence * 0.6 + diversity_bonus + agreement_bonus).min(1.0)
+}
+
 /// Extract key sentences from text that match the query (highlights).
 /// Returns up to 5 sentences, scored by query term overlap.
 pub fn extract_highlights(text: &str, query: &str, max_highlights: usize) -> Vec<String> {

@@ -245,15 +245,9 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
         answer = extractive_answer(&deduped, &input.query);
     }
 
-    // Compute answer confidence: based on engine count and result diversity
+    // Compute answer confidence using per-result scores + diversity + agreement
     let confidence = if answer.is_some() {
-        let engine_count = engines_used.len() as f64;
-        let domain_count = deduped.iter()
-            .filter_map(|r| r.domain.as_ref())
-            .collect::<HashSet<_>>()
-            .len() as f64;
-        let base = 0.5 + (engine_count * 0.1).min(0.3) + (domain_count * 0.05).min(0.2);
-        Some(base.min(1.0))
+        Some(compute_answer_confidence(&deduped, &input.query))
     } else {
         None
     };
