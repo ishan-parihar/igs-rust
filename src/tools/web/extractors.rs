@@ -184,6 +184,7 @@ pub(super) fn extract_scrape_output(
             links_count,
             headings,
         }),
+        screenshot: None,
         meta: ScrapeMeta {
             url: url.to_string(),
             status: 200,
@@ -612,9 +613,21 @@ pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settin
         );
     }
 
+    // Resolve URLs: either single `url` or multiple `urls`
+    let urls = if let Some(ref batch_urls) = input.urls {
+        if !batch_urls.is_empty() {
+            batch_urls.clone()
+        } else {
+            vec![input.url.clone()]
+        }
+    } else {
+        vec![input.url.clone()]
+    };
+
+    // If batch mode with multiple URLs, process first URL (batch TODO for future)
+    let url = &input.url;
     let clean_content = input.clean_content.unwrap_or(false);
     let start = std::time::Instant::now();
-    let url = &input.url;
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
     let wait_until = "networkidle";
 

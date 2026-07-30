@@ -699,6 +699,15 @@ pub struct WebScrapeInput {
     pub include_frames: Option<bool>,
     /// Wait event
     pub wait_until: Option<String>,
+    /// Capture full page screenshot (via Obscura)
+    #[serde(default)]
+    pub screenshot: Option<bool>,
+    /// Screenshot format: "png" (default) or "jpeg"
+    #[serde(default)]
+    pub screenshot_format: Option<String>,
+    /// Screenshot quality (1-100 for jpeg, ignored for png)
+    #[serde(default)]
+    pub screenshot_quality: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -710,6 +719,9 @@ pub struct WebScrapeOutput {
     pub title: Option<String>,
     pub markdown: Option<String>,
     pub metadata: Option<ScrapeStructuredData>,
+    /// Base64-encoded screenshot (PNG or JPEG, only when screenshot=true)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub screenshot: Option<String>,
     pub meta: ScrapeMeta,
 }
 
@@ -799,6 +811,9 @@ pub struct WebCrawlOutput {
 pub struct WebExtractInput {
     /// URL to extract content from
     pub url: String,
+    /// Multiple URLs for batch extraction (parallel, with concurrency limit)
+    #[serde(default)]
+    pub urls: Option<Vec<String>>,
     /// CSS selectors to extract specific elements (optional)
     pub selectors: Option<Vec<String>>,
     /// Extract structured data (JSON-LD, OpenGraph)
@@ -815,6 +830,12 @@ pub struct WebExtractInput {
     pub clean_content: Option<bool>,
     /// Optional query for BM25/Cosine chunk ranking (enables scored extraction)
     pub query: Option<String>,
+    /// JSON schema for structured extraction (returns validated JSON conforming to schema)
+    #[serde(default)]
+    pub output_schema: Option<serde_json::Value>,
+    /// Natural language extraction prompt (used with output_schema for schema-based extraction)
+    #[serde(default)]
+    pub extract_prompt: Option<String>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }

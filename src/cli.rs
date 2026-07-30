@@ -1740,6 +1740,9 @@ async fn main() -> anyhow::Result<()> {
                     structured_data: None,
                     include_frames: Some(include_frames),
                     wait_until,
+                    screenshot: None,
+                    screenshot_format: None,
+                    screenshot_quality: None,
                     output: OutputOptions { format: None },
                 }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
                 .await)?;
@@ -1806,6 +1809,7 @@ async fn main() -> anyhow::Result<()> {
                 let settings = igs_rust_mcp::config::load_settings().await?;
                 let result = r(web::web_extract(WebExtractInput {
                     url,
+                    urls: None,
                     selectors,
                     structured_data: Some(structured_data),
                     extract_links: Some(extract_links),
@@ -1814,6 +1818,8 @@ async fn main() -> anyhow::Result<()> {
                     include_html: Some(include_html),
                     clean_content: None,
                     query,
+                    output_schema: None,
+                    extract_prompt: None,
                     output: OutputOptions { format: None },
                 }, &settings)
                 .await)?;
