@@ -733,7 +733,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "news.fetch",
-        description = "Fetch news from sources. Filter by pools, countries, domains, keywords. depth='deep' runs full pipeline."
+        description = "Fetch news from configured RSS/web-crawl source pipeline. Filter by pools, countries, domains, keywords. depth='deep' runs fetch+enrich+index pipeline. For real-time web search across engines, use web.search instead."
     )]
     async fn news_fetch(
         &self,
@@ -1246,7 +1246,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.search",
-        description = "Multi-engine web search (DDG, Wikipedia, GitHub, HackerNews, StackOverflow). Supports content depth control, highlight extraction, answer synthesis, and smart engine routing by topic. Zero API keys required."
+        description = "Real-time web search across multiple engines (DDG, Wikipedia, GitHub, HackerNews, StackOverflow). Use for general web queries, code search, news lookup, and research. For RSS/web-crawl pipeline from configured sources, use news.fetch instead. Supports content depth control, highlight extraction, answer synthesis, time-range filtering, and smart engine routing by topic. Zero API keys required."
     )]
     async fn web_search(
         &self,
@@ -1320,7 +1320,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.image_search",
-        description = "Search for images via Wikimedia Commons API. No API keys required. Returns freely licensed image URLs, thumbnails, source pages, and dimensions."
+        description = "Search for images via Wikimedia Commons API. No API keys required. Returns freely licensed image URLs, thumbnails, source pages, dimensions, and descriptions."
     )]
     async fn web_image_search(
         &self,
