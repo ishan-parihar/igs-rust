@@ -9,8 +9,8 @@ mod readability;
 mod engines;
 mod extractors;
 pub(crate) use scoring::*;
-pub use readability::{extract_semantic_excerpt, extract_ddg_redirect_url, text_density};
-pub use engines::*;
+pub use readability::{extract_semantic_excerpt, extract_ddg_redirect_url};
+pub use engines::web_image_search;
 pub use extractors::{web_scrape, web_crawl, web_extract, web_map};
 
 pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String> {
@@ -49,7 +49,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
-                    search_duckduckgo(&q, max_results * 2, include_answer, &time_range_clone, &obs_settings, &http_clone).await
+                    engines::search_duckduckgo(&q, max_results * 2, include_answer, &time_range_clone, &obs_settings, &http_clone).await
                 }));
             }
 
@@ -57,7 +57,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let q = input.query.clone();
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 handles.push(tokio::spawn(async move {
-                    search_wikipedia(&q, (max_results / 2).max(3), &http_clone).await
+                    engines::search_wikipedia(&q, (max_results / 2).max(3), &http_clone).await
                 }));
             }
             "github" => {
@@ -65,7 +65,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 let topic_clone = topic.to_string();
                 handles.push(tokio::spawn(async move {
-                    search_github(&q, max_results, &http_clone, &topic_clone).await
+                    engines::search_github(&q, max_results, &http_clone, &topic_clone).await
                 }));
             }
             "hackernews" => {
@@ -73,20 +73,20 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
-                    search_hackernews(&q, max_results, &http_clone, &time_range_clone).await
+                    engines::search_hackernews(&q, max_results, &http_clone, &time_range_clone).await
                 }));
             }
             "stackoverflow" => {
                 let q = input.query.clone();
                 let http_clone = HttpClient::new(&settings.http, &cache_dir);
                 handles.push(tokio::spawn(async move {
-                    search_stackoverflow(&q, max_results, &http_clone).await
+                    engines::search_stackoverflow(&q, max_results, &http_clone).await
                 }));
             }
             "youtube" => {
                 let q = input.query.clone();
                 handles.push(tokio::spawn(async move {
-                    search_youtube(&q, max_results).await
+                    engines::search_youtube(&q, max_results).await
                 }));
             }
             _ => {} // skip unknown engines
@@ -287,6 +287,7 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
 mod tests {
     use crate::tools::nlp::tokenize;
     use std::time::Duration;
+    use super::readability::text_density;
     use super::*;
 
     #[test]
