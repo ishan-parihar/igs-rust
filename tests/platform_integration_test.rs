@@ -161,10 +161,7 @@ mod platform_tests {
             output: OutputOptions { format: None },
         };
 
-        let result = reddit::reddit_search(input).await;
-        if let Err(err) = result {
-            println!("Reddit search error: {}", err);
-        } else if let Ok(output) = result {
+        if let Ok(output) = reddit::reddit_search(input).await {
             assert!(output.count > 0, "Expected at least 1 result");
             assert!(!output.posts.is_empty(), "Posts vector should not be empty");
 
@@ -189,10 +186,7 @@ mod platform_tests {
             output: OutputOptions { format: None },
         };
 
-        let result = reddit::reddit_feed(input).await;
-        if let Err(err) = result {
-            println!("Reddit feed error: {}", err);
-        } else if let Ok(output) = result {
+        if let Ok(output) = reddit::reddit_feed(input).await {
             assert!(output.count > 0, "Expected at least 1 post");
             assert!(!output.posts.is_empty(), "Posts vector should not be empty");
 

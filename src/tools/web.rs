@@ -20,7 +20,7 @@ fn extractive_answer(results: &[WebSearchResult], query: &str) -> Option<String>
 
     let mut candidates: Vec<(f64, String)> = Vec::new();
     for result in results.iter().take(3) {
-        let text = result.content.as_deref().unwrap_or("");
+        let text = result.raw_content.as_deref().or(result.content.as_deref()).unwrap_or("");
         // Split into sentences
         for sentence in text.split(['.', '!', '?']) {
             let trimmed = sentence.trim();
