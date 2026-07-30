@@ -3,7 +3,7 @@ use crate::http::HttpClient;
 use crate::persistence;
 use crate::tools::{
     climate, env, finance, govt, health,
-    helpers::{self, toon_encode},
+    helpers::{self},
     insights, legal, lp_mcp, news, parsers as parsers_tools, patents, politics, pools, reddit,
     research, satellite, security, sop, sources, tool_guide, twitter,
     types::*,
@@ -454,6 +454,7 @@ pub struct IgsMcpServer {
     tool_groups: Vec<String>,
     #[allow(dead_code)] // reserved for future tool use
     http_client: Arc<HttpClient>,
+    #[allow(dead_code)] // used by dump() in non-test builds
     settings: Arc<Settings>,
     /// Real-time monitoring & alerting manager
     monitor: Arc<crate::tools::monitor::MonitorManager>,
@@ -534,7 +535,7 @@ impl IgsMcpServer {
         if !self.settings.output.dump_enabled {
             return;
         }
-        crate::tools::dump::maybe_dump(&self.settings, tool_name, subject, &toon_encode(output));
+        crate::tools::dump::maybe_dump(&self.settings, tool_name, subject, &helpers::toon_encode(output));
     }
 
     #[cfg(test)]

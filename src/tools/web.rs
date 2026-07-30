@@ -213,7 +213,7 @@ fn extract_highlights(text: &str, query: &str, max_highlights: usize) -> Vec<Str
 
     // Split into sentences
     let sentences: Vec<String> = text
-        .split(|c: char| c == '.' || c == '!' || c == '?')
+        .split(['.', '!', '?'])
         .map(|s| s.trim().to_string())
         .filter(|s| s.len() > 30 && s.len() < 500)
         .collect();
@@ -1205,33 +1205,30 @@ async fn search_wikipedia(
     let mut results = Vec::new();
     let mut answer = None;
 
-    match http.fetch(&search_url, None, "bypass").await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                if let Some(title) = json["title"].as_str() {
-                    let url = json["content_urls"]["desktop"]["page"].as_str().unwrap_or("").to_string();
-                    let extract = json["extract"].as_str().unwrap_or("").to_string();
-                    let thumbnail = json["thumbnail"]["source"].as_str().map(|s| s.to_string());
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&search_url, None, "bypass").await {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+            if let Some(title) = json["title"].as_str() {
+                let url = json["content_urls"]["desktop"]["page"].as_str().unwrap_or("").to_string();
+                let extract = json["extract"].as_str().unwrap_or("").to_string();
+                let thumbnail = json["thumbnail"]["source"].as_str().map(|s| s.to_string());
 
-                    if !url.is_empty() {
-                        answer = Some(extract.clone());
-                        results.push(WebSearchResult {
-                            title: title.to_string(),
-                            url,
-                            content: Some(extract),
-                            score: Some(1.0),
-                            highlights: None,
-                            raw_content: None,
-                            source: Some("wikipedia".to_string()),
-                            domain: Some("wikipedia.org".to_string()),
-                            published_date: None,
-                            favicon: thumbnail,
-                        });
-                    }
+                if !url.is_empty() {
+                    answer = Some(extract.clone());
+                    results.push(WebSearchResult {
+                        title: title.to_string(),
+                        url,
+                        content: Some(extract),
+                        score: Some(1.0),
+                        highlights: None,
+                        raw_content: None,
+                        source: Some("wikipedia".to_string()),
+                        domain: Some("wikipedia.org".to_string()),
+                        published_date: None,
+                        favicon: thumbnail,
+                    });
                 }
             }
         }
-        _ => {} // Not a direct article match, continue to search API
     }
 
     // Also do a search for related articles
@@ -1240,39 +1237,36 @@ async fn search_wikipedia(
         query_encoded, max_results
     );
 
-    match http.fetch(&search_api_url, None, "bypass").await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                if let Some(search_results) = json["query"]["search"].as_array() {
-                    for r in search_results.iter().take(max_results) {
-                        let title = r["title"].as_str().unwrap_or("").to_string();
-                        let snippet = r["snippet"].as_str()
-                            .unwrap_or("")
-                            .replace("<span class=\"searchmatch\">", "")
-                            .replace("</span>", "")
-                            .to_string();
-                        let url = format!("https://en.wikipedia.org/wiki/{}", title.replace(' ', "_"));
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&search_api_url, None, "bypass").await {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+            if let Some(search_results) = json["query"]["search"].as_array() {
+                for r in search_results.iter().take(max_results) {
+                    let title = r["title"].as_str().unwrap_or("").to_string();
+                    let snippet = r["snippet"].as_str()
+                        .unwrap_or("")
+                        .replace("<span class=\"searchmatch\">", "")
+                        .replace("</span>", "")
+                        .to_string();
+                    let url = format!("https://en.wikipedia.org/wiki/{}", title.replace(' ', "_"));
 
-                        // Skip if we already have this URL from the summary endpoint
-                        if results.iter().any(|existing| existing.url == url) { continue; }
+                    // Skip if we already have this URL from the summary endpoint
+                    if results.iter().any(|existing| existing.url == url) { continue; }
 
-                        results.push(WebSearchResult {
-                            title,
-                            url,
-                            content: if snippet.is_empty() { None } else { Some(snippet) },
-                            score: Some(0.8),
-                            highlights: None,
-                            raw_content: None,
-                            source: Some("wikipedia".to_string()),
-                            domain: Some("wikipedia.org".to_string()),
-                            published_date: None,
-                            favicon: None,
-                        });
-                    }
+                    results.push(WebSearchResult {
+                        title,
+                        url,
+                        content: if snippet.is_empty() { None } else { Some(snippet) },
+                        score: Some(0.8),
+                        highlights: None,
+                        raw_content: None,
+                        source: Some("wikipedia".to_string()),
+                        domain: Some("wikipedia.org".to_string()),
+                        published_date: None,
+                        favicon: None,
+                    });
                 }
             }
         }
-        _ => {}
     }
 
     Ok(("wikipedia".to_string(), results, answer))
@@ -1299,40 +1293,37 @@ async fn search_github(
 
     let mut results = Vec::new();
 
-    match http.fetch(&search_url, Some(&headers), "bypass").await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                if let Some(items) = json["items"].as_array() {
-                    for r in items.iter().take(max_results) {
-                        let name = r["full_name"].as_str().unwrap_or("").to_string();
-                        let description = r["description"].as_str().unwrap_or("").to_string();
-                        let html_url = r["html_url"].as_str().unwrap_or("").to_string();
-                        let stars = r["stargazers_count"].as_u64().unwrap_or(0);
-                        let language = r["language"].as_str().unwrap_or("").to_string();
-                        let updated = r["updated_at"].as_str().map(|s| s.to_string());
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&search_url, Some(&headers), "bypass").await {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+            if let Some(items) = json["items"].as_array() {
+                for r in items.iter().take(max_results) {
+                    let name = r["full_name"].as_str().unwrap_or("").to_string();
+                    let description = r["description"].as_str().unwrap_or("").to_string();
+                    let html_url = r["html_url"].as_str().unwrap_or("").to_string();
+                    let stars = r["stargazers_count"].as_u64().unwrap_or(0);
+                    let language = r["language"].as_str().unwrap_or("").to_string();
+                    let updated = r["updated_at"].as_str().map(|s| s.to_string());
 
-                        let content = format!(
-                            "⭐ {} stars | 📝 {} | {}",
-                            stars, language, description
-                        );
+                    let content = format!(
+                        "⭐ {} stars | 📝 {} | {}",
+                        stars, language, description
+                    );
 
-                        results.push(WebSearchResult {
-                            title: name,
-                            url: html_url,
-                            content: Some(content),
-                            score: Some(stars as f64 / 100000.0).map(|s| s.min(1.0)),
-                            highlights: None,
-                            raw_content: None,
-                            source: Some("github".to_string()),
-                            domain: Some("github.com".to_string()),
-                            published_date: updated,
-                            favicon: None,
-                        });
-                    }
+                    results.push(WebSearchResult {
+                        title: name,
+                        url: html_url,
+                        content: Some(content),
+                        score: Some(stars as f64 / 100000.0).map(|s| s.min(1.0)),
+                        highlights: None,
+                        raw_content: None,
+                        source: Some("github".to_string()),
+                        domain: Some("github.com".to_string()),
+                        published_date: updated,
+                        favicon: None,
+                    });
                 }
             }
         }
-        _ => {}
     }
 
     // Also search code when topic is explicitly code-related
@@ -1342,38 +1333,35 @@ async fn search_github(
         query_encoded, max_results.min(5)
     );
 
-    match http.fetch(&code_url, Some(&headers), "bypass").await {
-        Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-                if let Some(items) = json["items"].as_array() {
-                    for r in items.iter().take(5) {
-                        let path = r["path"].as_str().unwrap_or("").to_string();
-                        let repo = r["repository"]["full_name"].as_str().unwrap_or("").to_string();
-                        let html_url = r["html_url"].as_str().unwrap_or("").to_string();
-                        let score_val = r["score"].as_f64().unwrap_or(0.0);
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&code_url, Some(&headers), "bypass").await {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+            if let Some(items) = json["items"].as_array() {
+                for r in items.iter().take(5) {
+                    let path = r["path"].as_str().unwrap_or("").to_string();
+                    let repo = r["repository"]["full_name"].as_str().unwrap_or("").to_string();
+                    let html_url = r["html_url"].as_str().unwrap_or("").to_string();
+                    let score_val = r["score"].as_f64().unwrap_or(0.0);
 
-                        let title = format!("{}/{}", repo, path);
-                        let content = r["text_matches"].as_array()
-                            .map(|tm| tm.iter().take(2).map(|m| m["fragment"].as_str().unwrap_or("")).collect::<Vec<_>>().join(" ... "))
-                            .unwrap_or_default();
+                    let title = format!("{}/{}", repo, path);
+                    let content = r["text_matches"].as_array()
+                        .map(|tm| tm.iter().take(2).map(|m| m["fragment"].as_str().unwrap_or("")).collect::<Vec<_>>().join(" ... "))
+                        .unwrap_or_default();
 
-                        results.push(WebSearchResult {
-                            title,
-                            url: html_url,
-                            content: if content.is_empty() { None } else { Some(content) },
-                            score: Some(score_val),
-                            highlights: None,
-                            raw_content: None,
-                            source: Some("github".to_string()),
-                            domain: Some("github.com".to_string()),
-                            published_date: None,
-                            favicon: None,
-                        });
-                    }
+                    results.push(WebSearchResult {
+                        title,
+                        url: html_url,
+                        content: if content.is_empty() { None } else { Some(content) },
+                        score: Some(score_val),
+                        highlights: None,
+                        raw_content: None,
+                        source: Some("github".to_string()),
+                        domain: Some("github.com".to_string()),
+                        published_date: None,
+                        favicon: None,
+                    });
                 }
             }
         }
-        _ => {        }
     }
     } // end if topic == "code"
 
@@ -1502,7 +1490,7 @@ async fn search_stackoverflow(
                         title,
                         url: link,
                         content: Some(content),
-                        score: Some((score as f64 / 100.0).min(1.0).max(0.0)),
+                        score: Some((score as f64 / 100.0).clamp(0.0, 1.0)),
                         highlights: None,
                         raw_content: None,
                         source: Some("stackoverflow".to_string()),
