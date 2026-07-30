@@ -1633,6 +1633,7 @@ async fn main() -> anyhow::Result<()> {
                     exclude_domains,
                     days,
                     time_range: None,
+                    chunks_per_source: None,
                     provider: None,
                     output: OutputOptions { format: None },
                 })

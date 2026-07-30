@@ -603,6 +603,10 @@ pub struct WebSearchInput {
     pub days: Option<i32>,
     /// Time range filter: "day", "week", "month", "year" (applies to HN engine)
     pub time_range: Option<String>,
+    /// Number of BM25-scored chunks to return per result (for RAG workflows).
+    /// When set, content is split into paragraphs, scored by query relevance,
+    /// and top-N chunks are returned in the `chunks` field.
+    pub chunks_per_source: Option<i32>,
     /// Provider (backward compat, ignored)
     pub provider: Option<String>,
     #[serde(flatten)]
@@ -646,6 +650,21 @@ pub struct WebSearchResult {
     /// Favicon URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub favicon: Option<String>,
+    /// BM25-scored content chunks (only when chunks_per_source is set).
+    /// Useful for RAG workflows — each chunk is scored by query relevance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunks: Option<Vec<ScoredChunkOutput>>,
+}
+
+/// A content chunk with its BM25 relevance score.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ScoredChunkOutput {
+    /// The chunk content (a paragraph or section of the page)
+    pub content: String,
+    /// BM25 relevance score (higher = more relevant to query)
+    pub score: f64,
+    /// Original position in the document (0-indexed)
+    pub index: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

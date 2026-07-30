@@ -749,6 +749,38 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
         }
     }
 
+    // Chunked content per source: split into paragraphs, score with BM25, return top-N
+    if let Some(chunks_per_source) = input.chunks_per_source {
+        let cps = chunks_per_source.max(1) as usize;
+        for result in &mut deduped {
+            let text = result
+                .raw_content
+                .as_deref()
+                .or(result.content.as_deref())
+                .unwrap_or("");
+            if text.len() < 100 {
+                continue;
+            }
+            // Split into paragraphs: split on blank lines, merge consecutive non-blank lines
+            let paragraphs: Vec<String> = text
+                .split("\n\n")
+                .map(|s| s.replace('\n', " "))
+                .map(|s| s.trim().to_string())
+                .filter(|s| s.len() > 40) // skip short fragments
+                .collect();
+            if paragraphs.is_empty() {
+                continue;
+            }
+            // Use raw_content for BM25 scoring (not truncated content)
+            let scored = bm25_score_chunks(&paragraphs, &input.query, cps);
+            result.chunks = Some(scored.into_iter().map(|c| ScoredChunkOutput {
+                content: c.content,
+                score: c.score,
+                index: c.index,
+            }).collect());
+        }
+    }
+
     // Truncate to max_results
     deduped.truncate(max_results);
 
@@ -1005,6 +1037,7 @@ async fn search_youtube(
             domain: Some("youtube.com".to_string()),
             published_date: None,
             favicon: None,
+                chunks: None,
         });
     }
 
@@ -1184,6 +1217,7 @@ fn parse_duckduckgo_html(html: &str, max_results: usize) -> Vec<WebSearchResult>
                                 domain,
                                 published_date: None,
                                 favicon: None,
+                chunks: None,
                             });
                         }
                     }
@@ -1288,6 +1322,7 @@ async fn search_wikipedia(
                         domain: Some("wikipedia.org".to_string()),
                         published_date: None,
                         favicon: thumbnail,
+                chunks: None,
                     });
                 }
             }
@@ -1326,6 +1361,7 @@ async fn search_wikipedia(
                         domain: Some("wikipedia.org".to_string()),
                         published_date: None,
                         favicon: None,
+                chunks: None,
                     });
                 }
             }
@@ -1383,6 +1419,7 @@ async fn search_github(
                         domain: Some("github.com".to_string()),
                         published_date: updated,
                         favicon: None,
+                chunks: None,
                     });
                 }
             }
@@ -1421,6 +1458,7 @@ async fn search_github(
                         domain: Some("github.com".to_string()),
                         published_date: None,
                         favicon: None,
+                chunks: None,
                     });
                 }
             }
@@ -1497,6 +1535,7 @@ async fn search_hackernews(
                         domain: Some("news.ycombinator.com".to_string()),
                         published_date: Some(created_at),
                         favicon: None,
+                chunks: None,
                     });
                 }
             }
@@ -1576,6 +1615,7 @@ async fn search_stackoverflow(
                         domain: Some("stackoverflow.com".to_string()),
                         published_date: if date_str.is_empty() { None } else { Some(date_str) },
                         favicon: None,
+                chunks: None,
                     });
                 }
             }
@@ -2679,6 +2719,7 @@ mod tests {
                 content: None, score: Some(0.9), highlights: None,
                 raw_content: None, source: None, domain: None,
                 published_date: None, favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "How to learn Rust programming language".to_string(),
@@ -2686,6 +2727,7 @@ mod tests {
                 content: None, score: Some(0.7), highlights: None,
                 raw_content: None, source: None, domain: None,
                 published_date: None, favicon: None,
+                chunks: None,
             },
         ];
         semantic_dedup(&mut results);
@@ -2731,6 +2773,7 @@ mod tests {
             domain: None,
             published_date: None,
             favicon: None,
+                chunks: None,
         }];
         assert!(extractive_answer(&results, "").is_none());
     }
@@ -2748,6 +2791,7 @@ mod tests {
             domain: None,
             published_date: None,
             favicon: None,
+                chunks: None,
         }];
         let answer = extractive_answer(&results, "rust programming language");
         assert!(answer.is_some());
@@ -2768,6 +2812,7 @@ mod tests {
             domain: None,
             published_date: None,
             favicon: None,
+                chunks: None,
         }];
         let answer = extractive_answer(&results, "test topic");
         assert!(answer.is_some());
@@ -2964,6 +3009,7 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: Some("bbc.com".into()),
                 published_date: None, favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "Article 2".into(),
@@ -2974,6 +3020,7 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: Some("bbc.com".into()),
                 published_date: None, favicon: None,
+                chunks: None,
             },
         ];
         domain_dedup(&mut results);
@@ -2994,6 +3041,7 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: Some("bbc.com".into()),
                 published_date: None, favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "From Reuters".into(),
@@ -3004,6 +3052,7 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: Some("reuters.com".into()),
                 published_date: None, favicon: None,
+                chunks: None,
             },
         ];
         domain_dedup(&mut results);
@@ -3023,6 +3072,7 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: Some("www.bbc.co.uk".into()),
                 published_date: None, favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "BBC UK 2".into(),
@@ -3033,6 +3083,7 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: Some("bbc.co.uk".into()),
                 published_date: None, favicon: None,
+                chunks: None,
             },
         ];
         domain_dedup(&mut results);
@@ -3053,9 +3104,174 @@ mod tests {
                 source: Some("ddg".into()),
                 domain: None,
                 published_date: None, favicon: None,
+                chunks: None,
             },
         ];
         domain_dedup(&mut results);
         assert_eq!(results.len(), 1); // no domain = no dedup
+    }
+
+    // ─── semantic_dedup tests ──────────────────────────────────
+
+    #[test]
+    fn semantic_dedup_identical_titles() {
+        use super::WebSearchResult;
+        let mut results = vec![
+            WebSearchResult {
+                title: "Rust programming language tutorial".into(),
+                url: "https://a.com".into(),
+                content: Some("c".into()),
+                score: Some(0.5),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("a.com".into()),
+                published_date: None, favicon: None, chunks: None,
+            },
+            WebSearchResult {
+                title: "Rust programming language tutorial".into(),
+                url: "https://b.com".into(),
+                content: Some("c".into()),
+                score: Some(0.8),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("b.com".into()),
+                published_date: None, favicon: None, chunks: None,
+            },
+        ];
+        semantic_dedup(&mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].url, "https://b.com"); // higher score wins
+    }
+
+    #[test]
+    fn semantic_dedup_different_titles() {
+        use super::WebSearchResult;
+        let mut results = vec![
+            WebSearchResult {
+                title: "Rust programming".into(),
+                url: "https://a.com".into(),
+                content: Some("c".into()),
+                score: Some(0.5),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("a.com".into()),
+                published_date: None, favicon: None, chunks: None,
+            },
+            WebSearchResult {
+                title: "Python tutorial".into(),
+                url: "https://b.com".into(),
+                content: Some("c".into()),
+                score: Some(0.6),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("b.com".into()),
+                published_date: None, favicon: None, chunks: None,
+            },
+        ];
+        semantic_dedup(&mut results);
+        assert_eq!(results.len(), 2); // different titles kept
+    }
+
+    #[test]
+    fn semantic_dedup_below_threshold() {
+        use super::WebSearchResult;
+        // Similar but below 0.8 Jaccard threshold
+        let mut results = vec![
+            WebSearchResult {
+                title: "Rust is a systems programming language".into(),
+                url: "https://a.com".into(),
+                content: Some("c".into()),
+                score: Some(0.5),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("a.com".into()),
+                published_date: None, favicon: None, chunks: None,
+            },
+            WebSearchResult {
+                title: "Rust is a fast compiled language".into(),
+                url: "https://b.com".into(),
+                content: Some("c".into()),
+                score: Some(0.6),
+                highlights: None, raw_content: None,
+                source: Some("ddg".into()),
+                domain: Some("b.com".into()),
+                published_date: None, favicon: None, chunks: None,
+            },
+        ];
+        semantic_dedup(&mut results);
+        assert_eq!(results.len(), 2); // below 0.8 threshold, both kept
+    }
+
+    // ─── compute_relevance_score tests ──────────────────────────
+
+    #[test]
+    fn compute_relevance_score_title_match_high() {
+        use super::WebSearchResult;
+        let result = WebSearchResult {
+            title: "Rust programming language".into(),
+            url: "https://rust-lang.org".into(),
+            content: Some("Rust is a systems programming language.".into()),
+            score: None,
+            highlights: None, raw_content: None,
+            source: Some("wikipedia".into()),
+            domain: Some("wikipedia.org".into()),
+            published_date: None, favicon: None, chunks: None,
+        };
+        let score = compute_relevance_score(&result, "rust programming");
+        assert!(score > 0.6, "Expected high score for title match, got {}", score);
+    }
+
+    #[test]
+    fn compute_relevance_score_no_match_low() {
+        use super::WebSearchResult;
+        let result = WebSearchResult {
+            title: "Cooking recipes".into(),
+            url: "https://cooking.com".into(),
+            content: Some("Delicious recipes for dinner.".into()),
+            score: None,
+            highlights: None, raw_content: None,
+            source: Some("ddg".into()),
+            domain: Some("cooking.com".into()),
+            published_date: None, favicon: None, chunks: None,
+        };
+        let score = compute_relevance_score(&result, "rust programming");
+        assert!(score < 0.5, "Expected low score for no match, got {}", score);
+    }
+
+    #[test]
+    fn compute_relevance_score_freshness_boost() {
+        use super::WebSearchResult;
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let result = WebSearchResult {
+            title: "Rust update".into(),
+            url: "https://example.com".into(),
+            content: Some("Rust gets new features.".into()),
+            score: None,
+            highlights: None, raw_content: None,
+            source: Some("ddg".into()),
+            domain: Some("example.com".into()),
+            published_date: Some(today), favicon: None, chunks: None,
+        };
+        let score = compute_relevance_score(&result, "rust");
+        // Fresh content should get a boost
+        assert!(score > 0.5, "Expected freshness boost, got {}", score);
+    }
+
+    #[test]
+    fn compute_relevance_score_authority_boost() {
+        use super::WebSearchResult;
+        let result = WebSearchResult {
+            title: "Rust docs".into(),
+            url: "https://doc.rust-lang.org".into(),
+            content: Some("Official Rust documentation.".into()),
+            score: None,
+            highlights: None, raw_content: None,
+            source: Some("ddg".into()),
+            domain: Some("docs.rs".into()),
+            published_date: None, favicon: None, chunks: None,
+        };
+        let score = compute_relevance_score(&result, "rust docs");
+        // docs.rs has high authority (0.85)
+        assert!(score > 0.6, "Expected authority boost, got {}", score);
     }
 }
