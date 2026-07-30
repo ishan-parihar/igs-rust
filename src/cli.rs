@@ -409,9 +409,6 @@ enum WebAction {
         include_domains: Option<Vec<String>>,
         #[arg(long, value_delimiter = ',')]
         exclude_domains: Option<Vec<String>>,
-        /// Days back (news topic only)
-        #[arg(long)]
-        days: Option<i32>,
         /// Include LLM-generated answer in results
         #[arg(long)]
         include_answer: bool,
@@ -1624,7 +1621,6 @@ async fn main() -> anyhow::Result<()> {
                 topic,
                 include_domains,
                 exclude_domains,
-                days,
                 include_answer,
                 content_length,
                 include_highlights,
@@ -1643,7 +1639,7 @@ async fn main() -> anyhow::Result<()> {
                     include_answer: Some(include_answer),
                     include_domains,
                     exclude_domains,
-                    days,
+                    days: None,
                     time_range,
                     chunks_per_source,
                     provider: None,

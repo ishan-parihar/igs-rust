@@ -196,7 +196,7 @@ Both can search for news, but serve different purposes:
 |--------|--------|-------------|
 | Tavily parity score | >85% | Feature matrix comparison |
 | Clippy warnings | 0 | `cargo clippy -- -D warnings` |
-| Test coverage | 14+ tests | `cargo test` |
+| Test coverage | 194+ tests | `cargo test` |
 | Answer synthesis | Working | `igs web search --query "rust" --include-answer` |
 | Time-range filtering | Working | `igs web search --query "AI" --time-range week` |
 | NLP consolidation | 0 duplicated functions | Code review |
