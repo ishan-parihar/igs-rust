@@ -13,4 +13,5 @@ pub(crate) mod lightpanda;
 pub(crate) mod obscura;
 pub(crate) mod parsers;
 pub(crate) mod persistence;
+pub use types::Settings;
 pub(crate) mod types;
