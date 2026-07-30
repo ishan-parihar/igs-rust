@@ -302,6 +302,17 @@ fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
 // Reuse consolidated tokenizer from nlp module
 use super::nlp::tokenize;
 
+/// Split text into paragraphs for BM25 chunk scoring.
+/// Splits on double-newline boundaries, collapses internal single newlines,
+/// and filters out fragments under 40 characters.
+pub(crate) fn split_paragraphs(text: &str) -> Vec<String> {
+    text.split("\n\n")
+        .map(|s| s.replace('\n', " "))
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.len() > 40)
+        .collect()
+}
+
 /// BM25 chunk scoring constants.
 const BM25_K1: f64 = 1.2;
 const BM25_B: f64 = 0.75;
@@ -761,17 +772,10 @@ pub async fn web_search(input: WebSearchInput) -> Result<WebSearchOutput, String
             if text.len() < 100 {
                 continue;
             }
-            // Split into paragraphs: split on blank lines, merge consecutive non-blank lines
-            let paragraphs: Vec<String> = text
-                .split("\n\n")
-                .map(|s| s.replace('\n', " "))
-                .map(|s| s.trim().to_string())
-                .filter(|s| s.len() > 40) // skip short fragments
-                .collect();
+            let paragraphs = split_paragraphs(text);
             if paragraphs.is_empty() {
                 continue;
             }
-            // Use raw_content for BM25 scoring (not truncated content)
             let scored = bm25_score_chunks(&paragraphs, &input.query, cps);
             result.chunks = Some(scored.into_iter().map(|c| ScoredChunkOutput {
                 content: c.content,
@@ -3273,5 +3277,75 @@ mod tests {
         let score = compute_relevance_score(&result, "rust docs");
         // docs.rs has high authority (0.85)
         assert!(score > 0.6, "Expected authority boost, got {}", score);
+    }
+
+    // ─── chunked content tests ─────────────────────────────────
+
+    #[test]
+    fn bm25_chunk_scoring_returns_top_k() {
+        let chunks = vec![
+            "Rust is a systems programming language focused on safety and performance.".into(),
+            "Python is a popular general-purpose language used in data science.".into(),
+            "Rust ownership prevents data races at compile time with zero cost.".into(),
+        ];
+        let scored = bm25_score_chunks(&chunks, "rust safety", 2);
+        assert_eq!(scored.len(), 2);
+        // The Python chunk (no query terms) should not be in top 2
+        assert!(scored.iter().all(|c| !c.content.contains("Python")),
+            "Python chunk should rank lower than Rust chunks");
+        assert!(scored[0].score > 0.0);
+    }
+
+    #[test]
+    fn bm25_chunk_scoring_preserves_index() {
+        let chunks = vec!["hello world".into(), "foo bar baz".into()];
+        let scored = bm25_score_chunks(&chunks, "hello", 2);
+        assert_eq!(scored.len(), 2);
+        let hello_chunk = scored.iter().find(|c| c.content.contains("hello")).unwrap();
+        let foo_chunk = scored.iter().find(|c| c.content.contains("foo")).unwrap();
+        assert!(hello_chunk.score > foo_chunk.score);
+        assert_eq!(hello_chunk.index, 0);
+        assert_eq!(foo_chunk.index, 1);
+    }
+
+    #[test]
+    fn bm25_single_chunk() {
+        let chunks = vec!["Only one paragraph here.".into()];
+        let scored = bm25_score_chunks(&chunks, "anything", 5);
+        assert_eq!(scored.len(), 1);
+        assert_eq!(scored[0].index, 0);
+    }
+
+    #[test]
+    fn split_paragraphs_normal() {
+        let text = "First paragraph with enough content to pass the filter and be included in results."
+            .to_string()
+            + "\n\n"
+            + "Second paragraph also with enough content to survive the 40 char minimum filter."
+            + "\n\n"
+            + "Third paragraph of sufficient length that it should not be filtered out by the length check.";
+        let paragraphs = super::split_paragraphs(&text);
+        assert_eq!(paragraphs.len(), 3, "Expected 3 paragraphs after splitting");
+        assert!(paragraphs[0].starts_with("First paragraph"));
+        assert!(paragraphs[1].starts_with("Second paragraph"));
+        assert!(paragraphs[2].starts_with("Third paragraph"));
+    }
+
+    #[test]
+    fn split_paragraphs_filters_short() {
+        let text = "A short line.\n\nAnother short one.";
+        let paragraphs = super::split_paragraphs(text);
+        assert!(paragraphs.is_empty(), "Short fragments should be filtered out");
+    }
+
+    #[test]
+    fn split_paragraphs_collapses_single_newlines() {
+        let text = "Line one of paragraph.\nLine two of paragraph.\nLine three of paragraph.";
+        let paragraphs = super::split_paragraphs(text);
+        // No double newlines, so the whole text is one "paragraph"
+        // but single newlines are collapsed into spaces
+        assert_eq!(paragraphs.len(), 1);
+        assert!(paragraphs[0].contains("Line one"));
+        assert!(!paragraphs[0].contains('\n'), "Single newlines should be collapsed");
     }
 }
