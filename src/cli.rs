@@ -479,6 +479,9 @@ enum WebAction {
         /// Include raw HTML in output
         #[arg(long)]
         include_html: bool,
+        /// Query for BM25 relevance scoring (chunks ranked by query)
+        #[arg(long)]
+        query: Option<String>,
     },
     /// Search for images via DuckDuckGo (key-free, uses Obscura)
     ImageSearch {
@@ -1713,6 +1716,7 @@ async fn main() -> anyhow::Result<()> {
                 extract_links,
                 extract_images,
                 include_html,
+                query,
             } => {
                 let result = r(web::web_extract(WebExtractInput {
                     url,
@@ -1723,7 +1727,7 @@ async fn main() -> anyhow::Result<()> {
                     wait_selector: None,
                     include_html: Some(include_html),
                     clean_content: None,
-                    query: None,
+                    query,
                     output: OutputOptions { format: None },
                 })
                 .await)?;
