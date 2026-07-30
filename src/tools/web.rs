@@ -838,7 +838,8 @@ async fn search_youtube(
     let limit = max_results.min(10);
     let search_term = format!("ytsearch{}:{}", limit, query);
 
-    let output = tokio::process::Command::new("yt-dlp")
+    // Fail gracefully — don't break web.search if yt-dlp is missing
+    let output = match tokio::process::Command::new("yt-dlp")
         .args([
             &search_term,
             "--flat-playlist",
@@ -847,12 +848,16 @@ async fn search_youtube(
         ])
         .output()
         .await
-        .map_err(|e| format!("yt-dlp not found: {}. Install with: pip install yt-dlp", e))?;
+    {
+        Ok(o) => o,
+        Err(_) => return Ok(("youtube".to_string(), vec![], None)),
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if stderr.contains("ERROR") {
-            return Err(format!("yt-dlp error: {}", stderr.trim()));
+            tracing::warn!("yt-dlp error: {}", stderr.trim());
+            return Ok(("youtube".to_string(), vec![], None));
         }
     }
 
@@ -912,7 +917,7 @@ fn parse_ddg_images_html(html: &str, max_results: usize) -> Vec<WebImageResult> 
         Err(_) => return results,
     };
 
-    // DDG Images uses various selectors for image cards
+    // Image-specific selectors for DDG Images page
     let card_selectors = [
         ".tile--img",
         ".image-card",
@@ -1034,8 +1039,9 @@ fn parse_ddg_images_html(html: &str, max_results: usize) -> Vec<WebImageResult> 
     results
 }
 
-/// Search for images via DuckDuckGo Images using Obscura (key-free).
-/// DDG Images provides millions of indexed images without any API key.
+/// Search for images via DuckDuckGo using Obscura (key-free).
+/// Uses the DDG HTML search endpoint with "images" appended to the query,
+/// then extracts image URLs from the rendered result cards.
 pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSearchOutput, String> {
     let settings = config::load_settings()
         .await
@@ -1051,13 +1057,13 @@ pub async fn web_image_search(input: WebImageSearchInput) -> Result<WebImageSear
     let max_results = input.max_results.unwrap_or(10).min(30) as usize;
     let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 
-    // DDG Images search URL
+    let start = std::time::Instant::now();
+
+    // Use DDG HTML endpoint — more reliable for scraping than the JS-heavy images page
     let search_url = format!(
-        "https://duckduckgo.com/?q={}&iar=images&iax=images&ia=images",
+        "https://html.duckduckgo.com/html/?q={}+images",
         query_encoded
     );
-
-    let start = std::time::Instant::now();
 
     let html = obscura
         .fetch_with_all_options(&search_url, "html", false, "load", false, None)
