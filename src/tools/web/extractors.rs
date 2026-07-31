@@ -819,7 +819,7 @@ async fn extract_single_url(
 
     // Include raw HTML if requested
     let html_output = if input.include_html.unwrap_or(false) {
-        Some(html.clone())
+        Some(html)
     } else {
         None
     };

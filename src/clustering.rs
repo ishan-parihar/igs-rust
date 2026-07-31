@@ -42,7 +42,7 @@ fn extract_entities(text: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn cluster_articles(items: Vec<NewsItem>, min_overlap: usize) -> Vec<ArticleCluster> {
+pub fn cluster_articles(items: &[NewsItem], min_overlap: usize) -> Vec<ArticleCluster> {
     if items.is_empty() {
         return vec![];
     }
@@ -146,13 +146,13 @@ mod tests {
             make_item("Apple launches iPhone 16", "techcrunch"),
             make_item("Weather update today", "weather_com"),
         ];
-        let clusters = cluster_articles(items, 1);
+        let clusters = cluster_articles(&items, 1);
         assert!(clusters.len() <= 2);
     }
 
     #[test]
     fn test_cluster_empty() {
-        let clusters = cluster_articles(vec![], 1);
+        let clusters = cluster_articles(&[], 1);
         assert!(clusters.is_empty());
     }
 }

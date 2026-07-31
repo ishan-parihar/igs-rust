@@ -58,8 +58,21 @@ flate2 = "1.1.9"
 tar = "0.4.46"
 
 [lints.clippy]
+# Tier 1: Catch actual bugs
+correctness = { level = "deny", priority = 10 }
+
+# Tier 2: Performance warnings
+perf = { level = "warn", priority = 5 }
+
+# Tier 3: Targeted pedantic lints (full pedantic is too noisy for a binary)
+redundant_clone = { level = "deny", priority = 9 }
+needless_pass_by_value = { level = "warn", priority = 5 }
+
+# Tier 4: Allow what's intentional for a CLI/MCP binary
 unwrap_used = "allow"      # ponytail: IGS is a CLI/MCP binary; unwrap is acceptable at trust boundaries
 expect_used = "allow"       # ponytail: expect with clear messages is fine in binary
 todo = "warn"
 unimplemented = "warn"
 large_enum_variant = "allow" # ponytail: CLI enums are one-shot, variant size doesn't matter
+must_use_candidate = "allow" # ponytail: binary tool, return values are consumed immediately
+module_name_repetitions = "allow" # ponytail: e.g. news::fetch_news is intentional, not noise

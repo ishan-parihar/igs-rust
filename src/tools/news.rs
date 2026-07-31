@@ -235,7 +235,7 @@ pub async fn news_fetch(input: NewsFetchInput, http: Arc<HttpClient>, settings: 
     };
 
     let clusters = if depth == "deep" && all_items.len() >= 5 {
-        let article_clusters = clustering::cluster_articles(all_items.clone(), 2);
+        let article_clusters = clustering::cluster_articles(&all_items, 2);
         Some(
             article_clusters
                 .into_iter()

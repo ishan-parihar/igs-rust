@@ -67,7 +67,7 @@ impl SemanticIndex {
             id: id.to_string(),
             title: title.to_string(),
             link: link.to_string(),
-            text: doc_text.clone(),
+            text: doc_text,
             tfidf: HashMap::new(), // will be computed in rebuild()
         });
         self.rebuild();
