@@ -7,6 +7,7 @@ use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
+use crate::error::{AppError, AppResult};
 
 const REDDIT_USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Brave/Chrome/145.0.0.0 Safari/537.36";
@@ -53,7 +54,7 @@ struct RedditPost {
 // ─── Cookie-based Authentication ──────────────────────────────
 
 /// Load Reddit cookie from settings
-async fn load_reddit_cookie() -> Result<String, String> {
+async fn load_reddit_cookie() -> AppResult<String> {
     let settings = config::load_settings()
         .await
         .map_err(|e| format!("Settings load failed: {}", e))?;
@@ -62,9 +63,7 @@ async fn load_reddit_cookie() -> Result<String, String> {
         .reddit
         .and_then(|r| r.cookie)
         .filter(|c| !c.is_empty())
-        .ok_or_else(|| {
-            "Reddit cookie not configured. Add reddit.cookie to settings.yml".to_string()
-        })
+        .ok_or_else(|| AppError::from("Reddit cookie not configured. Add reddit.cookie to settings.yml"))
 }
 
 /// Build a dedicated reqwest Client for Reddit with browser-like headers.
@@ -89,7 +88,7 @@ fn build_reddit_client(cookie: &str) -> Client {
 }
 
 /// GET request via www.reddit.com with cookie auth
-async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
+async fn reddit_get(client: &Client, url: &str) -> AppResult<String> {
     let max_retries = 3;
     let mut last_err = String::new();
     // Track whether the previous attempt already slept (e.g., via Retry-After
@@ -136,17 +135,17 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
                 }
 
                 if status == 401 || status == 403 {
-                    return Err(format!(
+                    return Err(AppError::from(format!(
                         "Reddit auth failed (HTTP {}). Check your cookie in settings.yml.",
                         status
-                    ));
+                    )));
                 }
 
                 if status >= 400 {
-                    return Err(format!("HTTP {} from {}", status, url));
+                    return Err(AppError::from(format!("HTTP {} from {}", status, url)));
                 }
 
-                return resp.text().await.map_err(|e| format!("Read error: {}", e));
+                return resp.text().await.map_err(|e| AppError::from(format!("Read error: {}", e)));
             }
             Err(e) => {
                 last_err = e.to_string();
@@ -160,18 +159,18 @@ async fn reddit_get(client: &Client, url: &str) -> Result<String, String> {
         }
     }
 
-    Err(format!(
+    Err(AppError::from(format!(
         "Failed after {} retries: {}",
         max_retries + 1,
         last_err
-    ))
+    )))
 }
 
 // ─── Reddit Search (JSON API) ─────────────────────────────────
 
-pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutput, String> {
+pub async fn reddit_search(input: RedditSearchInput) -> AppResult<RedditSearchOutput> {
     if input.query.trim().is_empty() {
-        return Err("Query cannot be empty".to_string());
+        return Err(AppError::from("Query cannot be empty"));
     }
 
     let sort = input.sort.as_deref().unwrap_or("relevance");
@@ -265,7 +264,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> Result<RedditSearchOutpu
 
 // ─── Reddit Feed (JSON API) ───────────────────────────────────
 
-pub async fn reddit_feed(input: RedditFeedInput) -> Result<RedditFeedOutput, String> {
+pub async fn reddit_feed(input: RedditFeedInput) -> AppResult<RedditFeedOutput> {
     let limit = input.limit.unwrap_or(25).clamp(1, 100) as usize;
 
     let cookie = load_reddit_cookie().await?;

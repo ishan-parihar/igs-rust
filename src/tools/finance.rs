@@ -1,7 +1,8 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
+use crate::error::AppResult;
 
-pub async fn finance_market(input: FinanceMarketInput, http: &HttpClient) -> Result<FinanceMarketOutput, String> {
+pub async fn finance_market(input: FinanceMarketInput, http: &HttpClient) -> AppResult<FinanceMarketOutput> {
     let mut quotes = Vec::new();
 
     for symbol in &input.symbols {
@@ -47,7 +48,7 @@ pub async fn finance_market(input: FinanceMarketInput, http: &HttpClient) -> Res
     Ok(FinanceMarketOutput { quotes })
 }
 
-pub async fn finance_crypto(input: FinanceCryptoInput, http: &HttpClient) -> Result<FinanceCryptoOutput, String> {
+pub async fn finance_crypto(input: FinanceCryptoInput, http: &HttpClient) -> AppResult<FinanceCryptoOutput> {
     let ids = if input.ids.is_empty() {
         input.symbols.clone()
     } else {
@@ -89,7 +90,7 @@ pub async fn finance_crypto(input: FinanceCryptoInput, http: &HttpClient) -> Res
 pub async fn finance_trending(
     _input: FinanceTrendingInput,
     http: &HttpClient,
-) -> Result<FinanceTrendingOutput, String> {
+) -> AppResult<FinanceTrendingOutput> {
     let url = "https://api.coingecko.com/api/v3/search/trending";
     let outcome = http
         .fetch(url, None, "bypass")

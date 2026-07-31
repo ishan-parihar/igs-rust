@@ -1,7 +1,8 @@
 use crate::tools::types::*;
 use tokio::process::Command;
+use crate::error::{AppError, AppResult};
 
-pub async fn youtube_search(input: YoutubeSearchInput) -> Result<YoutubeSearchOutput, String> {
+pub async fn youtube_search(input: YoutubeSearchInput) -> AppResult<YoutubeSearchOutput> {
     let limit = input.limit.unwrap_or(10).min(50);
     let search_term = format!("ytsearch{}:{}", limit, input.query);
 
@@ -24,7 +25,7 @@ pub async fn youtube_search(input: YoutubeSearchInput) -> Result<YoutubeSearchOu
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if stderr.contains("ERROR") {
-            return Err(format!("yt-dlp error: {}", stderr.trim()));
+            return Err(AppError::from(format!("yt-dlp error: {}", stderr.trim())));
         }
     }
 
@@ -61,7 +62,7 @@ pub async fn youtube_search(input: YoutubeSearchInput) -> Result<YoutubeSearchOu
 
 pub async fn youtube_metadata(
     input: YoutubeMetadataInput,
-) -> Result<YoutubeMetadataOutput, String> {
+) -> AppResult<YoutubeMetadataOutput> {
     let output = Command::new("yt-dlp")
         .args(["--dump-json", "--no-download", "--no-playlist"])
         .arg(&input.url)
@@ -76,7 +77,7 @@ pub async fn youtube_metadata(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("yt-dlp error: {}", stderr.trim()));
+        return Err(AppError::from(format!("yt-dlp error: {}", stderr.trim())));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -96,7 +97,7 @@ pub async fn youtube_metadata(
 
 pub async fn youtube_subtitles(
     input: YoutubeSubtitlesInput,
-) -> Result<YoutubeSubtitlesOutput, String> {
+) -> AppResult<YoutubeSubtitlesOutput> {
     let lang = input.language.unwrap_or_else(|| "en".to_string());
 
     let list_output = Command::new("yt-dlp")
@@ -169,10 +170,10 @@ pub async fn youtube_subtitles(
 
     if !dl_output.status.success() {
         let stderr = String::from_utf8_lossy(&dl_output.stderr);
-        return Err(format!(
+        return Err(AppError::from(format!(
             "yt-dlp subtitle download failed: {}",
             stderr.trim()
-        ));
+        )));
     }
 
     let subtitle_text = if let Ok(entries) = std::fs::read_dir(&temp_dir) {
@@ -194,10 +195,10 @@ pub async fn youtube_subtitles(
     };
 
     if subtitle_text.is_empty() {
-        return Err(format!(
+        return Err(AppError::from(format!(
             "No subtitles found for language '{}'. The video may not have subtitles available.",
             actual_lang
-        ));
+        )));
     }
 
     Ok(YoutubeSubtitlesOutput {

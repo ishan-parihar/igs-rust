@@ -1,8 +1,9 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
+use crate::error::AppResult;
 
-pub async fn govt_bills(input: GovtBillsInput, http: &HttpClient) -> Result<GovtBillsOutput, String> {
+pub async fn govt_bills(input: GovtBillsInput, http: &HttpClient) -> AppResult<GovtBillsOutput> {
     let query = urlencoding(&input.query);
     let congress = input.congress.unwrap_or(118);
 
@@ -53,7 +54,7 @@ pub async fn govt_bills(input: GovtBillsInput, http: &HttpClient) -> Result<Govt
 pub async fn govt_regulations(
     input: GovtRegulationsInput,
     http: &HttpClient,
-) -> Result<GovtRegulationsOutput, String> {
+) -> AppResult<GovtRegulationsOutput> {
     let query = urlencoding(&input.query);
 
     let url = format!(

@@ -14,6 +14,7 @@ use crate::tools::types::LimitInput;
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use crate::error::AppResult;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GdeltEvent {
@@ -83,7 +84,7 @@ pub struct GdeltArticleListOutput {
 }
 
 /// Search GDELT Events 2.0 API for events matching the query.
-pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient) -> Result<GdeltSearchOutput, String> {
+pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient) -> AppResult<GdeltSearchOutput> {
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);
 
@@ -141,7 +142,7 @@ pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient) -> Result<
 pub async fn gdelt_article_list(
     input: GdeltArticleListInput,
     http: &HttpClient,
-) -> Result<GdeltArticleListOutput, String> {
+) -> AppResult<GdeltArticleListOutput> {
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);
 

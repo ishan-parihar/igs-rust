@@ -1,8 +1,9 @@
 use super::helpers::urlencoding;
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
+use crate::error::{AppError, AppResult};
 
-pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCdcOutput, String> {
+pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> AppResult<HealthCdcOutput> {
     let client = reqwest::Client::new();
     let year = input.year.unwrap_or(2021);
     let limit = input.limits.limit.unwrap_or(20).min(100);
@@ -28,7 +29,7 @@ pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCd
         .map_err(|e| format!("CDC API error: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!("CDC API returned {}", resp.status()));
+        return Err(AppError::from(format!("CDC API returned {}", resp.status())));
     }
 
     let data: serde_json::Value = resp
@@ -63,7 +64,7 @@ pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> Result<HealthCd
     })
 }
 
-pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient) -> Result<HealthWhoOutput, String> {
+pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient) -> AppResult<HealthWhoOutput> {
     let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 

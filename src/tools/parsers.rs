@@ -1,7 +1,8 @@
 use crate::tools::types::*;
+use crate::error::AppResult;
 
 /// List available parser keys
-pub async fn parsers_list() -> Result<ParserListOutput, String> {
+pub async fn parsers_list() -> AppResult<ParserListOutput> {
     Ok(ParserListOutput {
         parsers: vec![
             ParserInfo {

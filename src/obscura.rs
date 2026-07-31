@@ -42,21 +42,17 @@ impl ObscuraManager {
             anyhow::bail!("Obscura is not enabled. Set obscura.enabled=true in settings.yml");
         }
 
-        // Create bin dir if needed
         if !self.binary_dir.exists() {
             std::fs::create_dir_all(&self.binary_dir)
                 .context("Failed to create Obscura bin directory")?;
         }
 
-        // Check if binary exists and if we need to check for updates
         if self.binary_path.exists() && !self.should_check_update() {
             return Ok(self.binary_path.clone());
         }
 
-        // Fetch latest version from GitHub
         let latest_version = self.fetch_latest_version().await?;
 
-        // Check if we already have this version
         if self.binary_path.exists() {
             if let Ok(current) = self.read_version_file() {
                 if current == latest_version {
@@ -66,9 +62,7 @@ impl ObscuraManager {
             }
         }
 
-        // Download
         let arch = Self::detect_arch()?;
-        // Obscura asset names: obscura-{arch}.tar.gz (e.g., obscura-x86_64-linux.tar.gz)
         let asset_name = format!("obscura-{}.tar.gz", arch);
         let url = format!(
             "{}/{}/{}",
@@ -78,12 +72,10 @@ impl ObscuraManager {
         info!("Downloading Obscura {} from {}", latest_version, url);
         self.download_and_extract_binary(&url).await?;
 
-        // Write version metadata
         std::fs::write(&self.version_file, &latest_version)
             .context("Failed to write Obscura version file")?;
         self.write_last_check()?;
 
-        // Make executable
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -113,7 +105,7 @@ impl ObscuraManager {
                     .as_secs();
                 now.saturating_sub(last_check) >= CHECK_INTERVAL_SECS
             }
-            Err(_) => true, // No check file = should check
+            Err(_) => true,
         }
     }
 
@@ -134,7 +126,6 @@ impl ObscuraManager {
     }
 
     /// Fetch the latest stable release version from GitHub API.
-    /// Uses /releases (plural) and filters out prerelease tags.
     async fn fetch_latest_version(&self) -> Result<String> {
         let client = reqwest::Client::builder()
             .user_agent("igs-mcp/0.1")
@@ -156,7 +147,6 @@ impl ObscuraManager {
             .as_array()
             .context("Expected JSON array from releases API")?;
 
-        // Find the first stable release (not prerelease, not draft)
         for release in releases {
             let tag = release["tag_name"].as_str().unwrap_or("");
             let is_prerelease = release["prerelease"].as_bool().unwrap_or(false);
@@ -189,45 +179,38 @@ impl ObscuraManager {
         }
 
         let bytes = resp.bytes().await?;
-        
-        // Write to temp file
+
         let temp_path = self.binary_dir.join("obscura.tar.gz");
         std::fs::write(&temp_path, &bytes).context("Failed to write Obscura archive")?;
-        
-        // Extract tar.gz
+
         let tar_gz = std::fs::File::open(&temp_path)?;
         let tar = flate2::read::GzDecoder::new(tar_gz);
         let mut archive = tar::Archive::new(tar);
-        
-        // Extract to binary_dir
-        archive.unpack(&self.binary_dir)
+
+        archive
+            .unpack(&self.binary_dir)
             .context("Failed to extract Obscura archive")?;
-        
-        // Find the binary (should be named 'obscura' after extraction)
+
         let extracted_binary = self.binary_dir.join("obscura");
         if extracted_binary.exists() {
-            // Move to final location
             std::fs::rename(&extracted_binary, &self.binary_path)
                 .context("Failed to move Obscura binary to final location")?;
         } else {
-            // Try to find any executable file
             for entry in std::fs::read_dir(&self.binary_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.is_file() {
-                    // Check if it's executable or named obscura
-                    if path.file_name().and_then(|n| n.to_str()) == Some("obscura") {
-                        std::fs::rename(&path, &self.binary_path)
-                            .context("Failed to move Obscura binary")?;
-                        break;
-                    }
+                if path.is_file()
+                    && path.file_name().and_then(|n| n.to_str()) == Some("obscura")
+                {
+                    std::fs::rename(&path, &self.binary_path)
+                        .context("Failed to move Obscura binary")?;
+                    break;
                 }
             }
         }
-        
-        // Clean up temp file
+
         let _ = std::fs::remove_file(&temp_path);
-        
+
         Ok(())
     }
 
@@ -272,6 +255,160 @@ impl ObscuraManager {
         }
 
         String::from_utf8(output.stdout).context("Obscura output was not valid UTF-8")
+    }
+
+    /// Take a screenshot of a URL via CDP WebSocket.
+    ///
+    /// Starts Obscura in serve mode, connects via CDP, captures the page,
+    /// returns base64-encoded image data, then shuts down the child process.
+    /// Child process cleanup is guaranteed on all paths.
+    pub async fn screenshot(
+        &self,
+        url: &str,
+        format: &str,
+        quality: Option<u32>,
+        wait_until: &str,
+    ) -> Result<String> {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio::io::AsyncBufReadExt;
+
+        let binary = self.ensure_ready().await?;
+        let port = 9222 + (SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            % 1000) as u16;
+
+        // Start Obscura in serve mode
+        let mut cmd = tokio::process::Command::new(&binary);
+        cmd.arg("serve")
+            .arg("--port")
+            .arg(port.to_string())
+            .arg("--headless")
+            .arg(url);
+
+        if let Some(ref proxy) = self.settings.proxy {
+            cmd.arg("--proxy").arg(proxy);
+        }
+
+        let mut child = cmd
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .context("Failed to start Obscura serve")?;
+
+        // Wait for the WebSocket debugger URL from stdout
+        let ws_url = {
+            let stdout = child.stdout.take().unwrap();
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            let start = std::time::Instant::now();
+            let mut found_url = None;
+            while start.elapsed() < Duration::from_secs(30) {
+                match tokio::time::timeout(Duration::from_secs(5), reader.next_line()).await {
+                    Ok(Ok(Some(line))) => {
+                        if line.contains("ws://") {
+                            found_url = Some(line.trim().to_string());
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+            match found_url {
+                Some(url) => url,
+                None => {
+                    let _ = child.kill().await;
+                    anyhow::bail!("Obscura did not emit a WebSocket URL within 30s");
+                }
+            }
+        };
+
+        // Connect to CDP
+        let ws_result = tokio_tungstenite::connect_async(&ws_url).await;
+        let (mut ws_stream, _) = match ws_result {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = child.kill().await;
+                anyhow::bail!("Failed to connect to Obscura CDP WebSocket: {}", e);
+            }
+        };
+
+        // Wait for page load based on wait_until parameter
+        let wait_ms = match wait_until {
+            "load" => 2000,
+            "domcontentloaded" => 1500,
+            "networkidle" => 4000,
+            "done" => 5000,
+            _ => 3000,
+        };
+        tokio::time::sleep(Duration::from_millis(wait_ms)).await;
+
+        // Build Page.captureScreenshot params — only include quality for jpeg
+        let params = if format.eq_ignore_ascii_case("jpeg") {
+            match quality {
+                Some(q) => serde_json::json!({ "format": format, "quality": q }),
+                None => serde_json::json!({ "format": format }),
+            }
+        } else {
+            serde_json::json!({ "format": format })
+        };
+
+        let screenshot_msg = serde_json::json!({
+            "id": 1,
+            "method": "Page.captureScreenshot",
+            "params": params,
+        });
+
+        let send_result = ws_stream
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                screenshot_msg.to_string().into(),
+            ))
+            .await;
+        if let Err(e) = send_result {
+            let _ = child.kill().await;
+            anyhow::bail!("Failed to send CDP command: {}", e);
+        }
+
+        // Read response — wait for result with matching id
+        let mut screenshot_data = None;
+        let start = std::time::Instant::now();
+        while start.elapsed() < Duration::from_secs(15) {
+            match tokio::time::timeout(Duration::from_secs(5), ws_stream.next()).await {
+                Ok(Some(Ok(msg))) => {
+                    if let tokio_tungstenite::tungstenite::Message::Text(text) = msg {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if json.get("id").and_then(|i| i.as_u64()) == Some(1) {
+                                if let Some(data) = json
+                                    .get("result")
+                                    .and_then(|r| r.get("data"))
+                                    .and_then(|d| d.as_str())
+                                {
+                                    screenshot_data = Some(data.to_string());
+                                    break;
+                                }
+                                if let Some(err) = json.get("error") {
+                                    let err_msg = err
+                                        .get("message")
+                                        .and_then(|m| m.as_str())
+                                        .unwrap_or("unknown CDP error");
+                                    let _ = child.kill().await;
+                                    anyhow::bail!("CDP error: {}", err_msg);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Some(Err(e))) => {
+                    let _ = child.kill().await;
+                    anyhow::bail!("WebSocket error: {}", e);
+                }
+                _ => continue,
+            }
+        }
+
+        let _ = child.kill().await;
+
+        screenshot_data.ok_or_else(|| anyhow::anyhow!("No screenshot data received from CDP"))
     }
 
     /// Detect the current platform architecture for binary download

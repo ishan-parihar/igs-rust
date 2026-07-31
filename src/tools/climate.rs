@@ -2,12 +2,13 @@ use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use std::collections::HashMap;
+use crate::error::{AppError, AppResult};
 
 pub async fn climate_noaa_observations(
     input: ClimateNoaaInput,
     http: &HttpClient,
     settings: &crate::types::Settings,
-) -> Result<ClimateNoaaOutput, String> {
+) -> AppResult<ClimateNoaaOutput> {
     let api_key = settings
         .noaa
         .as_ref()
@@ -47,7 +48,7 @@ pub async fn climate_noaa_observations(
         serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
 
     if let Some(err) = data["message"].as_str() {
-        return Err(format!("NOAA error: {}", err));
+        return Err(AppError::other(format!("NOAA error: {}", err)));
     }
 
     let mut observations = Vec::new();
@@ -74,7 +75,7 @@ pub async fn climate_noaa_stations(
     input: ClimateNoaaStationsInput,
     http: &HttpClient,
     settings: &crate::types::Settings,
-) -> Result<ClimateNoaaStationsOutput, String> {
+) -> AppResult<ClimateNoaaStationsOutput> {
     let api_key = settings
         .noaa
         .as_ref()
@@ -107,7 +108,7 @@ pub async fn climate_noaa_stations(
         serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
 
     if let Some(err) = data["message"].as_str() {
-        return Err(format!("NOAA error: {}", err));
+        return Err(AppError::other(format!("NOAA error: {}", err)));
     }
 
     let mut stations = Vec::new();

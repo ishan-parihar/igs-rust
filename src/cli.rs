@@ -1086,9 +1086,9 @@ enum MonitorAction {
     },
 }
 
-/// Convert Result<T, String> to anyhow::Result<T>
-fn r<T>(result: Result<T, String>) -> anyhow::Result<T> {
-    result.map_err(|e| anyhow::anyhow!(e))
+/// Convert Result<T, E> to anyhow::Result<T> (E must be convertible to anyhow::Error)
+fn r<T, E: Into<anyhow::Error>>(result: Result<T, E>) -> anyhow::Result<T> {
+    result.map_err(Into::into)
 }
 
 fn output<T: serde::Serialize>(format: &str, value: &T) {

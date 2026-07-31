@@ -6,6 +6,7 @@ use crate::tools::types::*;
 use super::scoring::extract_domain;
 use super::readability::extract_ddg_redirect_url;
 use std::collections::HashMap;
+use crate::error::{AppError, AppResult};
 
 // ─── YouTube Search Engine (via yt-dlp) ──────────────────────
 
@@ -14,7 +15,7 @@ use std::collections::HashMap;
 pub(super) async fn search_youtube(
     query: &str,
     max_results: usize,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+) -> AppResult<(String, Vec<WebSearchResult>, Option<String>)> {
     let limit = max_results.min(10);
     let search_term = format!("ytsearch{}:{}", limit, query);
 
@@ -83,7 +84,7 @@ pub(super) async fn search_youtube(
 /// Search for images via Wikimedia Commons REST API (key-free).
 /// Uses the Wikimedia Commons API to find freely licensed images.
 /// No API key required — Wikimedia is completely open.
-pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient) -> Result<WebImageSearchOutput, String> {
+pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient) -> AppResult<WebImageSearchOutput> {
     let max_results = input.max_results.unwrap_or(10).min(30) as usize;
     let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 
@@ -268,7 +269,7 @@ pub(super) async fn search_duckduckgo(
     time_range: &str,
     obs_settings: &crate::types::ObscuraSettings,
     http: &HttpClient,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+) -> AppResult<(String, Vec<WebSearchResult>, Option<String>)> {
     if !obs_settings.enabled {
         return Err("Obscura not enabled".into());
     }
@@ -321,7 +322,7 @@ pub(super) async fn search_wikipedia(
     query: &str,
     max_results: usize,
     http: &HttpClient,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+) -> AppResult<(String, Vec<WebSearchResult>, Option<String>)> {
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let search_url = format!(
         "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
@@ -410,7 +411,7 @@ pub(super) async fn search_github(
     max_results: usize,
     http: &HttpClient,
     topic: &str,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+) -> AppResult<(String, Vec<WebSearchResult>, Option<String>)> {
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let search_url = format!(
         "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page={}",
@@ -508,7 +509,7 @@ pub(super) async fn search_hackernews(
     max_results: usize,
     http: &HttpClient,
     time_range: &str,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+) -> AppResult<(String, Vec<WebSearchResult>, Option<String>)> {
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let hits = max_results.min(30);
     // Add time range filter via numericFilters (unix timestamp)
@@ -576,7 +577,7 @@ pub(super) async fn search_hackernews(
             // Bypass mode should never return Cached; treat as error
             Err("HN API: unexpected cached response in bypass mode".into())
         }
-        Err(e) => Err(format!("HN API error: {}", e)),
+        Err(e) => Err(AppError::other(format!("HN API error: {}", e))),
     }
 }
 
@@ -589,7 +590,7 @@ pub(super) async fn search_stackoverflow(
     query: &str,
     max_results: usize,
     http: &HttpClient,
-) -> Result<(String, Vec<WebSearchResult>, Option<String>), String> {
+) -> AppResult<(String, Vec<WebSearchResult>, Option<String>)> {
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let pagesize = max_results.min(20);
     // Use 'all' instead of 'intitle' to search title+body for better relevance
@@ -656,6 +657,6 @@ pub(super) async fn search_stackoverflow(
             // Bypass mode should never return Cached; treat as error
             Err("SO API: unexpected cached response in bypass mode".into())
         }
-        Err(e) => Err(format!("SO API error: {}", e)),
+        Err(e) => Err(AppError::other(format!("SO API error: {}", e))),
     }
 }

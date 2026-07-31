@@ -4,9 +4,10 @@ use crate::tools::helpers::find_feed_url;
 use crate::tools::types::*;
 use crate::types::*;
 use std::collections::HashMap;
+use crate::error::{AppError, AppResult};
 
 /// List sources with optional pool/active filters
-pub async fn sources_list(params: SourceListInput) -> Result<SourceListOutput, String> {
+pub async fn sources_list(params: SourceListInput) -> AppResult<SourceListOutput> {
     match config::load_sources().await {
         Ok(sf) => {
             let mut list = sf.sources;
@@ -18,12 +19,12 @@ pub async fn sources_list(params: SourceListInput) -> Result<SourceListOutput, S
             }
             Ok(SourceListOutput { sources: list })
         }
-        Err(e) => Err(format!("Failed to load sources: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load sources: {}", e))),
     }
 }
 
 /// Create or update a source
-pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutput, String> {
+pub async fn sources_upsert(input: SourceUpsertInput) -> AppResult<SourceUpsertOutput> {
     match config::load_sources().await {
         Ok(mut sf) => {
             let id = input.id.unwrap_or_else(|| {
@@ -58,12 +59,12 @@ pub async fn sources_upsert(input: SourceUpsertInput) -> Result<SourceUpsertOutp
                 .map_err(|e| format!("Save failed: {}", e))?;
             Ok(SourceUpsertOutput { id })
         }
-        Err(e) => Err(format!("Failed to load sources: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load sources: {}", e))),
     }
 }
 
 /// Delete a source by id
-pub async fn sources_delete(input: SourceDeleteInput) -> Result<SourceDeleteOutput, String> {
+pub async fn sources_delete(input: SourceDeleteInput) -> AppResult<SourceDeleteOutput> {
     match config::load_sources().await {
         Ok(mut sf) => {
             let before = sf.sources.len();
@@ -74,12 +75,12 @@ pub async fn sources_delete(input: SourceDeleteInput) -> Result<SourceDeleteOutp
                 .map_err(|e| format!("Save failed: {}", e))?;
             Ok(SourceDeleteOutput { removed })
         }
-        Err(e) => Err(format!("Failed to load sources: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load sources: {}", e))),
     }
 }
 
 /// Auto-discover feeds/selectors from a homepage URL
-pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -> Result<AutodiscoverOutput, String> {
+pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -> AppResult<AutodiscoverOutput> {
     match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
@@ -111,14 +112,14 @@ pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -
                 }
             }
         }
-        Err(e) => Err(format!("Fetch failed: {}", e)),
+        Err(e) => Err(AppError::other(format!("Fetch failed: {}", e))),
     }
 }
 
 /// Enable generic HTML scraping for a source
 pub async fn sources_enable_scraper(
     input: EnableScraperInput,
-) -> Result<EnableScraperOutput, String> {
+) -> AppResult<EnableScraperOutput> {
     match config::load_sources().await {
         Ok(mut sf) => {
             if let Some(idx) = sf.sources.iter().position(|s| s.id == input.id) {
@@ -139,15 +140,15 @@ pub async fn sources_enable_scraper(
                     .map_err(|e| format!("Save failed: {}", e))?;
                 Ok(EnableScraperOutput { updated: true })
             } else {
-                Err(format!("Source not found: {}", input.id))
+                Err(AppError::from(format!("Source not found: {}", input.id)))
             }
         }
-        Err(e) => Err(format!("Failed to load sources: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load sources: {}", e))),
     }
 }
 
 /// List countries with available source counts
-pub async fn sources_countries() -> Result<CountriesOutput, String> {
+pub async fn sources_countries() -> AppResult<CountriesOutput> {
     let countries = config::load_countries()
         .await
         .unwrap_or(serde_json::json!({"countries": []}));
@@ -184,7 +185,7 @@ pub async fn sources_countries() -> Result<CountriesOutput, String> {
 }
 
 /// List cities with available source counts
-pub async fn sources_cities() -> Result<CitiesOutput, String> {
+pub async fn sources_cities() -> AppResult<CitiesOutput> {
     let sources = config::load_sources()
         .await
         .unwrap_or(SourcesFile { sources: vec![] });
@@ -208,7 +209,7 @@ pub async fn sources_cities() -> Result<CitiesOutput, String> {
 }
 
 /// List domains with available source counts
-pub async fn sources_domains() -> Result<DomainsOutput, String> {
+pub async fn sources_domains() -> AppResult<DomainsOutput> {
     let sources = config::load_sources()
         .await
         .unwrap_or(SourcesFile { sources: vec![] });

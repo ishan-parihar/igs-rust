@@ -1,8 +1,9 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
+use crate::error::{AppError, AppResult};
 
-pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> Result<PatentSearchOutput, String> {
+pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> AppResult<PatentSearchOutput> {
     let office = input.office.as_deref().unwrap_or("USPTO");
     let limit = input.years_back.unwrap_or(20).clamp(1, 100);
 
@@ -33,7 +34,7 @@ pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> Resu
                 .map_err(|e| format!("JSON parse error: {}", e))?;
 
             if let Some(err) = data["error"].as_str() {
-                return Err(format!("PatentsView error: {}", err));
+                return Err(AppError::other(format!("PatentsView error: {}", err)));
             }
 
             let mut patents = Vec::new();
@@ -58,11 +59,11 @@ pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> Resu
                 patents,
             })
         }
-        _ => Err(format!("Unsupported patent office: {}. Use USPTO.", office)),
+        _ => Err(AppError::from(format!("Unsupported patent office: {}. Use USPTO.", office))),
     }
 }
 
-pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> Result<PatentDetailsOutput, String> {
+pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> AppResult<PatentDetailsOutput> {
     let query_json = serde_json::json!({"patent_number": input.patent_id});
     let fields =
         r#"["patent_number","patent_title","patent_date","patent_abstract","patent_claims"]"#;
@@ -96,6 +97,6 @@ pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> Re
             url: format!("https://patents.google.com/patent/{}", input.patent_id),
         })
     } else {
-        Err(format!("Patent {} not found", input.patent_id))
+        Err(AppError::from(format!("Patent {} not found", input.patent_id)))
     }
 }

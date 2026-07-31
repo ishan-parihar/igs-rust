@@ -8,6 +8,7 @@ use std::time::Duration;
 use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::tools::types::*;
+use crate::error::{AppError, AppResult};
 
 // ── Constants ───────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ fn extract_ct0(cookies: &HashMap<String, String>) -> Option<String> {
 
 // ── HTTP Client ────────────────────────────────────────────
 
-fn build_client(cookie_str: &str) -> Result<reqwest::Client, String> {
+fn build_client(cookie_str: &str) -> AppResult<reqwest::Client> {
     let cookies = parse_cookie_string(cookie_str);
     let ct0 = extract_ct0(&cookies).unwrap_or_default();
 
@@ -92,7 +93,7 @@ fn build_client(cookie_str: &str) -> Result<reqwest::Client, String> {
         .default_headers(headers)
         .timeout(Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("Failed to build HTTP client: {e}"))
+        .map_err(|e| AppError::from(format!("Failed to build HTTP client: {e}")))
 }
 
 // ── GraphQL Request ────────────────────────────────────────
@@ -102,7 +103,7 @@ async fn graphql_post(
     query_id: &str,
     operation: &str,
     variables: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> AppResult<serde_json::Value> {
     let url = format!("https://x.com/i/api/graphql/{query_id}/{operation}");
     let body = serde_json::json!({
         "variables": variables,
@@ -123,7 +124,7 @@ async fn graphql_post(
     let body = resp.text().await.map_err(|e| format!("Body error: {e}"))?;
 
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {body}"));
+        return Err(AppError::from(format!("HTTP {status}: {body}")));
     }
 
     let json: serde_json::Value =
@@ -281,7 +282,7 @@ fn extract_tweets_from_timeline(data: &serde_json::Value) -> Vec<TwitterTweet> {
 
 // ── Public API ─────────────────────────────────────────────
 
-pub async fn twitter_search(input: TwitterSearchInput, settings: &crate::types::Settings) -> Result<TwitterSearchOutput, String> {
+pub async fn twitter_search(input: TwitterSearchInput, settings: &crate::types::Settings) -> AppResult<TwitterSearchOutput> {
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
         return Err(
@@ -333,7 +334,7 @@ pub async fn twitter_search(input: TwitterSearchInput, settings: &crate::types::
     })
 }
 
-pub async fn twitter_read(input: TwitterReadInput, settings: &crate::types::Settings) -> Result<TwitterReadOutput, String> {
+pub async fn twitter_read(input: TwitterReadInput, settings: &crate::types::Settings) -> AppResult<TwitterReadOutput> {
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
         return Err(

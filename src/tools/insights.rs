@@ -3,12 +3,13 @@ use crate::tools::types::*;
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::error::AppResult;
 
 /// Unified connection finder: specific entity OR all cross-domain entities
 pub async fn insights_find_connections(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightFindConnectionsInput,
-) -> Result<InsightFindConnectionsOutput, String> {
+) -> AppResult<InsightFindConnectionsOutput> {
     let storage = storage.lock().await;
     let min_domains = input.min_domains.unwrap_or(2) as usize;
 
@@ -43,7 +44,7 @@ pub async fn insights_find_connections(
 pub async fn insights_trending(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightTrendingInput,
-) -> Result<InsightTrendingOutput, String> {
+) -> AppResult<InsightTrendingOutput> {
     let storage = storage.lock().await;
     let window_ms = input.time_window_hours.unwrap_or(24) * 3_600_000;
     let trending = storage.detect_trending(
@@ -64,7 +65,7 @@ pub async fn insights_trending(
 pub async fn insights_index(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightIndexInput,
-) -> Result<InsightIndexOutput, String> {
+) -> AppResult<InsightIndexOutput> {
     let mut storage = storage.lock().await;
     let indexed = input.articles.len();
 
@@ -90,7 +91,7 @@ pub async fn insights_index(
 /// Get statistics about indexed articles
 pub async fn insights_stats(
     storage: &Arc<Mutex<InsightStorage>>,
-) -> Result<InsightStatsOutput, String> {
+) -> AppResult<InsightStatsOutput> {
     let storage = storage.lock().await;
     let stats = storage.stats();
     Ok(InsightStatsOutput { stats })
@@ -99,7 +100,7 @@ pub async fn insights_stats(
 /// Clear all indexed articles from the insight engine
 pub async fn insights_clear(
     storage: &Arc<Mutex<InsightStorage>>,
-) -> Result<InsightClearOutput, String> {
+) -> AppResult<InsightClearOutput> {
     let mut storage = storage.lock().await;
     storage.clear();
     Ok(InsightClearOutput { cleared: true })

@@ -10,6 +10,7 @@ use crate::tools::types_base::{KeywordFilter, OutputOptions};
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::error::AppResult;
 
 /// Return (max_sources, max_results) for a given depth string.
 /// - "quick"   → (10, 20)   — fast, few sources, few results
@@ -42,7 +43,7 @@ fn news_item_to_json(item: &NewsItem) -> serde_json::Value {
 }
 
 /// Fetch normalized news items from configured sources
-pub async fn news_fetch(input: NewsFetchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> Result<NewsFetchOutput, String> {
+pub async fn news_fetch(input: NewsFetchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> AppResult<NewsFetchOutput> {
     let sf = config::load_sources()
         .await
         .map_err(|e| format!("Sources: {}", e))?;
@@ -266,7 +267,7 @@ pub async fn fetch_news_intelligent(
     insights: &Arc<Mutex<InsightStorage>>,
     http: Arc<HttpClient>,
     settings: &crate::types::Settings,
-) -> Result<serde_json::Value, String> {
+) -> AppResult<serde_json::Value> {
     // Use json format for internal pipeline steps
     let mut fetch_input = input.clone();
     fetch_input.output.format = Some("json".to_string());
@@ -387,7 +388,7 @@ pub async fn fetch_news_intelligent(
 }
 
 /// Debug helper. Test a single source and return up to 10 items.
-pub async fn news_test_source(input: NewsTestInput, http: &HttpClient) -> Result<NewsTestOutput, String> {
+pub async fn news_test_source(input: NewsTestInput, http: &HttpClient) -> AppResult<NewsTestOutput> {
     let sf = config::load_sources()
         .await
         .map_err(|e| format!("Sources: {}", e))?;
@@ -409,7 +410,7 @@ pub async fn news_test_source(input: NewsTestInput, http: &HttpClient) -> Result
 }
 
 /// NLP enrichment (offline). Adds basic topics, sentiment, and summary to items.
-pub async fn news_enrich(input: NewsEnrichInput) -> Result<NewsEnrichOutput, String> {
+pub async fn news_enrich(input: NewsEnrichInput) -> AppResult<NewsEnrichOutput> {
     let extract = input.extract.unwrap_or_else(|| {
         vec![
             "topics".into(),

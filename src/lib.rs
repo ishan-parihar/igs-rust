@@ -5,6 +5,8 @@ pub mod config;
 pub mod server;
 pub mod tools;
 
+pub mod error;
+pub use error::{AppError, AppResult};
 pub(crate) mod cache;
 pub(crate) mod clustering;
 pub(crate) mod fusion;

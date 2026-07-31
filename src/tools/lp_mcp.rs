@@ -2,6 +2,7 @@ use crate::tools::types::*;
 use tokio::sync::Mutex;
 
 use std::sync::OnceLock;
+use crate::error::AppResult;
 
 static CURRENT_URL: OnceLock<Mutex<String>> = OnceLock::new();
 
@@ -45,7 +46,7 @@ fn js_escape(s: &str) -> String {
     out.replace("</script>", "<\\/script>")
 }
 
-async fn run_obscura_cli(args: &[&str], stdin_js: Option<&str>) -> Result<LpToolOutput, String> {
+async fn run_obscura_cli(args: &[&str], stdin_js: Option<&str>) -> AppResult<LpToolOutput> {
     let mut cmd = tokio::process::Command::new("obscura");
     cmd.arg("fetch");
     for arg in args {
@@ -88,7 +89,7 @@ async fn run_obscura_cli(args: &[&str], stdin_js: Option<&str>) -> Result<LpTool
     })
 }
 
-pub async fn lp_goto(input: LpGotoInput) -> Result<LpToolOutput, String> {
+pub async fn lp_goto(input: LpGotoInput) -> AppResult<LpToolOutput> {
     let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
     let args = vec![input.url.as_str(), "--wait-until", wait_until, "--stealth"];
 
@@ -104,7 +105,7 @@ pub async fn lp_goto(input: LpGotoInput) -> Result<LpToolOutput, String> {
     Ok(output)
 }
 
-pub async fn lp_markdown(input: LpMarkdownInput) -> Result<LpToolOutput, String> {
+pub async fn lp_markdown(input: LpMarkdownInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let mut args = vec![url.as_str(), "--dump", "markdown", "--stealth"];
     if let Some(ref sm) = input.strip_mode {
@@ -117,7 +118,7 @@ pub async fn lp_markdown(input: LpMarkdownInput) -> Result<LpToolOutput, String>
     Ok(output)
 }
 
-pub async fn lp_links(_input: LpLinksInput) -> Result<LpToolOutput, String> {
+pub async fn lp_links(_input: LpLinksInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let args = vec![url.as_str(), "--dump", "links", "--stealth"];
     let mut output = run_obscura_cli(&args, None).await?;
@@ -126,7 +127,7 @@ pub async fn lp_links(_input: LpLinksInput) -> Result<LpToolOutput, String> {
     Ok(output)
 }
 
-pub async fn lp_evaluate(input: LpEvaluateInput) -> Result<LpToolOutput, String> {
+pub async fn lp_evaluate(input: LpEvaluateInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let args = vec![url.as_str(), "--stealth"];
     let mut output = run_obscura_cli(&args, Some(&input.expression)).await?;
@@ -135,7 +136,7 @@ pub async fn lp_evaluate(input: LpEvaluateInput) -> Result<LpToolOutput, String>
     Ok(output)
 }
 
-pub async fn lp_click(input: LpClickInput) -> Result<LpToolOutput, String> {
+pub async fn lp_click(input: LpClickInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let js = format!(
         "document.querySelector('{}')?.click(); 'clicked'",
@@ -148,7 +149,7 @@ pub async fn lp_click(input: LpClickInput) -> Result<LpToolOutput, String> {
     Ok(output)
 }
 
-pub async fn lp_fill(input: LpFillInput) -> Result<LpToolOutput, String> {
+pub async fn lp_fill(input: LpFillInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let js = format!(
         "const el = document.querySelector('{}'); if(el) {{ el.value = '{}'; el.dispatchEvent(new Event('input', {{bubbles:true}})); }} 'filled'",
@@ -162,7 +163,7 @@ pub async fn lp_fill(input: LpFillInput) -> Result<LpToolOutput, String> {
     Ok(output)
 }
 
-pub async fn lp_scroll(input: LpScrollInput) -> Result<LpToolOutput, String> {
+pub async fn lp_scroll(input: LpScrollInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let direction = input.direction.as_deref().unwrap_or("down");
     let pixels = input.pixels.unwrap_or(500);
@@ -182,7 +183,7 @@ pub async fn lp_scroll(input: LpScrollInput) -> Result<LpToolOutput, String> {
     Ok(output)
 }
 
-pub async fn lp_wait_for_selector(input: LpWaitForSelectorInput) -> Result<LpToolOutput, String> {
+pub async fn lp_wait_for_selector(input: LpWaitForSelectorInput) -> AppResult<LpToolOutput> {
     let url = current_url().await;
     let args = vec![
         url.as_str(),

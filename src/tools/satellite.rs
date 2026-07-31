@@ -1,10 +1,11 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
+use crate::error::AppResult;
 
 pub async fn satellite_firms_fires(
     input: SatelliteFirmsInput,
     http: &HttpClient,
-) -> Result<SatelliteFirmsOutput, String> {
+) -> AppResult<SatelliteFirmsOutput> {
     let west = input.west;
     let south = input.south;
     let east = input.east;

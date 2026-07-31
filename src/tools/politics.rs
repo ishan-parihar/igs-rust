@@ -1,8 +1,9 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
+use crate::error::{AppError, AppResult};
 
-pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient) -> Result<PoliticsFecOutput, String> {
+pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient) -> AppResult<PoliticsFecOutput> {
     let name = urlencoding(&input.name);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -31,7 +32,7 @@ pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient)
         serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {}", e))?;
 
     if let Some(err) = data["error"].as_str() {
-        return Err(format!("FEC error: {}", err));
+        return Err(AppError::other(format!("FEC error: {}", err)));
     }
 
     let mut candidates = Vec::new();
@@ -64,7 +65,7 @@ pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient)
 pub async fn politics_fec_committees(
     input: PoliticsFecCommitteesInput,
     http: &HttpClient,
-) -> Result<PoliticsFecCommitteesOutput, String> {
+) -> AppResult<PoliticsFecCommitteesOutput> {
     let name = urlencoding(&input.name);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -90,7 +91,7 @@ pub async fn politics_fec_committees(
         serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {}", e))?;
 
     if let Some(err) = data["error"].as_str() {
-        return Err(format!("FEC error: {}", err));
+        return Err(AppError::other(format!("FEC error: {}", err)));
     }
 
     let mut committees = Vec::new();

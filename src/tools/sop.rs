@@ -1,4 +1,5 @@
 use super::types::*;
+use crate::error::AppResult;
 
 fn built_in_chains() -> Vec<SopChain> {
     vec![
@@ -80,7 +81,7 @@ pub fn sop_list() -> SopListOutput {
     }
 }
 
-pub fn sop_execute(input: SopExecuteInput) -> Result<SopExecuteOutput, String> {
+pub fn sop_execute(input: SopExecuteInput) -> AppResult<SopExecuteOutput> {
     let chains = built_in_chains();
     let chain = chains
         .iter()

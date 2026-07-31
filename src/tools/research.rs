@@ -4,9 +4,10 @@ use crate::tools::types::*;
 use crate::types::*;
 use chrono::Datelike;
 use unpdf;
+use crate::error::{AppError, AppResult};
 
 /// Search academic papers across arXiv and Semantic Scholar
-pub async fn research_search(input: ResearchSearchInput, http: &HttpClient) -> Result<ResearchSearchOutput, String> {
+pub async fn research_search(input: ResearchSearchInput, http: &HttpClient) -> AppResult<ResearchSearchOutput> {
     let sources = input
         .sources
         .unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
@@ -271,7 +272,7 @@ async fn fetch_s2_related_papers(
 }
 
 /// Convert PDF bytes to markdown text using unpdf
-fn pdf_to_markdown(bytes: &[u8]) -> Result<String, String> {
+fn pdf_to_markdown(bytes: &[u8]) -> AppResult<String> {
     let doc = unpdf::parse_reader(bytes).map_err(|e| format!("Failed to parse PDF: {}", e))?;
     let options = unpdf::render::RenderOptions::default();
     let markdown = unpdf::render::to_markdown(&doc, &options)
@@ -291,7 +292,7 @@ type PaperFetchResult = (
 );
 
 /// Get detailed information about a specific paper by ID
-pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<ResearchPaperOutput, String> {
+pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<ResearchPaperOutput> {
 
     let paper_id = &input.paper_id;
     let (title, authors, abstract_text, year, citations, references, pdf_url, _content): PaperFetchResult =
@@ -316,7 +317,7 @@ pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settin
                         return Err("Failed to parse arXiv response".into());
                     }
                 }
-                Err(e) => return Err(format!("arXiv fetch failed: {}", e)),
+                Err(e) => return Err(AppError::other(format!("arXiv fetch failed: {}", e))),
             }
         } else if paper_id.starts_with("semanticscholar:") {
             let id = paper_id.trim_start_matches("semanticscholar:");
@@ -344,7 +345,7 @@ pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settin
                         return Err("Failed to parse Semantic Scholar response".into());
                     }
                 }
-                Err(e) => return Err(format!("Semantic Scholar fetch failed: {}", e)),
+                Err(e) => return Err(AppError::other(format!("Semantic Scholar fetch failed: {}", e))),
             }
         } else {
             return Err("Unknown paper ID format. Use arxiv:XXXX.XXXXX or semanticscholar:XXXX".into());
@@ -431,7 +432,7 @@ pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settin
 pub async fn research_pubmed_search(
     input: ResearchPubMedInput,
     http: &HttpClient,
-) -> Result<ResearchPubMedOutput, String> {
+) -> AppResult<ResearchPubMedOutput> {
 
     let query = urlencoding(&input.query);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
@@ -525,7 +526,7 @@ pub async fn research_download(
     input: ResearchDownloadInput,
     http: &HttpClient,
     settings: &crate::types::Settings,
-) -> Result<ResearchDownloadOutput, String> {
+) -> AppResult<ResearchDownloadOutput> {
 
     // Determine the PDF URL based on the paper ID
     let pdf_url = if input.paper_id.starts_with("arxiv:") {
@@ -552,7 +553,7 @@ pub async fn research_download(
                     return Err("Failed to parse Semantic Scholar response".into());
                 }
             }
-            Err(e) => return Err(format!("Failed to fetch paper details: {}", e)),
+            Err(e) => return Err(AppError::other(format!("Failed to fetch paper details: {}", e))),
         }
     } else {
         return Err("Unknown paper ID format. Use arxiv:XXXX.XXXXX or semanticscholar:XXXX".into());
@@ -571,10 +572,10 @@ pub async fn research_download(
         .map_err(|e| format!("Failed to download PDF: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!(
+        return Err(AppError::from(format!(
             "PDF download failed with status: {}",
             resp.status()
-        ));
+        )));
     }
 
     let bytes = resp

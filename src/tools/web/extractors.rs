@@ -7,10 +7,11 @@ use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
 use super::scoring::{extract_internal_links, bm25_score_chunks, BM25_MIN_THRESHOLD};
 use std::collections::HashMap;
+use crate::error::{AppError, AppResult};
 
 
 
-pub async fn web_scrape(input: WebScrapeInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<WebScrapeOutput, String> {
+pub async fn web_scrape(input: WebScrapeInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<WebScrapeOutput> {
 
     // Determine provider: explicit input, or browser.default from settings
     let provider = input.provider.as_deref().unwrap_or(&settings.browser.default);
@@ -27,7 +28,7 @@ pub(super) async fn web_scrape_default(
     input: &WebScrapeInput,
     http: &HttpClient,
     _settings: &crate::types::Settings,
-) -> Result<WebScrapeOutput, String> {
+) -> AppResult<WebScrapeOutput> {
 
     let body = match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
@@ -35,11 +36,11 @@ pub(super) async fn web_scrape_default(
                 unreachable!("bypass cache mode never returns Cached")
             };
             if resp.status < 200 || resp.status >= 400 {
-                return Err(format!("HTTP {} for URL: {}", resp.status, input.url));
+                return Err(AppError::from(format!("HTTP {} for URL: {}", resp.status, input.url)));
             }
             resp.body_text
         }
-        Err(e) => return Err(format!("Scrape failed: {}", e)),
+        Err(e) => return Err(AppError::other(format!("Scrape failed: {}", e))),
     };
 
     extract_scrape_output(&input.url, &body, "default", input.formats.as_deref())
@@ -49,7 +50,7 @@ pub(super) async fn web_scrape_default(
 pub(super) async fn web_scrape_lightpanda(
     input: &WebScrapeInput,
     settings: &crate::types::Settings,
-) -> Result<WebScrapeOutput, String> {
+) -> AppResult<WebScrapeOutput> {
     let lp_settings = &settings.browser.lightpanda;
     if !lp_settings.enabled {
         return Err(
@@ -82,7 +83,7 @@ pub(super) async fn web_scrape_lightpanda(
 pub(super) async fn web_scrape_obscura(
     input: &WebScrapeInput,
     settings: &crate::types::Settings,
-) -> Result<WebScrapeOutput, String> {
+) -> AppResult<WebScrapeOutput> {
     let obs_settings = &settings.browser.obscura;
     if !obs_settings.enabled {
         return Err(
@@ -116,7 +117,7 @@ pub(super) fn extract_scrape_output(
     body: &str,
     _provider: &str,
     _formats: Option<&[String]>,
-) -> Result<WebScrapeOutput, String> {
+) -> AppResult<WebScrapeOutput> {
     let doc = scraper::Html::parse_document(body);
 
     let title = scraper::Selector::parse("title")
@@ -194,7 +195,7 @@ pub(super) fn extract_scrape_output(
     })
 }
 
-pub async fn web_crawl(input: WebCrawlInput, settings: &crate::types::Settings) -> Result<WebCrawlOutput, String> {
+pub async fn web_crawl(input: WebCrawlInput, settings: &crate::types::Settings) -> AppResult<WebCrawlOutput> {
 
     // Use browser.default from settings
     let provider = &settings.browser.default;
@@ -212,7 +213,7 @@ pub async fn web_crawl(input: WebCrawlInput, settings: &crate::types::Settings) 
 pub(super) async fn web_crawl_lightpanda(
     input: &WebCrawlInput,
     settings: &crate::types::Settings,
-) -> Result<WebCrawlOutput, String> {
+) -> AppResult<WebCrawlOutput> {
     let lp_settings = &settings.browser.lightpanda;
     if !lp_settings.enabled {
         return Err(
@@ -360,7 +361,7 @@ pub(super) async fn web_crawl_lightpanda(
 pub(super) async fn web_crawl_obscura(
     input: &WebCrawlInput,
     settings: &crate::types::Settings,
-) -> Result<WebCrawlOutput, String> {
+) -> AppResult<WebCrawlOutput> {
     let obs_settings = &settings.browser.obscura;
     if !obs_settings.enabled {
         return Err(
@@ -602,7 +603,7 @@ pub(super) fn detect_language(doc: &scraper::Html) -> Option<String> {
 /// Single-URL mode: extracts content from `input.url`.
 /// Batch mode: if `input.urls` has multiple entries, processes them in parallel
 /// (capped at 5 concurrent extractions) and returns the first successful result.
-pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settings) -> Result<WebExtractOutput, String> {
+pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settings) -> AppResult<WebExtractOutput> {
     let obs_settings = &settings.browser.obscura;
 
     if !obs_settings.enabled {
@@ -629,7 +630,7 @@ async fn web_extract_batch(
     input: WebExtractInput,
     urls: &[String],
     settings: &crate::types::Settings,
-) -> Result<WebExtractOutput, String> {
+) -> AppResult<WebExtractOutput> {
     let start = std::time::Instant::now();
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
 
@@ -700,7 +701,7 @@ async fn extract_single_url(
     url: &str,
     input: &WebExtractInput,
     settings: &crate::types::Settings,
-) -> Result<WebExtractOutput, String> {
+) -> AppResult<WebExtractOutput> {
     let start = std::time::Instant::now();
     let obs_settings = &settings.browser.obscura;
     let obscura = crate::obscura::ObscuraManager::new(obs_settings);
@@ -1103,8 +1104,45 @@ pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value)
     serde_json::Value::Object(result)
 }
 
+/// Take a screenshot of a URL via Obscura's CDP headless browser.
+pub async fn web_screenshot(input: WebScreenshotInput, settings: &crate::types::Settings) -> AppResult<WebScreenshotOutput> {
+    let obs_settings = &settings.browser.obscura;
+    if !obs_settings.enabled {
+        return Err(
+            "Obscura is not enabled. Set browser.obscura.enabled=true in settings.yml to use web.screenshot"
+                .into(),
+        );
+    }
+
+    let start = std::time::Instant::now();
+    let obscura = crate::obscura::ObscuraManager::new(obs_settings);
+    let format = input.format.as_deref().unwrap_or("png");
+    let wait_until = input.wait_until.as_deref().unwrap_or("networkidle");
+    let url = input.url.clone();
+
+    let screenshot = obscura
+        .screenshot(&url, format, input.quality, wait_until)
+        .await
+        .map_err(|e| format!("Screenshot failed: {}", e))?;
+
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+
+    Ok(WebScreenshotOutput {
+        success: true,
+        url: url.clone(),
+        screenshot,
+        format: format.to_string(),
+        meta: ExtractMeta {
+            url,
+            provider: "obscura".into(),
+            js_rendered: true,
+            elapsed_ms,
+        },
+    })
+}
+
 /// Discover URLs on a website by analyzing sitemap and links.
-pub async fn web_map(input: WebMapInput, http: &HttpClient, settings: &crate::types::Settings) -> Result<WebMapOutput, String> {
+pub async fn web_map(input: WebMapInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<WebMapOutput> {
     let _cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
 
     let base_url = input.url.trim_end_matches('/');

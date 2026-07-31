@@ -970,6 +970,31 @@ pub struct WebImageSearchOutput {
     pub meta: WebSearchMeta,
 }
 
+// ─── Web Screenshot Types ─────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WebScreenshotInput {
+    /// URL to capture
+    pub url: String,
+    /// Image format: "png" (default) or "jpeg"
+    pub format: Option<String>,
+    /// JPEG quality 1-100 (ignored for png)
+    pub quality: Option<u32>,
+    /// Wait event: "load", "domcontentloaded", "networkidle", "done"
+    pub wait_until: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct WebScreenshotOutput {
+    pub success: bool,
+    pub url: String,
+    /// Base64-encoded image data
+    pub screenshot: String,
+    /// Image format used
+    pub format: String,
+    pub meta: ExtractMeta,
+}
+
 // ─── Web Map Types ────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]

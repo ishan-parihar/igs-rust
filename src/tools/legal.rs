@@ -1,7 +1,8 @@
 use super::helpers::urlencoding;
 use super::types::*;
+use crate::error::{AppError, AppResult};
 
-pub async fn legal_search_cases(input: LegalSearchInput, settings: &crate::types::Settings) -> Result<LegalSearchOutput, String> {
+pub async fn legal_search_cases(input: LegalSearchInput, settings: &crate::types::Settings) -> AppResult<LegalSearchOutput> {
     let api_key = settings
         .courtlistener
         .as_ref()
@@ -35,10 +36,10 @@ pub async fn legal_search_cases(input: LegalSearchInput, settings: &crate::types
         .map_err(|e| format!("CourtListener API error: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!(
+        return Err(AppError::from(format!(
             "CourtListener API returned status {}",
             resp.status()
-        ));
+        )));
     }
 
     let data: serde_json::Value = resp
@@ -47,7 +48,7 @@ pub async fn legal_search_cases(input: LegalSearchInput, settings: &crate::types
         .map_err(|e| format!("JSON parse error: {}", e))?;
 
     if let Some(err) = data["detail"].as_str() {
-        return Err(format!("CourtListener error: {}", err));
+        return Err(AppError::other(format!("CourtListener error: {}", err)));
     }
 
     let mut cases = Vec::new();
@@ -79,7 +80,7 @@ pub async fn legal_search_cases(input: LegalSearchInput, settings: &crate::types
 pub async fn legal_case_details(
     input: LegalCaseDetailsInput,
     settings: &crate::types::Settings,
-) -> Result<LegalCaseDetailsOutput, String> {
+) -> AppResult<LegalCaseDetailsOutput> {
     let api_key = settings
         .courtlistener
         .as_ref()
@@ -105,10 +106,10 @@ pub async fn legal_case_details(
         .map_err(|e| format!("CourtListener API error: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(format!(
+        return Err(AppError::from(format!(
             "CourtListener API returned status {}",
             resp.status()
-        ));
+        )));
     }
 
     let data: serde_json::Value = resp
@@ -117,7 +118,7 @@ pub async fn legal_case_details(
         .map_err(|e| format!("JSON parse error: {}", e))?;
 
     if let Some(err) = data["detail"].as_str() {
-        return Err(format!("CourtListener error: {}", err));
+        return Err(AppError::other(format!("CourtListener error: {}", err)));
     }
 
     let judges = data["judges"]

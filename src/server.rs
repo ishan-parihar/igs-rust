@@ -608,7 +608,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceUpsertInput>,
     ) -> Result<Json<SourceUpsertOutput>, String> {
-        sources::sources_upsert(params.0).await.map(Json)
+        sources::sources_upsert(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -619,7 +619,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceDeleteInput>,
     ) -> Result<Json<SourceDeleteOutput>, String> {
-        sources::sources_delete(params.0).await.map(Json)
+        sources::sources_delete(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -630,7 +630,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<AutodiscoverInput>,
     ) -> Result<Json<AutodiscoverOutput>, String> {
-        sources::sources_autodiscover(params.0, &self.http_client).await.map(Json)
+        sources::sources_autodiscover(params.0, &self.http_client).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -641,7 +641,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<EnableScraperInput>,
     ) -> Result<Json<EnableScraperOutput>, String> {
-        sources::sources_enable_scraper(params.0).await.map(Json)
+        sources::sources_enable_scraper(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -929,7 +929,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ResearchDownloadInput>,
     ) -> Result<Json<ResearchDownloadOutput>, String> {
-        research::research_download(params.0, &self.http_client, &self.settings).await.map(Json)
+        research::research_download(params.0, &self.http_client, &self.settings).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1179,7 +1179,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LegalCaseDetailsInput>,
     ) -> Result<Json<LegalCaseDetailsOutput>, String> {
-        legal::legal_case_details(params.0, &self.settings).await.map(Json)
+        legal::legal_case_details(params.0, &self.settings).await.map_err(String::from).map(Json)
     }
 
     // ── Health Tools ─────────────────────────────────────────
@@ -1357,6 +1357,7 @@ impl IgsMcpServer {
     ) -> Result<Json<InsightFindConnectionsOutput>, String> {
         insights::insights_find_connections(&self.insights, params.0)
             .await
+            .map_err(String::from)
             .map(Json)
     }
 
@@ -1383,6 +1384,7 @@ impl IgsMcpServer {
     ) -> Result<Json<InsightIndexOutput>, String> {
         insights::insights_index(&self.insights, params.0)
             .await
+            .map_err(String::from)
             .map(Json)
     }
 
@@ -1391,7 +1393,7 @@ impl IgsMcpServer {
         description = "Get insight engine statistics. Returns total_articles, total_entities, total_domains."
     )]
     async fn insights_stats(&self) -> Result<Json<InsightStatsOutput>, String> {
-        insights::insights_stats(&self.insights).await.map(Json)
+        insights::insights_stats(&self.insights).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1399,7 +1401,7 @@ impl IgsMcpServer {
         description = "Clear all indexed articles from the in-memory insight engine."
     )]
     async fn insights_clear(&self) -> Result<Json<InsightClearOutput>, String> {
-        insights::insights_clear(&self.insights).await.map(Json)
+        insights::insights_clear(&self.insights).await.map_err(String::from).map(Json)
     }
 
     // ── Obscura Browser Automation Tools ─────────────────────────
@@ -1409,7 +1411,7 @@ impl IgsMcpServer {
         description = "Navigate to URL. Renders JS, spawns session."
     )]
     async fn lp_goto(&self, params: Parameters<LpGotoInput>) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_goto(params.0).await.map(Json)
+        lp_mcp::lp_goto(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1420,7 +1422,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpMarkdownInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_markdown(params.0).await.map(Json)
+        lp_mcp::lp_markdown(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1431,7 +1433,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpLinksInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_links(params.0).await.map(Json)
+        lp_mcp::lp_links(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1442,7 +1444,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpEvaluateInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_evaluate(params.0).await.map(Json)
+        lp_mcp::lp_evaluate(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(name = "browser.click", description = "Click element by CSS selector.")]
@@ -1450,7 +1452,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpClickInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_click(params.0).await.map(Json)
+        lp_mcp::lp_click(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1458,7 +1460,7 @@ impl IgsMcpServer {
         description = "Fill form field by CSS selector."
     )]
     async fn lp_fill(&self, params: Parameters<LpFillInput>) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_fill(params.0).await.map(Json)
+        lp_mcp::lp_fill(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1469,7 +1471,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpScrollInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_scroll(params.0).await.map(Json)
+        lp_mcp::lp_scroll(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1480,7 +1482,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LpWaitForSelectorInput>,
     ) -> Result<Json<LpToolOutput>, String> {
-        lp_mcp::lp_wait_for_selector(params.0).await.map(Json)
+        lp_mcp::lp_wait_for_selector(params.0).await.map_err(String::from).map(Json)
     }
 
     // ── Intelligence Upgrade Tools (P1) ────────────────────────
@@ -1877,7 +1879,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<YoutubeSearchInput>,
     ) -> Result<Json<YoutubeSearchOutput>, String> {
-        youtube::youtube_search(params.0).await.map(Json)
+        youtube::youtube_search(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1888,7 +1890,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<YoutubeMetadataInput>,
     ) -> Result<Json<YoutubeMetadataOutput>, String> {
-        youtube::youtube_metadata(params.0).await.map(Json)
+        youtube::youtube_metadata(params.0).await.map_err(String::from).map(Json)
     }
 
     #[tool(
@@ -1899,7 +1901,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<YoutubeSubtitlesInput>,
     ) -> Result<Json<YoutubeSubtitlesOutput>, String> {
-        youtube::youtube_subtitles(params.0).await.map(Json)
+        youtube::youtube_subtitles(params.0).await.map_err(String::from).map(Json)
     }
 
     // ── Twitter Tools ─────────────────────────────────────────
@@ -1967,7 +1969,7 @@ impl rmcp::ServerHandler for IgsMcpServer {
         if request.uri == "igs://tool-guide" {
             let guide = tool_guide::get_tool_guide()
                 .await
-                .map_err(|e| ErrorData::internal_error(e, None))?;
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
             let json = serde_json::to_string(&guide)
                 .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
             Ok(ReadResourceResult::new(vec![ResourceContents::text(

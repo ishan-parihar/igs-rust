@@ -40,6 +40,7 @@
 //! 3. Set `email_webhook_url` and `email_recipients`
 
 use crate::config;
+use crate::error::AppResult;
 use crate::http::{self as http_mod, HttpClient};
 use crate::parsers;
 use crate::types::Settings;
@@ -461,7 +462,7 @@ async fn poll_monitor(
     monitor: &MonitorConfig,
     http: &HttpClient,
     _settings: &Settings,
-) -> Result<MonitorAlert, String> {
+) -> AppResult<MonitorAlert> {
     let sf = config::load_sources()
         .await
         .map_err(|e| format!("Failed to load sources: {}", e))?;

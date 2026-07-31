@@ -3,6 +3,7 @@ use crate::tools::types::*;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
+use crate::error::AppResult;
 
 mod scoring;
 mod readability;
@@ -12,8 +13,9 @@ pub(crate) use scoring::*;
 pub use readability::{extract_semantic_excerpt, extract_ddg_redirect_url};
 pub use engines::web_image_search;
 pub use extractors::{web_scrape, web_crawl, web_extract, web_map};
+pub use extractors::web_screenshot;
 
-pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> Result<WebSearchOutput, String> {
+pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> AppResult<WebSearchOutput> {
 
     let max_results: usize = input.max_results.unwrap_or(10) as usize;
     let depth = input.depth.as_deref().unwrap_or("fast");

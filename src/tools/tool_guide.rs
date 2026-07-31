@@ -1,8 +1,9 @@
 use super::types::*;
 use std::collections::HashMap;
+use crate::error::AppResult;
 
 /// Get tool guide with decision tree, categories, and drill-down chains.
-pub async fn get_tool_guide() -> Result<ToolGuideOutput, String> {
+pub async fn get_tool_guide() -> AppResult<ToolGuideOutput> {
     let mut decision_tree = HashMap::new();
 
     // News & Research

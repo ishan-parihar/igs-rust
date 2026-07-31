@@ -1,17 +1,18 @@
 use crate::config;
 use crate::tools::types::*;
 use crate::types::*;
+use crate::error::{AppError, AppResult};
 
 /// List all configured pools
-pub async fn pools_list() -> Result<PoolListOutput, String> {
+pub async fn pools_list() -> AppResult<PoolListOutput> {
     match config::load_pools().await {
         Ok(pf) => Ok(PoolListOutput { pools: pf.pools }),
-        Err(e) => Err(format!("Failed to load pools: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load pools: {}", e))),
     }
 }
 
 /// Create or update a pool
-pub async fn pools_upsert(input: PoolUpsertInput) -> Result<PoolUpsertOutput, String> {
+pub async fn pools_upsert(input: PoolUpsertInput) -> AppResult<PoolUpsertOutput> {
     match config::load_pools().await {
         Ok(mut pf) => {
             if let Some(idx) = pf.pools.iter().position(|p| p.id == input.id) {
@@ -34,12 +35,12 @@ pub async fn pools_upsert(input: PoolUpsertInput) -> Result<PoolUpsertOutput, St
                 .map_err(|e| format!("Save failed: {}", e))?;
             Ok(PoolUpsertOutput { updated: true })
         }
-        Err(e) => Err(format!("Failed to load pools: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load pools: {}", e))),
     }
 }
 
 /// Delete a pool by id
-pub async fn pools_delete(input: PoolDeleteInput) -> Result<PoolDeleteOutput, String> {
+pub async fn pools_delete(input: PoolDeleteInput) -> AppResult<PoolDeleteOutput> {
     match config::load_pools().await {
         Ok(mut pf) => {
             let before = pf.pools.len();
@@ -50,6 +51,6 @@ pub async fn pools_delete(input: PoolDeleteInput) -> Result<PoolDeleteOutput, St
                 .map_err(|e| format!("Save failed: {}", e))?;
             Ok(PoolDeleteOutput { removed })
         }
-        Err(e) => Err(format!("Failed to load pools: {}", e)),
+        Err(e) => Err(AppError::other(format!("Failed to load pools: {}", e))),
     }
 }
