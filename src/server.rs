@@ -688,7 +688,7 @@ impl IgsMcpServer {
         &self.insights
     }
 
-    pub fn filtered_tool_names(&self, all_tools: Vec<String>) -> Vec<String> {
+    pub fn filtered_tool_names(&self, all_tools: &[String]) -> Vec<String> {
         // Default to minimal safe set if no tool_groups configured
         let tool_groups = if self.tool_groups.is_empty() {
             vec![
@@ -704,7 +704,7 @@ impl IgsMcpServer {
         let mut result = Vec::new();
         for group_name in &tool_groups {
             if let Some(group_tools) = crate::tools::registry::get_group_tools(group_name) {
-                for tool in &all_tools {
+                for tool in all_tools {
                     if group_tools.contains(&tool.as_str()) && !result.contains(tool) {
                         result.push(tool.clone());
                     }
