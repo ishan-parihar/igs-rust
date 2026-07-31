@@ -10,6 +10,7 @@ use crate::tools::{
     weather, web, youtube,
 };
 use crate::types::*;
+use crate::AppResult;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
@@ -460,12 +461,6 @@ pub struct IgsMcpServer {
 
 // ─── Tool Router ────────────────────────────────────────────────
 
-impl Default for IgsMcpServer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl IgsMcpServer {
     pub fn resolve_format(output: &crate::tools::types_base::OutputOptions) -> String {
         output.format.as_deref().unwrap_or("toon").to_string()
@@ -497,29 +492,29 @@ impl IgsMcpServer {
 
 #[tool_router(router = tool_router)]
 impl IgsMcpServer {
-    pub fn new() -> Self {
+    pub fn new() -> AppResult<Self> {
         Self::new_with_groups(Vec::new())
     }
 
-    pub fn new_with_groups(tool_groups: Vec<String>) -> Self {
+    pub fn new_with_groups(tool_groups: Vec<String>) -> AppResult<Self> {
         let settings = load_settings_sync().expect("Failed to load settings");
         let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
-        let http_client = HttpClient::new(&settings.http, &cache_dir);
-        let monitor = Arc::new(crate::tools::monitor::MonitorManager::new(Arc::new(
+        let http_client = HttpClient::new(&settings.http, &cache_dir)?;
+        let monitor = crate::tools::monitor::MonitorManager::new(Arc::new(
             settings.clone(),
-        )));
+        ))?;
         let semantic_index = Arc::new(Mutex::new(crate::tools::semantic::SemanticIndex::new()));
         // Start the monitoring poll loop in the background
         monitor.start_all();
-        Self {
+        Ok(Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
             tool_groups,
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
-            monitor,
+            monitor: Arc::new(monitor),
             semantic_index,
-        }
+        })
     }
 
     /// Dump tool output as a markdown sidecar if dump is enabled in settings.
@@ -1995,8 +1990,8 @@ mod tests {
         title: &str,
         pub_date: &str,
         source_name: &str,
-        domains: Vec<&str>,
-        entities: Vec<(&str, &str, Option<&str>)>,
+        domains: &[&str],
+        entities: &[(&str, &str, Option<&str>)],
     ) -> ArticleInsight {
         ArticleInsight {
             id: id.to_string(),
@@ -2047,8 +2042,8 @@ mod tests {
             "Article 1",
             "2026-01-01T00:00:00Z",
             "src1",
-            vec!["tech"],
-            vec![("OpenAI", "Organization", None)],
+            &["tech"],
+            &[("OpenAI", "Organization", None)],
         ));
         let result = s.find_inter_domain_connections("openai", 2);
         assert!(
@@ -2066,8 +2061,8 @@ mod tests {
             "Article 1",
             "2026-01-01T00:00:00Z",
             "src1",
-            vec!["tech", "finance"],
-            vec![("OpenAI", "Organization", None)],
+            &["tech", "finance"],
+            &[("OpenAI", "Organization", None)],
         ));
         let result = s.find_inter_domain_connections("openai", 2);
         assert_eq!(result.len(), 1);
@@ -2086,8 +2081,8 @@ mod tests {
             "Article 1",
             "2026-01-01T00:00:00Z",
             "src1",
-            vec!["tech"],
-            vec![("OpenAI", "Organization", None)],
+            &["tech"],
+            &[("OpenAI", "Organization", None)],
         ));
         // Article 2: entity "OAI" (alias) with normalized_id="openai", in domain "finance"
         s.add_article(make_article(
@@ -2095,8 +2090,8 @@ mod tests {
             "Article 2",
             "2026-01-02T00:00:00Z",
             "src2",
-            vec!["finance"],
-            vec![("OAI", "Organization", Some("openai"))],
+            &["finance"],
+            &[("OAI", "Organization", Some("openai"))],
         ));
         let result = s.find_inter_domain_connections("openai", 2);
         assert_eq!(result.len(), 1, "alias sweep should find both articles");
@@ -2116,8 +2111,8 @@ mod tests {
             "A1",
             "2026-01-01T00:00:00Z",
             "src1",
-            vec!["tech", "finance"],
-            vec![("OpenAI", "Organization", None)],
+            &["tech", "finance"],
+            &[("OpenAI", "Organization", None)],
         ));
         // "google" appears in 1 domain (below min_domains=2)
         s.add_article(make_article(
@@ -2125,8 +2120,8 @@ mod tests {
             "A2",
             "2026-01-02T00:00:00Z",
             "src2",
-            vec!["tech"],
-            vec![("Google", "Organization", None)],
+            &["tech"],
+            &[("Google", "Organization", None)],
         ));
         let result = s.find_all_inter_domain_connections(2);
         assert_eq!(result.len(), 1, "only openai should qualify");
@@ -2140,8 +2135,8 @@ mod tests {
             "Hello World",
             "2026-01-01T00:00:00Z",
             "src1",
-            vec!["tech", "tech", "finance"],
-            vec![],
+            &["tech", "tech", "finance"],
+            &[],
         );
         let mut map: std::collections::HashMap<String, DomainConnection> =
             std::collections::HashMap::new();
@@ -2178,16 +2173,16 @@ mod tests {
             "A1",
             "2026-01-01T00:00:00Z",
             "src1",
-            vec!["tech", "finance"],
-            vec![("OpenAI", "Organization", None), ("Sam", "Person", None)],
+            &["tech", "finance"],
+            &[("OpenAI", "Organization", None), ("Sam", "Person", None)],
         ));
         s.add_article(make_article(
             "a2",
             "A2",
             "2026-01-02T00:00:00Z",
             "src2",
-            vec!["tech"],
-            vec![("Google", "Organization", None)],
+            &["tech"],
+            &[("Google", "Organization", None)],
         ));
         let stats = s.stats();
         assert_eq!(stats.total_articles, 2);

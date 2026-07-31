@@ -1,5 +1,6 @@
 use crate::cache::FeedCache;
 use crate::types::{FeedCacheEntry, HttpSettings, NewsItem, Settings};
+use crate::{AppError, AppResult};
 use anyhow::Result;
 use reqwest::Client;
 use std::collections::HashMap;
@@ -55,21 +56,21 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    pub fn new(settings: &HttpSettings, cache_dir: &Path) -> Self {
+    pub fn new(settings: &HttpSettings, cache_dir: &Path) -> AppResult<Self> {
         let timeout = Duration::from_millis(settings.timeout_ms);
         let client = Client::builder()
             .user_agent(&settings.user_agent)
             .timeout(timeout)
             .build()
-            .expect("Failed to build HTTP client");
+            .map_err(|e| AppError::Http(e))?;
 
-        Self {
+        Ok(Self {
             cache: FeedCache::new(cache_dir),
             client,
             settings: settings.clone(),
             global_semaphore: Semaphore::new(settings.concurrency as usize),
             host_semaphores: HostSemaphoreMap::new(settings.per_host),
-        }
+        })
     }
 
     /// Extract host from URL for per-host concurrency

@@ -123,7 +123,7 @@ fn apperror_other_constructor() {
 
 #[test]
 fn apperror_source_returns_inner_for_io() {
-    let io_err = std::io::Error::new(std::io::ErrorKind::Other, "disk full");
+    let io_err = std::io::Error::other("disk full");
     let e = AppError::Io(io_err);
     assert!(e.source().is_some());
 }

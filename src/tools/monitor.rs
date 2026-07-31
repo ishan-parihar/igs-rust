@@ -139,15 +139,15 @@ pub struct MonitorManager {
 }
 
 impl MonitorManager {
-    pub fn new(settings: Arc<Settings>) -> Self {
+    pub fn new(settings: Arc<Settings>) -> AppResult<Self> {
         let cache_dir = http_mod::resolve_cache_dir(&settings, &config::user_config_dir());
-        let http = Arc::new(HttpClient::new(&settings.http, &cache_dir));
-        Self {
+        let http = Arc::new(HttpClient::new(&settings.http, &cache_dir)?);
+        Ok(Self {
             monitors: Arc::new(Mutex::new(Vec::new())),
             settings,
             http,
             last_alert: Arc::new(Mutex::new(HashMap::new())),
-        }
+        })
     }
 
     pub async fn add(&self, monitor: MonitorConfig) {

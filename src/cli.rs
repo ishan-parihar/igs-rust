@@ -1120,7 +1120,7 @@ fn print_next_step(hints: &[&str]) {
 async fn cli_http_client() -> anyhow::Result<(igs_rust_mcp::Settings, igs_rust_mcp::http::HttpClient)> {
     let settings = igs_rust_mcp::config::load_settings().await?;
     let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
-    let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
+    let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?;
     Ok((settings, http_client))
 }
 
@@ -1183,7 +1183,7 @@ async fn main() -> anyhow::Result<()> {
                     if let Some(first_pool) = pools.pools.first() {
                         let Ok(axi_settings) = igs_rust_mcp::config::load_settings().await else { return Ok(()); };
                         let axi_cache = igs_rust_mcp::http::resolve_cache_dir(&axi_settings, &igs_rust_mcp::config::user_config_dir());
-                        let axi_http = std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&axi_settings.http, &axi_cache));
+                        let axi_http = std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&axi_settings.http, &axi_cache)?);
                         if let Ok(result) = news::news_fetch(NewsFetchInput {
                             filters: DiscoveryFilters {
                                 pools: Some(vec![first_pool.id.clone()]),
@@ -1236,7 +1236,7 @@ async fn main() -> anyhow::Result<()> {
             // MCP server mode — takes over stdin/stdout, no CLI output
             let settings = igs_rust_mcp::config::load_settings().await?;
             let tool_groups = settings.tool_groups.unwrap_or_default();
-            let server = IgsMcpServer::new_with_groups(tool_groups);
+            let server = IgsMcpServer::new_with_groups(tool_groups)?;
             let service = server
                 .serve(rmcp::transport::stdio())
                 .await
@@ -1730,7 +1730,7 @@ async fn main() -> anyhow::Result<()> {
                     chunks_per_source,
                     provider: None,
                     output: OutputOptions { format: None },
-                }, std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)), &settings)
+                }, std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?), &settings)
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1758,7 +1758,7 @@ async fn main() -> anyhow::Result<()> {
                     include_frames: Some(include_frames),
                     wait_until,
                     output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1803,7 +1803,7 @@ async fn main() -> anyhow::Result<()> {
                     limit: Some(limit),
                     search,
                     output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir), &settings)
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?, &settings)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1855,7 +1855,7 @@ async fn main() -> anyhow::Result<()> {
                     size: None,
                     image_type: None,
                     output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir))
+                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?)
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2377,7 +2377,7 @@ async fn main() -> anyhow::Result<()> {
             // Insights tools require the shared InsightStorage from the server.
             // For CLI use, we create a standalone server instance to access
             // the insight engine.
-            let server = IgsMcpServer::new();
+            let server = IgsMcpServer::new()?;
             match action {
                 InsightsAction::FindConnections {
                     entity,
@@ -2484,7 +2484,7 @@ async fn main() -> anyhow::Result<()> {
             let settings = igs_rust_mcp::config::load_settings()
                 .await
                 .map_err(|e| anyhow::anyhow!("Settings load failed: {}", e))?;
-            let manager = MonitorManager::new(std::sync::Arc::new(settings));
+            let manager = MonitorManager::new(std::sync::Arc::new(settings))?;
             match action {
                 MonitorAction::Create {
                     id,
