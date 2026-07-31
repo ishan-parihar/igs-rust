@@ -296,8 +296,20 @@ pub async fn lookup_wikidata_id(name: &str) -> Option<String> {
     );
 
     let client = reqwest::Client::new();
-    let resp = client.get(&url).send().await.ok()?;
-    let json: serde_json::Value = resp.json().await.ok()?;
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(url = %url, error = %e, "Entity resolution HTTP failed");
+            return None;
+        }
+    };
+    let json: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(url = %url, error = %e, "Entity resolution JSON parse failed");
+            return None;
+        }
+    };
     json["search"][0]["id"].as_str().map(|s| s.to_string())
 }
 
