@@ -67,12 +67,13 @@ async fn load_reddit_cookie() -> AppResult<String> {
 }
 
 /// Build a dedicated reqwest Client for Reddit with browser-like headers.
-fn build_reddit_client(cookie: &str) -> Client {
+fn build_reddit_client(cookie: &str) -> AppResult<Client> {
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_static(REDDIT_USER_AGENT));
     headers.insert(
         COOKIE,
-        HeaderValue::from_str(cookie).expect("Invalid cookie header"),
+        HeaderValue::from_str(cookie)
+            .map_err(|e| AppError::validation(format!("invalid cookie header: {e}")))?,
     );
     headers.insert("Accept", HeaderValue::from_static("application/json"));
     headers.insert(
@@ -84,7 +85,7 @@ fn build_reddit_client(cookie: &str) -> Client {
         .default_headers(headers)
         .timeout(Duration::from_secs(20))
         .build()
-        .expect("Failed to build Reddit HTTP client")
+        .map_err(|e| AppError::from(format!("Failed to build Reddit HTTP client: {e}")))
 }
 
 /// GET request via www.reddit.com with cookie auth
@@ -178,7 +179,7 @@ pub async fn reddit_search(input: RedditSearchInput) -> AppResult<RedditSearchOu
     let limit = input.limit.unwrap_or(25).clamp(1, 100);
 
     let cookie = load_reddit_cookie().await?;
-    let client = build_reddit_client(&cookie);
+    let client = build_reddit_client(&cookie)?;
     let mut posts = Vec::new();
 
     let subreddits = input.subreddits.clone().unwrap_or_default();
@@ -268,7 +269,7 @@ pub async fn reddit_feed(input: RedditFeedInput) -> AppResult<RedditFeedOutput> 
     let limit = input.limit.unwrap_or(25).clamp(1, 100) as usize;
 
     let cookie = load_reddit_cookie().await?;
-    let client = build_reddit_client(&cookie);
+    let client = build_reddit_client(&cookie)?;
     let mut all_posts = Vec::new();
 
     for (idx, sub) in input.subreddits.iter().enumerate() {

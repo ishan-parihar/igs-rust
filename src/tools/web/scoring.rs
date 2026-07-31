@@ -70,7 +70,13 @@ pub fn cache_ttl(topic: &str) -> Duration {
 /// Check cache for a matching query. Returns None if miss or expired.
 pub fn cache_get(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool) -> Option<WebSearchOutput> {
     let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
-    let cache = SEARCH_CACHE.lock().ok()?;
+    let cache = match SEARCH_CACHE.lock() {
+        Ok(c) => c,
+        Err(p) => {
+            tracing::warn!("SEARCH_CACHE poisoned, recovering");
+            p.into_inner()
+        }
+    };
     if let Some((output, inserted_at)) = cache.get(&cache_key) {
         if inserted_at.elapsed() < cache_ttl(topic) {
             return Some(output.clone());
@@ -82,14 +88,19 @@ pub fn cache_get(query: &str, topic: &str, max_results: usize, content_length: &
 /// Store search results in cache.
 pub fn cache_set(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool, output: &WebSearchOutput) {
     let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
-    if let Ok(mut cache) = SEARCH_CACHE.lock() {
-        // Evict expired entries when cache exceeds threshold
-        if cache.len() > CACHE_MAX_ENTRIES {
-            let max_ttl = Duration::from_secs(CACHE_MAX_AGE);
-            cache.retain(|_, (_, inserted_at)| inserted_at.elapsed() < max_ttl);
+    let mut cache = match SEARCH_CACHE.lock() {
+        Ok(c) => c,
+        Err(p) => {
+            tracing::warn!("SEARCH_CACHE poisoned, recovering");
+            p.into_inner()
         }
-        cache.insert(cache_key, (output.clone(), Instant::now()));
+    };
+    // Evict expired entries when cache exceeds threshold
+    if cache.len() > CACHE_MAX_ENTRIES {
+        let max_ttl = Duration::from_secs(CACHE_MAX_AGE);
+        cache.retain(|_, (_, inserted_at)| inserted_at.elapsed() < max_ttl);
     }
+    cache.insert(cache_key, (output.clone(), Instant::now()));
 }
 
 /// Extract domain from a URL string

@@ -1,7 +1,7 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 pub async fn env_epa_facilities(
     input: EnvEpaFacilitiesInput,
@@ -30,7 +30,7 @@ pub async fn env_epa_facilities(
         .map_err(|e| format!("EPA API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =
@@ -78,7 +78,7 @@ pub async fn env_epa_emissions(
         .map_err(|e| format!("EPA API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =

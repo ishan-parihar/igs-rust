@@ -84,10 +84,19 @@ fn build_client(cookie_str: &str) -> AppResult<reqwest::Client> {
     headers.insert("x-twitter-client-language", HeaderValue::from_static("en"));
     headers.insert(
         "authorization",
-        HeaderValue::from_str(&format!("Bearer {BEARER_TOKEN}")).expect("bearer token is ASCII"),
+        HeaderValue::from_str(&format!("Bearer {BEARER_TOKEN}"))
+            .map_err(|e| AppError::validation(format!("invalid bearer token header: {e}")))?,
     );
-    headers.insert("x-csrf-token", HeaderValue::from_str(&ct0).expect("csrf token is ASCII"));
-    headers.insert("cookie", HeaderValue::from_str(cookie_str).expect("cookie is ASCII"));
+    headers.insert(
+        "x-csrf-token",
+        HeaderValue::from_str(&ct0)
+            .map_err(|e| AppError::validation(format!("invalid csrf token header: {e}")))?,
+    );
+    headers.insert(
+        "cookie",
+        HeaderValue::from_str(cookie_str)
+            .map_err(|e| AppError::validation(format!("invalid cookie header: {e}")))?,
+    );
 
     reqwest::Client::builder()
         .default_headers(headers)

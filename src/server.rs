@@ -11,6 +11,7 @@ use crate::tools::{
 };
 use crate::types::*;
 use crate::AppResult;
+use crate::error::AppError;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
@@ -125,15 +126,8 @@ impl InsightStorage {
     }
 
     pub fn add_articles_batch(&mut self, articles: Vec<ArticleInsight>) {
-        if let Some(ref conn) = self.db {
-            // SAFETY: `unchecked_transaction` bypasses rusqlite's compile-time
-            // borrow check. This is safe here because `InsightStorage` is always
-            // accessed behind a `tokio::sync::Mutex<InsightStorage>` — only one
-            // async task can hold the lock at a time, so the `Connection` is
-            // never shared across threads. If the storage is ever moved to a
-            // `std::sync::Mutex` or shared via `Arc`, this must be changed to
-            // `transaction()` or replaced with an `r2d2` connection pool.
-            let tx = match conn.unchecked_transaction() {
+        if let Some(ref mut conn) = self.db {
+            let tx = match conn.transaction() {
                 Ok(tx) => tx,
                 Err(e) => {
                     tracing::warn!("Failed to start transaction: {}", e);
@@ -456,14 +450,19 @@ pub struct IgsMcpServer {
     /// Real-time monitoring & alerting manager
     monitor: Arc<crate::tools::monitor::MonitorManager>,
     /// Semantic search index — populated by news.fetch depth=deep, searched by search.semantic
+    /// Handle to the monitor dispatcher task for graceful shutdown
+    monitor_dispatcher: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     semantic_index: Arc<Mutex<crate::tools::semantic::SemanticIndex>>,
 }
 
 // ─── Tool Router ────────────────────────────────────────────────
 
 impl IgsMcpServer {
-    pub fn resolve_format(output: &crate::tools::types_base::OutputOptions) -> String {
-        output.format.as_deref().unwrap_or("toon").to_string()
+    pub fn resolve_format(&self, output: &crate::tools::types_base::OutputOptions) -> String {
+        output.format.as_deref()
+            .or(Some(self.settings.output.default_format.as_str()))
+            .unwrap_or("toon")
+            .to_string()
     }
 
     /// Public accessor for the insight engine — used by the CLI's `igs insights` subcommand
@@ -473,11 +472,20 @@ impl IgsMcpServer {
     }
 
     pub fn filtered_tool_names(&self, all_tools: Vec<String>) -> Vec<String> {
-        if self.tool_groups.is_empty() {
-            return all_tools;
-        }
+        // Default to minimal safe set if no tool_groups configured
+        let tool_groups = if self.tool_groups.is_empty() {
+            vec![
+                "discovery".to_string(),
+                "news".to_string(),
+                "research".to_string(),
+                "web".to_string(),
+                "insights".to_string(),
+            ]
+        } else {
+            self.tool_groups.clone()
+        };
         let mut result = Vec::new();
-        for group_name in &self.tool_groups {
+        for group_name in &tool_groups {
             if let Some(group_tools) = crate::tools::registry::get_group_tools(group_name) {
                 for tool in &all_tools {
                     if group_tools.contains(&tool.as_str()) && !result.contains(tool) {
@@ -492,12 +500,13 @@ impl IgsMcpServer {
 
 #[tool_router(router = tool_router)]
 impl IgsMcpServer {
-    pub fn new() -> AppResult<Self> {
-        Self::new_with_groups(Vec::new())
+    pub async fn new() -> AppResult<Self> {
+        Self::new_with_groups(Vec::new()).await
     }
 
-    pub fn new_with_groups(tool_groups: Vec<String>) -> AppResult<Self> {
-        let settings = load_settings_sync().expect("Failed to load settings");
+    pub async fn new_with_groups(tool_groups: Vec<String>) -> AppResult<Self> {
+        let settings = load_settings_sync()
+            .map_err(|e| AppError::config(format!("settings.yml: {}", e)))?;
         let cache_dir = crate::http::resolve_cache_dir(&settings, &config::user_config_dir());
         let http_client = HttpClient::new(&settings.http, &cache_dir)?;
         let monitor = crate::tools::monitor::MonitorManager::new(Arc::new(
@@ -505,7 +514,7 @@ impl IgsMcpServer {
         ))?;
         let semantic_index = Arc::new(Mutex::new(crate::tools::semantic::SemanticIndex::new()));
         // Start the monitoring poll loop in the background
-        monitor.start_all();
+        let dispatcher_handle = monitor.start_all().await;
         Ok(Self {
             tool_router: Self::tool_router(),
             insights: Arc::new(Mutex::new(InsightStorage::new())),
@@ -513,8 +522,19 @@ impl IgsMcpServer {
             http_client: Arc::new(http_client),
             settings: Arc::new(settings),
             monitor: Arc::new(monitor),
+            monitor_dispatcher: Arc::new(Mutex::new(Some(dispatcher_handle))),
             semantic_index,
         })
+}
+
+    /// Shut down the monitor dispatcher gracefully.
+    pub async fn shutdown(&self) {
+        self.monitor.shutdown();
+        if let Ok(mut handle_opt) = self.monitor_dispatcher.try_lock() {
+            if let Some(handle) = handle_opt.take() {
+                let _ = handle.await;
+            }
+        }
     }
 
     /// Dump tool output as a markdown sidecar if dump is enabled in settings.
@@ -583,7 +603,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SourceListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_list(params.0).await?;
@@ -647,7 +667,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GeoListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_countries().await?;
@@ -667,7 +687,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GeoListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_cities().await?;
@@ -687,7 +707,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GeoListInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let cursor = params.0.cursor.clone();
         let page_size = params.0.page_size.unwrap_or(50);
         let all_output = sources::sources_domains().await?;
@@ -730,7 +750,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<NewsFetchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let depth = params
             .0
             .depth_opts
@@ -784,7 +804,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<NewsTestInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.id.clone();
         let output = news::news_test_source(params.0, &self.http_client).await?;
         self.dump("news.test_source", &_subject, &output);
@@ -799,7 +819,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<NewsEnrichInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = format!("enrich-{}", params.0.items.len());
         let output = news::news_enrich(params.0).await?;
         self.dump("news.enrich", &_subject, &output);
@@ -816,7 +836,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WeatherForecastInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = weather::weather_forecast(params.0, &self.http_client, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -829,7 +849,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WeatherCurrentInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = weather::weather_current(params.0, &self.http_client, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -842,7 +862,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WeatherAlertsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = weather::weather_alerts(params.0, &self.http_client, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -857,7 +877,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<RedditSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params
             .0
             .subreddits
@@ -878,7 +898,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<RedditFeedInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.subreddits.first().cloned().unwrap_or_default();
         let output = reddit::reddit_feed(params.0).await?;
         self.dump("reddit.feed", &_subject, &output);
@@ -895,7 +915,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ResearchSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = research::research_search(params.0, &self.http_client).await?;
         self.dump("research.search", &_subject, &output);
@@ -935,7 +955,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ResearchPubMedInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = research::research_pubmed_search(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -950,7 +970,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<FinanceMarketInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.symbols.join(",");
         let output = finance::finance_market(params.0, &self.http_client).await?;
         self.dump("finance.market", &_subject, &output);
@@ -965,7 +985,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<FinanceCryptoInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.symbols.join(",");
         let output = finance::finance_crypto(params.0, &self.http_client).await?;
         self.dump("finance.crypto", &_subject, &output);
@@ -980,7 +1000,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<FinanceTrendingInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = finance::finance_trending(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -995,7 +1015,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<CveSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = security::security_cve_search(params.0, &self.http_client).await?;
         self.dump("security.cve", &_subject, &output);
@@ -1010,7 +1030,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SecurityAdvisoriesInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.ecosystem.clone();
         let output = security::security_advisories(params.0, &self.http_client).await?;
         self.dump("security.advisories", &_subject, &output);
@@ -1027,7 +1047,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GovtBillsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = govt::govt_bills(params.0, &self.http_client).await?;
         self.dump("govt.bills", &_subject, &output);
@@ -1042,7 +1062,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<GovtRegulationsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = govt::govt_regulations(params.0, &self.http_client).await?;
         self.dump("govt.regulations", &_subject, &output);
@@ -1059,7 +1079,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<PoliticsFecInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = politics::politics_fec_candidates(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -1072,7 +1092,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<PoliticsFecCommitteesInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = politics::politics_fec_committees(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -1087,7 +1107,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<PatentSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = patents::patents_search(params.0, &self.http_client).await?;
         self.dump("patents.search", &_subject, &output);
@@ -1118,7 +1138,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SatelliteFirmsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = satellite::satellite_firms_fires(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -1133,7 +1153,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<EnvEpaFacilitiesInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = env::env_epa_facilities(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -1146,7 +1166,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<EnvEpaEmissionsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = env::env_epa_emissions(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -1161,7 +1181,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<LegalSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = legal::legal_search_cases(params.0, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -1187,7 +1207,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<HealthCdcInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = health::health_cdc_leading_causes(params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1200,7 +1220,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<HealthWhoInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = health::health_who_gho(params.0, &self.http_client).await?;
         Ok(format_output(&output, &format))
     }
@@ -1215,7 +1235,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ClimateNoaaInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = climate::climate_noaa_observations(params.0, &self.http_client, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -1228,7 +1248,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<ClimateNoaaStationsInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = climate::climate_noaa_stations(params.0, &self.http_client, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -1243,7 +1263,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WebSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = web::web_search(params.0, self.http_client.clone(), &self.settings).await?;
         self.dump("web.search", &_subject, &output);
@@ -1258,7 +1278,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WebScrapeInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
@@ -1272,7 +1292,7 @@ impl IgsMcpServer {
         description = "BFS crawl a website using Obscura headless browser. Returns pages with depth and status."
     )]
     async fn web_crawl(&self, params: Parameters<WebCrawlInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
@@ -1286,7 +1306,7 @@ impl IgsMcpServer {
         description = "Discover URLs on a website by parsing sitemap.xml. Returns links array with url and title."
     )]
     async fn web_map(&self, params: Parameters<WebMapInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
@@ -1300,7 +1320,7 @@ impl IgsMcpServer {
         description = "Extract structured content from a URL using Obscura. Supports full extraction (text, metadata, links, images, structured data) or selector-based extraction."
     )]
     async fn web_extract(&self, params: Parameters<WebExtractInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = url::Url::parse(&params.0.url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| params.0.url.clone());
@@ -1333,7 +1353,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<WebImageSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let _subject = params.0.query.clone();
         let output = web::web_image_search(params.0, &self.http_client).await?;
         self.dump("web.image_search", &_subject, &output);
@@ -1364,7 +1384,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<InsightTrendingInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = insights::insights_trending(&self.insights, params.0).await?;
         Ok(format_output(&output, &format))
     }
@@ -1846,7 +1866,7 @@ impl IgsMcpServer {
         description = "List available SOP chains for composable multi-step intelligence workflows."
     )]
     async fn sop_list(&self, params: Parameters<SopListInput>) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = sop::sop_list();
         Ok(format_output(&output, &format))
     }
@@ -1859,7 +1879,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<SopExecuteInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = sop::sop_execute(params.0)?;
         Ok(format_output(&output, &format))
     }
@@ -1909,7 +1929,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<TwitterSearchInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = twitter::twitter_search(params.0, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -1922,7 +1942,7 @@ impl IgsMcpServer {
         &self,
         params: Parameters<TwitterReadInput>,
     ) -> Result<CallToolResult, String> {
-        let format = Self::resolve_format(&params.0.output);
+        let format = self.resolve_format(&params.0.output);
         let output = twitter::twitter_read(params.0, &self.settings).await?;
         Ok(format_output(&output, &format))
     }
@@ -1934,7 +1954,7 @@ impl IgsMcpServer {
 impl rmcp::ServerHandler for IgsMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
-            .with_server_info(Implementation::new("igs-rust", "0.2.0"))
+            .with_server_info(Implementation::new("igs-rust", env!("CARGO_PKG_VERSION")))
 
             .with_instructions("Intelligence Gathering System MCP Server. Provides tools for RSS/HTTP source monitoring, news fetching, Reddit search, academic paper research, web search/scraping, and cross-article entity insight analysis.")
     }

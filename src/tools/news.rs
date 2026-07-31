@@ -60,7 +60,7 @@ pub async fn news_fetch(input: NewsFetchInput, http: Arc<HttpClient>, settings: 
     let limit = input
         .filters
         .limit
-        .unwrap_or(max_results as i32)
+        .unwrap_or(max_results as u32)
         .clamp(1, 500) as usize;
 
     let mut sources = sf.sources;

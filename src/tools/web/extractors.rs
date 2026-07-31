@@ -33,7 +33,7 @@ pub(super) async fn web_scrape_default(
     let body = match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                unreachable!("bypass cache mode never returns Cached")
+                return Err(AppError::other("unexpected cached response for bypass mode"));
             };
             if resp.status < 200 || resp.status >= 400 {
                 return Err(AppError::from(format!("HTTP {} for URL: {}", resp.status, input.url)));

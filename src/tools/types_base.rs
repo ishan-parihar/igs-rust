@@ -44,7 +44,7 @@ pub struct DiscoveryFilters {
     /// AND logic (default: OR)
     pub match_all: Option<bool>,
     /// Max items (1-500)
-    pub limit: Option<i32>,
+    pub limit: Option<u32>,
     /// Cache mode: fresh|all|only
     pub cache_mode: Option<String>,
 }

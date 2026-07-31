@@ -27,7 +27,7 @@ pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> AppR
                 .map_err(|e| format!("PatentsView API error: {}", e))?;
 
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                unreachable!("bypass cache mode never returns Cached")
+                return Err(AppError::other("unexpected cached response for bypass mode"));
             };
 
             let data: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -78,7 +78,7 @@ pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> Ap
         .map_err(|e| format!("PatentsView API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =

@@ -41,7 +41,7 @@ pub async fn climate_noaa_observations(
         .map_err(|e| format!("NOAA API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =
@@ -101,7 +101,7 @@ pub async fn climate_noaa_stations(
         .map_err(|e| format!("NOAA API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =

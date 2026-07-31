@@ -46,4 +46,4 @@ output:
   # Removed (YAGNI): toon_indent, max_items_per_response
 
 # ─── Tool Groups ───────────────────────────────────────────────
-# tool_groups: ["discovery", "news", "web"]
+tool_groups: ["discovery", "news", "research", "web", "insights"]

@@ -91,7 +91,7 @@ pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient) -> AppResu
         .map_err(|e| format!("WHO GHO API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =

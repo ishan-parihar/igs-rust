@@ -34,7 +34,7 @@ pub async fn weather_forecast(
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -115,7 +115,7 @@ pub async fn weather_current(input: WeatherCurrentInput, http: &HttpClient, sett
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -180,7 +180,7 @@ pub async fn weather_alerts(input: WeatherAlertsInput, http: &HttpClient, settin
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)

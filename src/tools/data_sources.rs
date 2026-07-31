@@ -12,7 +12,7 @@ use crate::tools::types::LimitInput;
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 // ─── OpenAlex ─────────────────────────────────────────────────
 
@@ -60,7 +60,7 @@ pub async fn openalex_search(input: OpenAlexSearchInput, http: &HttpClient) -> A
         .await
         .map_err(|e| format!("OpenAlex API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -171,7 +171,7 @@ pub async fn shodan_search(input: ShodanSearchInput, http: &HttpClient) -> AppRe
         .await
         .map_err(|e| format!("Shodan API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -260,7 +260,7 @@ pub async fn hibp_check(input: HibpBreachInput, http: &HttpClient) -> AppResult<
         .await
         .map_err(|e| format!("HIBP API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     // 404 means no breaches — that's a success
@@ -372,7 +372,7 @@ pub async fn acled_search(input: AcledSearchInput, http: &HttpClient) -> AppResu
         .await
         .map_err(|e| format!("ACLED API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)

@@ -418,7 +418,7 @@ pub struct RedditSearchInput {
     /// Time filter
     pub time: Option<String>,
     /// Max results (default: 25)
-    pub limit: Option<i32>,
+    pub limit: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -445,7 +445,7 @@ pub struct RedditFeedInput {
     /// Subreddits (no r/)
     pub subreddits: Vec<String>,
     /// Per-sub limit (25-100)
-    pub limit: Option<i32>,
+    pub limit: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -472,7 +472,7 @@ pub struct ResearchSearchInput {
     /// Latest year
     pub year_to: Option<i32>,
     /// Max results (default: 25)
-    pub limit: Option<i32>,
+    pub limit: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }
@@ -1004,7 +1004,7 @@ pub struct WebMapInput {
     /// Provider: default or obscura
     pub provider: Option<String>,
     /// Max links (default: 100)
-    pub limit: Option<i32>,
+    pub limit: Option<u32>,
     /// Filter by substring
     pub search: Option<String>,
     #[serde(flatten)]
@@ -1039,9 +1039,9 @@ pub struct InsightFindConnectionsInput {
     /// Entity name
     pub entity: Option<String>,
     /// Min domains (default: 2)
-    pub min_domains: Option<i32>,
+    pub min_domains: Option<u32>,
     /// Max results (default: 20)
-    pub limit: Option<i32>,
+    pub limit: Option<u32>,
     #[serde(flatten)]
     pub output: OutputOptions,
 }

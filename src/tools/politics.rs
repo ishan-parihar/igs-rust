@@ -25,7 +25,7 @@ pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient)
         .map_err(|e| format!("FEC API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =
@@ -84,7 +84,7 @@ pub async fn politics_fec_committees(
         .map_err(|e| format!("FEC API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =

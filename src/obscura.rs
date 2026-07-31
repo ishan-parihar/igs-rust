@@ -1,3 +1,6 @@
+use std::os::unix::fs::PermissionsExt;
+use std::io::Read;
+use tempfile;
 use crate::config;
 use crate::types::ObscuraSettings;
 use anyhow::{Context, Result};
@@ -163,7 +166,12 @@ impl ObscuraManager {
     }
 
     /// Download and extract the binary from the given tar.gz URL
+    /// Download and extract the binary from the given tar.gz URL
     async fn download_and_extract_binary(&self, url: &str) -> Result<()> {
+        // Size limits
+        const MAX_DOWNLOAD_SIZE: u64 = 200 * 1024 * 1024; // 200 MB
+        const MAX_EXTRACTED_SIZE: u64 = 500 * 1024 * 1024; // 500 MB
+
         let client = reqwest::Client::builder()
             .user_agent("igs-mcp/0.1")
             .build()?;
@@ -178,19 +186,55 @@ impl ObscuraManager {
             anyhow::bail!("Download returned status {}", resp.status());
         }
 
-        let bytes = resp.bytes().await?;
+        // Check Content-Length if available
+        if let Some(len) = resp.content_length() {
+            if len > MAX_DOWNLOAD_SIZE {
+                anyhow::bail!("Download too large: {} bytes (max {})", len, MAX_DOWNLOAD_SIZE);
+            }
+        }
 
-        let temp_path = self.binary_dir.join("obscura.tar.gz");
-        std::fs::write(&temp_path, &bytes).context("Failed to write Obscura archive")?;
+        // Download with size limit
+        let bytes = resp.bytes().await.context("Failed to download Obscura binary")?;
+        if (bytes.len() as u64) > MAX_DOWNLOAD_SIZE {
+            anyhow::bail!("Download exceeded size limit: {} bytes (max {})", bytes.len(), MAX_DOWNLOAD_SIZE);
+        }
 
-        let tar_gz = std::fs::File::open(&temp_path)?;
-        let tar = flate2::read::GzDecoder::new(tar_gz);
-        let mut archive = tar::Archive::new(tar);
+        let temp_dir = tempfile::tempdir().context("Failed to create temp dir")?;
+        let temp_path = temp_dir.path().join("obscura.tar.gz");
+        tokio::fs::write(&temp_path, &bytes).await.context("Failed to write Obscura archive")?;
 
+        // Extract with size limit and path validation
+        let tar_gz = std::fs::File::open(&temp_path).context("Failed to open downloaded archive")?;
+        let tar_gz = flate2::read::GzDecoder::new(tar_gz);
+        let tar_gz = tar_gz.take(MAX_EXTRACTED_SIZE); // Limit decompression
+        let mut archive = tar::Archive::new(tar_gz);
+
+        // Validate each entry before extracting
+        for entry in archive.entries().context("Failed to read archive entries")? {
+            let mut entry = entry.context("Failed to read archive entry")?;
+            let path = entry.path().context("Failed to get entry path")?;
+            
+            // Prevent path traversal
+            let path = path.strip_prefix("").unwrap_or(&path);
+            if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                anyhow::bail!("Archive contains path traversal: {}", path.display());
+            }
+            if path.is_absolute() {
+                anyhow::bail!("Archive contains absolute path: {}", path.display());
+            }
+        }
+        
+        // Rewind and extract
+        let tar_gz = std::fs::File::open(&temp_path).context("Failed to reopen archive")?;
+        let tar_gz = flate2::read::GzDecoder::new(tar_gz);
+        let tar_gz = tar_gz.take(MAX_EXTRACTED_SIZE);
+        let mut archive = tar::Archive::new(tar_gz);
+        
         archive
             .unpack(&self.binary_dir)
             .context("Failed to extract Obscura archive")?;
 
+        // Find and move the binary
         let extracted_binary = self.binary_dir.join("obscura");
         if extracted_binary.exists() {
             std::fs::rename(&extracted_binary, &self.binary_path)
@@ -209,8 +253,11 @@ impl ObscuraManager {
             }
         }
 
-        let _ = std::fs::remove_file(&temp_path);
+        // Make executable
+        std::fs::set_permissions(&self.binary_path, std::fs::Permissions::from_mode(0o755))
+            .context("Failed to set permissions")?;
 
+        // Cleanup (temp_dir is dropped automatically)
         Ok(())
     }
 

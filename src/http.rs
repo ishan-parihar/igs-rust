@@ -4,10 +4,94 @@ use crate::{AppError, AppResult};
 use anyhow::Result;
 use reqwest::Client;
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, Semaphore};
+use url::Url;
+
+/// Validate that a URL is safe to fetch (SSRF protection).
+/// Rejects non-http(s) schemes, loopback, link-local, private, and reserved IPs.
+pub fn validate_public_url(url_str: &str) -> AppResult<Url> {
+    let url = Url::parse(url_str)
+        .map_err(|e| AppError::validation(format!("invalid URL: {e}")))?;
+    
+    // Only allow http/https schemes
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(AppError::validation(
+            "only http and https schemes are allowed".to_string()));
+    }
+    
+    // Get host and resolve to IP
+    let host = url.host_str().ok_or_else(|| 
+        AppError::validation("URL missing host".to_string()))?;
+    
+    // Try to parse as IP address first
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_private_or_reserved_ip(&ip) {
+            return Err(AppError::validation(
+                "access to private/reserved IP addresses is not allowed".to_string()));
+        }
+        // IP is public, OK
+        return Ok(url);
+    }
+    
+    // Host is a domain name - resolve it
+    // We'll do a basic check for obvious internal domains
+    if is_obviously_internal_domain(host) {
+        return Err(AppError::validation(
+            "access to internal domains is not allowed".to_string()));
+    }
+    
+    // For full DNS resolution, we'd need a DNS resolver.
+    // For now, allow the request but the HTTP client will resolve at connect time.
+    // A production deployment should add a DNS resolution step here.
+    Ok(url)
+}
+
+/// Check if an IP address is private, loopback, link-local, or reserved.
+fn is_private_or_reserved_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => {
+            ipv4.is_loopback()
+                || ipv4.is_private()
+                || ipv4.is_link_local()
+                || ipv4.is_broadcast()
+                || ipv4.is_documentation()
+                || ipv4.is_unspecified()
+                || matches!(ipv4.octets(), [127, ..])
+                || matches!(ipv4.octets(), [169, 254, ..])
+                || matches!(ipv4.octets(), [10, ..])
+                || matches!(ipv4.octets(), [172, 16..=31, ..])
+                || matches!(ipv4.octets(), [192, 168, ..])
+                || matches!(ipv4.octets(), [100, 64..=127, ..])
+        }
+        IpAddr::V6(ipv6) => {
+            ipv6.is_loopback()
+                || ipv6.is_unspecified()
+                || ipv6.segments()[0] & 0xfe00 == 0xfc00
+                || ipv6.segments()[0] & 0xffc0 == 0xfe80
+                || ipv6.is_unique_local()
+        }
+    }
+}
+
+/// Quick check for obviously internal domains (not exhaustive).
+fn is_obviously_internal_domain(host: &str) -> bool {
+    let host = host.to_lowercase();
+    host == "localhost"
+        || host.ends_with(".local")
+        || host.ends_with(".internal")
+        || host.ends_with(".corp")
+        || host.ends_with(".lan")
+        || host.ends_with(".home")
+        || host == "metadata"
+        || host == "metadata.google.internal"
+        || host == "169.254.169.254" // AWS metadata
+        || host == "metadata.azure.com" // Azure metadata
+        || host == "metadata.google.internal" // GCP metadata
+}
 
 /// HTTP fetch result
 pub struct FetchResponse {
@@ -61,6 +145,10 @@ impl HttpClient {
         let client = Client::builder()
             .user_agent(&settings.user_agent)
             .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .gzip(true)
+            .brotli(true)
+            .deflate(true)
             .build()
             .map_err(|e| AppError::Http(e))?;
 
@@ -88,6 +176,8 @@ impl HttpClient {
         cache_mode: &str,
     ) -> Result<FetchOutcome> {
         let cached = self.cache.read(url).await.ok().flatten();
+        // SSRF protection: validate URL before fetching
+        let _ = crate::http::validate_public_url(url)?;
 
         // If cache-only mode, return cached if available
         if cache_mode == "only" {
@@ -229,8 +319,9 @@ impl HttpClient {
         body: &serde_json::Value,
         extra_headers: Option<&HashMap<String, String>>,
     ) -> Result<FetchOutcome> {
-        let _global_permit = self
-            .global_semaphore
+        // SSRF protection: validate URL before posting
+        let _ = crate::http::validate_public_url(url)?;
+        let _global_permit = self.global_semaphore
             .acquire()
             .await
             .map_err(|e| anyhow::anyhow!("Global semaphore closed: {}", e))?;

@@ -11,7 +11,7 @@ use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 // ─── Webhook Enrichment ───────────────────────────────────────
 
@@ -48,7 +48,7 @@ pub async fn webhook_enrich(input: WebhookEnrichInput, http: &HttpClient) -> App
         .map_err(|e| format!("Webhook request failed: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("post_json never returns Cached")
+        return Err(AppError::other("unexpected cached response for post_json"));
     };
 
     if resp.status >= 400 {

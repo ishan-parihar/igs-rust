@@ -49,8 +49,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::time::Duration as TokioDuration;
+use tokio_util::sync::CancellationToken;
 
 // ─── Monitor Configuration Types ──────────────────────────────
 
@@ -136,6 +137,10 @@ pub struct MonitorManager {
     http: Arc<HttpClient>,
     /// Track last alert time per monitor ID for cooldown
     last_alert: Arc<Mutex<HashMap<String, u64>>>,
+    /// Cancellation token for graceful shutdown
+    shutdown: CancellationToken,
+    /// Track in-flight monitor tasks to prevent unbounded fan-out
+    in_flight: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
 impl MonitorManager {
@@ -147,6 +152,8 @@ impl MonitorManager {
             settings,
             http,
             last_alert: Arc::new(Mutex::new(HashMap::new())),
+            shutdown: CancellationToken::new(),
+            in_flight: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -381,79 +388,128 @@ impl MonitorManager {
     }
 
     /// Start all active monitors as background tokio tasks.
-    /// Each monitor polls at its own configured interval_secs.
-    pub fn start_all(&self) {
+    /// Returns a JoinHandle for the dispatcher task that can be awaited for graceful shutdown.
+    pub async fn start_all(&self) -> tokio::task::JoinHandle<()> {
         let monitors = self.monitors.clone();
         let http = self.http.clone();
         let settings = self.settings.clone();
         let last_alert = self.last_alert.clone();
+        let in_flight = self.in_flight.clone();
+        let shutdown = self.shutdown.clone();
 
         tokio::spawn(async move {
-            // Track next-poll-time per monitor ID
             let mut next_poll: HashMap<String, u64> = HashMap::new();
+            let mut interval = TokioDuration::from_secs(10);
 
             loop {
-                let now = chrono::Utc::now().timestamp() as u64;
-                let active_monitors: Vec<MonitorConfig> = {
-                    let guards = monitors.lock().await;
-                    guards.iter().filter(|m| m.active).cloned().collect()
-                };
-
-                for monitor in active_monitors {
-                    let interval = monitor.interval_secs.max(30); // minimum 30s
-                    let should_poll = match next_poll.get(&monitor.id) {
-                        Some(&next_time) => now >= next_time,
-                        None => true, // first poll
-                    };
-
-                    if !should_poll {
-                        continue;
+                tokio::select! {
+                    _ = shutdown.cancelled() => {
+                        tracing::info!("Monitor dispatcher received shutdown signal");
+                        break;
                     }
+                    _ = tokio::time::sleep(interval) => {
+                        let now = chrono::Utc::now().timestamp() as u64;
+                        let active_monitors: Vec<MonitorConfig> = {
+                            let guards = monitors.lock().await;
+                            guards.iter().filter(|m| m.active).cloned().collect()
+                        };
 
-                    // Schedule next poll
-                    next_poll.insert(monitor.id.clone(), now + interval);
+                        for monitor in active_monitors {
+                            let monitor_interval = monitor.interval_secs.max(30);
+                            let should_poll = match next_poll.get(&monitor.id) {
+                                Some(&next_time) => now >= next_time,
+                                None => true,
+                            };
 
-                    let http = http.clone();
-                    let settings = settings.clone();
-                    let last_alert_clone = last_alert.clone();
-                    let monitor_for_task = monitor.clone();
-
-                    tokio::spawn(async move {
-                        if let Ok(alert) = poll_monitor(&monitor_for_task, &http, &settings).await {
-                            if alert.article_count >= monitor_for_task.threshold as usize {
-                                // Check cooldown
-                                let cooldown = monitor_for_task.cooldown_secs.unwrap_or(300);
-                                let should_deliver = {
-                                    let la = last_alert_clone.lock().await;
-                                    match la.get(&monitor_for_task.id) {
-                                        Some(&last) => now - last >= cooldown,
-                                        None => true,
-                                    }
-                                };
-
-                                if should_deliver {
-                                    // Update last alert time
-                                    {
-                                        let mut la = last_alert_clone.lock().await;
-                                        la.insert(monitor_for_task.id.clone(), now);
-                                    }
-                                    deliver_alert(&alert, &monitor_for_task).await;
-                                } else {
-                                    tracing::debug!(
-                                        "Monitor {} alert suppressed (cooldown {}s)",
-                                        monitor_for_task.id,
-                                        cooldown
-                                    );
-                                }
+                            if !should_poll {
+                                continue;
                             }
-                        }
-                    });
-                }
 
-                // Check every 10 seconds for monitors that need polling
-                tokio::time::sleep(TokioDuration::from_secs(10)).await;
+                            // Check if there's already an in-flight task for this monitor
+                            let has_in_flight = {
+                                let in_flight_guard = in_flight.lock().await;
+                                in_flight_guard.contains_key(&monitor.id)
+                            };
+                            if has_in_flight {
+                                tracing::debug!(
+                                    "Monitor {} has in-flight task, skipping this poll cycle",
+                                    monitor.id
+                                );
+                                continue;
+                            }
+
+                            // Schedule next poll
+                            let monitor_id = monitor.id.clone();
+                            next_poll.insert(monitor_id.clone(), now + monitor_interval);
+
+                            let http = http.clone();
+                            let settings = settings.clone();
+                            let last_alert_clone = last_alert.clone();
+                            let in_flight_clone = in_flight.clone();
+                            let monitor_for_task = monitor.clone();
+                            let monitor_id_for_spawn = monitor_id.clone();
+                            let monitor_id_for_track = monitor_id;
+
+                            let handle = tokio::spawn(async move {
+                                let result = poll_monitor(&monitor_for_task, &http, &settings).await;
+                                
+                                // Remove from in-flight when done
+                                in_flight_clone.lock().await.remove(&monitor_id_for_spawn);
+
+                                if let Ok(alert) = result {
+                                    if alert.article_count >= monitor_for_task.threshold as usize {
+                                        let cooldown = monitor_for_task.cooldown_secs.unwrap_or(300);
+                                        let should_deliver = {
+                                            let mut la = last_alert_clone.lock().await;
+                                            match la.get(&monitor_id_for_spawn) {
+                                                Some(&last) => {
+                                                    if now - last >= cooldown {
+                                                        la.insert(monitor_id_for_spawn.clone(), now);
+                                                        true
+                                                    } else {
+                                                        false
+                                                    }
+                                                }
+                                                None => {
+                                                    la.insert(monitor_id_for_spawn.clone(), now);
+                                                    true
+                                                }
+                                            }
+                                        };
+
+                                        if should_deliver {
+                                            deliver_alert(&alert, &monitor_for_task).await;
+                                        } else {
+                                            tracing::debug!(
+                                                "Monitor {} alert suppressed (cooldown {}s)",
+                                                monitor_for_task.id,
+                                                cooldown
+                                            );
+                                        }
+                                    }
+                                }
+                            });
+
+                            // Track in-flight task
+                            in_flight.lock().await.insert(monitor_id_for_track, handle);
+                        }
+                    }
+                }
             }
-        });
+
+            // Wait for all in-flight tasks to complete on shutdown
+            let mut in_flight_guard = in_flight.lock().await;
+            let handles: Vec<_> = in_flight_guard.drain().map(|(_, h)| h).collect();
+            for handle in handles {
+                handle.abort();
+                let _ = handle.await;
+            }
+        })
+    }
+
+    /// Signal the dispatcher to shut down gracefully.
+    pub fn shutdown(&self) {
+        self.shutdown.cancel();
     }
 }
 

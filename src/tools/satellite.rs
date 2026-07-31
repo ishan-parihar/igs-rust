@@ -1,6 +1,6 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 pub async fn satellite_firms_fires(
     input: SatelliteFirmsInput,
@@ -28,7 +28,7 @@ pub async fn satellite_firms_fires(
         .map_err(|e| format!("NASA FIRMS API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     // Parse CSV response

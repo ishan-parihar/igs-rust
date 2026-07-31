@@ -60,7 +60,7 @@ impl FeedCache {
         match fs::read_to_string(&file).await {
             Ok(raw) => {
                 let fname = self.filename_for(url);
-                let mut lru = self.lru_order.lock().unwrap();
+                let mut lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
                 lru.retain(|f| f != &fname);
                 lru.push_back(fname);
 
@@ -97,7 +97,7 @@ impl FeedCache {
 
         let fname = self.filename_for(url);
         {
-            let mut lru = self.lru_order.lock().unwrap();
+            let mut lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
             lru.retain(|f| f != &fname);
             lru.push_back(fname);
         }
@@ -109,14 +109,14 @@ impl FeedCache {
     fn evict_if_needed(&self) {
         loop {
             let should_evict = {
-                let lru = self.lru_order.lock().unwrap();
+                let lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
                 lru.len() > self.max_items
             };
             if !should_evict {
                 break;
             }
             let oldest = {
-                let mut lru = self.lru_order.lock().unwrap();
+                let mut lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
                 lru.pop_front()
             };
             if let Some(name) = oldest {

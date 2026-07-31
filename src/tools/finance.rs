@@ -1,6 +1,6 @@
 use super::types::*;
 use crate::http::{self as http_mod, HttpClient};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 pub async fn finance_market(input: FinanceMarketInput, http: &HttpClient) -> AppResult<FinanceMarketOutput> {
     let mut quotes = Vec::new();
@@ -63,7 +63,7 @@ pub async fn finance_crypto(input: FinanceCryptoInput, http: &HttpClient) -> App
         .map_err(|e| format!("CoinGecko API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =
@@ -98,7 +98,7 @@ pub async fn finance_trending(
         .map_err(|e| format!("CoinGecko API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        unreachable!("bypass cache mode never returns Cached")
+        return Err(AppError::other("unexpected cached response for bypass mode"));
     };
 
     let data: serde_json::Value =

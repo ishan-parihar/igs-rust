@@ -333,6 +333,49 @@ impl Default for OutputSettings {
     }
 }
 
+impl Default for HttpSettings {
+    fn default() -> Self {
+        Self {
+            user_agent: default_user_agent(),
+            timeout_ms: default_timeout(),
+            retries: default_retries(),
+            backoff_base_ms: default_backoff_base(),
+            backoff_factor: default_backoff_factor(),
+            concurrency: default_concurrency(),
+            per_host: default_per_host(),
+        }
+    }
+}
+
+impl Default for CacheSettings {
+    fn default() -> Self {
+        Self {
+            enabled: default_cache_enabled(),
+            dir: default_cache_dir(),
+            ttl_ms: default_ttl_ms(),
+        }
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            http: HttpSettings::default(),
+            cache: CacheSettings::default(),
+            browser: BrowserSettings::default(),
+            nlp: NlpSettings::default(),
+            output: OutputSettings::default(),
+            tool_groups: None,
+            openweather: None,
+            noaa: None,
+            courtlistener: None,
+            comtrade: None,
+            twitter: None,
+            reddit: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NoaaSettings {

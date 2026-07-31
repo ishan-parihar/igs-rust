@@ -1,5 +1,5 @@
+use crate::error::{AppError, AppResult};
 use crate::types::*;
-use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -29,18 +29,18 @@ async fn file_exists(p: &Path) -> bool {
     fs::metadata(p).await.is_ok()
 }
 
-async fn ensure_bootstrapped() -> Result<()> {
+async fn ensure_bootstrapped() -> AppResult<()> {
     let user_dir = user_config_dir();
     let pkg_dir = package_config_dir();
-    fs::create_dir_all(&user_dir).await?;
+    fs::create_dir_all(&user_dir).await.map_err(AppError::from)?;
 
     for f in &["pools.yml", "sources.yml", "settings.yml", "countries.yml"] {
         let target = user_dir.join(f);
         if !file_exists(&target).await {
             let src = pkg_dir.join(f);
             if file_exists(&src).await {
-                let content = fs::read(&src).await?;
-                fs::write(&target, &content).await?;
+                let content = fs::read(&src).await.map_err(AppError::from)?;
+                fs::write(&target, &content).await.map_err(AppError::from)?;
                 tracing::info!("Bootstrapped {} from package config", f);
             }
         }
@@ -81,26 +81,26 @@ pub fn expand_env_vars(s: &str) -> String {
     result
 }
 
-async fn read_yaml<T: serde::de::DeserializeOwned>(file: &Path) -> Result<T> {
+async fn read_yaml<T: serde::de::DeserializeOwned>(file: &Path) -> AppResult<T> {
     let raw = fs::read_to_string(file)
         .await
-        .with_context(|| format!("Failed to read {}", file.display()))?;
+        .map_err(|e| AppError::from(format!("Failed to read {}: {}", file.display(), e)))?;
     let expanded = expand_env_vars(&raw);
     let doc: T = serde_yaml::from_str(&expanded)
-        .with_context(|| format!("Failed to parse {}", file.display()))?;
+        .map_err(|e| AppError::config(format!("Failed to parse {}: {}", file.display(), e)))?;
     Ok(doc)
 }
 
-async fn write_yaml<T: serde::Serialize>(file: &Path, data: &T) -> Result<()> {
+async fn write_yaml<T: serde::Serialize>(file: &Path, data: &T) -> AppResult<()> {
     if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent).await?;
+        fs::create_dir_all(parent).await.map_err(|e| AppError::from(format!("Failed to create dir {}: {}", parent.display(), e)))?;
     }
-    let txt = serde_yaml::to_string(data)?;
-    fs::write(file, txt.as_bytes()).await?;
+    let txt = serde_yaml::to_string(data).map_err(|e| AppError::config(format!("Failed to serialize: {}", e)))?;
+    fs::write(file, txt.as_bytes()).await.map_err(|e| AppError::from(format!("Failed to write {}: {}", file.display(), e)))?;
     Ok(())
 }
 
-async fn merge_missing_default_sources() -> Result<()> {
+async fn merge_missing_default_sources() -> AppResult<()> {
     let user_file = user_config_dir().join("sources.yml");
     let default_file = package_config_dir().join("sources.yml");
     if !file_exists(&user_file).await || !file_exists(&default_file).await {
@@ -137,7 +137,7 @@ async fn merge_missing_default_sources() -> Result<()> {
 }
 
 /// Load pool definitions from `pools.yml`.
-pub async fn load_pools() -> Result<PoolsFile> {
+pub async fn load_pools() -> AppResult<PoolsFile> {
     ensure_bootstrapped().await?;
     let file = user_config_dir().join("pools.yml");
     let parsed: PoolsFile = read_yaml(&file).await?;
@@ -145,14 +145,14 @@ pub async fn load_pools() -> Result<PoolsFile> {
 }
 
 /// Save pool definitions to `pools.yml`.
-pub async fn save_pools(data: &PoolsFile) -> Result<()> {
+pub async fn save_pools(data: &PoolsFile) -> AppResult<()> {
     let file = user_config_dir().join("pools.yml");
     write_yaml(&file, data).await?;
     Ok(())
 }
 
 /// Load source definitions from `sources.yml`, merging any missing defaults.
-pub async fn load_sources() -> Result<SourcesFile> {
+pub async fn load_sources() -> AppResult<SourcesFile> {
     ensure_bootstrapped().await?;
     merge_missing_default_sources().await?;
     let file = user_config_dir().join("sources.yml");
@@ -161,14 +161,14 @@ pub async fn load_sources() -> Result<SourcesFile> {
 }
 
 /// Save source definitions to `sources.yml`.
-pub async fn save_sources(data: &SourcesFile) -> Result<()> {
+pub async fn save_sources(data: &SourcesFile) -> AppResult<()> {
     let file = user_config_dir().join("sources.yml");
     write_yaml(&file, data).await?;
     Ok(())
 }
 
 /// Load application settings from `settings.yml`.
-pub async fn load_settings() -> Result<Settings> {
+pub async fn load_settings() -> AppResult<Settings> {
     ensure_bootstrapped().await?;
     let file = user_config_dir().join("settings.yml");
     let parsed: Settings = read_yaml(&file).await?;
@@ -176,19 +176,19 @@ pub async fn load_settings() -> Result<Settings> {
 }
 
 /// Load country definitions from `countries.yml`.
-pub async fn load_countries() -> Result<serde_json::Value> {
+pub async fn load_countries() -> AppResult<serde_json::Value> {
     ensure_bootstrapped().await?;
     let user_file = user_config_dir().join("countries.yml");
     let content = if file_exists(&user_file).await {
-        fs::read_to_string(&user_file).await?
+        fs::read_to_string(&user_file).await.map_err(AppError::from)?
     } else {
         let pkg_file = package_config_dir().join("countries.yml");
         if file_exists(&pkg_file).await {
-            fs::read_to_string(&pkg_file).await?
+            fs::read_to_string(&pkg_file).await.map_err(AppError::from)?
         } else {
             return Ok(serde_json::json!({"countries": []}));
         }
     };
-    let val: serde_json::Value = serde_yaml::from_str(&content)?;
+    let val: serde_json::Value = serde_yaml::from_str(&content).map_err(|e| AppError::config(format!("Failed to parse YAML: {}", e)))?;
     Ok(val)
 }

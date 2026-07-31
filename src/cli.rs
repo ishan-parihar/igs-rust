@@ -17,9 +17,9 @@ use tracing_subscriber::EnvFilter;
 #[derive(Parser)]
 #[command(name = "igs", version, about = "IGS — Intelligence Gathering System")]
 struct Cli {
-    /// Output format: "toon" (default) or "json"
-    #[arg(long, default_value = "toon", global = true)]
-    format: String,
+    /// Output format: "toon" (default), "json", or read from settings.output.default_format
+    #[arg(long, global = true)]
+    format: Option<String>,
 
     /// Show full content (disable truncation for large fields)
     #[arg(long, global = true)]
@@ -293,7 +293,7 @@ enum NewsAction {
         #[arg(long)]
         match_all: bool,
         #[arg(long, default_value = "50")]
-        limit: i32,
+        limit: u32,
         #[arg(long, default_value = "prefer")]
         cache_mode: String,
         /// Fetch depth: "quick" (10 sources, 20 results), "deep" (200 sources, 500 results), or omit for default (100 sources, 100 results)
@@ -337,14 +337,14 @@ enum RedditAction {
         #[arg(long, default_value = "all")]
         time: String,
         #[arg(long, default_value = "25")]
-        limit: i32,
+        limit: u32,
     },
     /// Fetch latest posts via RSS feeds (reliable, no API key needed)
     Feed {
         #[arg(long, value_delimiter = ',')]
         subreddits: Vec<String>,
         #[arg(long, default_value = "25")]
-        limit: i32,
+        limit: u32,
     },
 }
 
@@ -363,7 +363,7 @@ enum ResearchAction {
         #[arg(long)]
         year_to: Option<i32>,
         #[arg(long, default_value = "25")]
-        limit: i32,
+        limit: u32,
     },
     /// Get paper details by ID
     Paper {
@@ -391,7 +391,7 @@ enum ResearchAction {
         #[arg(long)]
         query: String,
         #[arg(long, default_value = "20")]
-        limit: i32,
+        limit: u32,
     },
 }
 
@@ -506,7 +506,7 @@ enum WebAction {
         #[arg(long)]
         url: String,
         #[arg(long, default_value = "100")]
-        limit: i32,
+        limit: u32,
         #[arg(long)]
         search: Option<String>,
     },
@@ -565,7 +565,7 @@ enum TwitterAction {
         #[arg(long)]
         query: String,
         #[arg(long, default_value = "10")]
-        limit: i32,
+        limit: u32,
         #[arg(long)]
         mode: Option<String>,
     },
@@ -581,7 +581,7 @@ enum YoutubeAction {
         #[arg(long)]
         query: String,
         #[arg(long, default_value = "10")]
-        limit: i32,
+        limit: u32,
     },
     Metadata {
         #[arg(long)]
@@ -832,9 +832,9 @@ enum InsightsAction {
         #[arg(long)]
         entity: Option<String>,
         #[arg(long)]
-        min_domains: Option<i32>,
+        min_domains: Option<u32>,
         #[arg(long)]
-        limit: Option<i32>,
+        limit: Option<u32>,
     },
     /// Detect trending entities
     TrendingEntities {
@@ -1137,9 +1137,9 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let fmt = &cli.format;
+    let settings = igs_rust_mcp::config::load_settings().await.unwrap_or_default();
+    let fmt = cli.format.as_deref().or(Some(settings.output.default_format.as_str())).unwrap_or("toon");
     let full = cli.full;
-
     match cli.command {
         // ── AXI §8 + §10: no-args home view shows live state + tool identity ──
         None => {
@@ -1236,7 +1236,8 @@ async fn main() -> anyhow::Result<()> {
             // MCP server mode — takes over stdin/stdout, no CLI output
             let settings = igs_rust_mcp::config::load_settings().await?;
             let tool_groups = settings.tool_groups.unwrap_or_default();
-            let server = IgsMcpServer::new_with_groups(tool_groups)?;
+            let server = IgsMcpServer::new_with_groups(tool_groups).await?;
+            let server_for_shutdown = server.clone();
             let service = server
                 .serve(rmcp::transport::stdio())
                 .await
@@ -1244,6 +1245,7 @@ async fn main() -> anyhow::Result<()> {
                     tracing::error!("MCP server error: {:?}", e);
                 })?;
             service.waiting().await?;
+            server_for_shutdown.shutdown().await;
             return Ok(());
         }
 
@@ -1684,7 +1686,7 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(research::research_pubmed_search(ResearchPubMedInput {
                     query,
                     limits: LimitInput {
-                        limit: Some(limit as u32),
+                        limit: Some(limit),
                     },
                     output: OutputOptions { format: None },
                 }, &http_client)
@@ -1889,7 +1891,7 @@ async fn main() -> anyhow::Result<()> {
                 let settings = igs_rust_mcp::config::load_settings().await?;
                 let result = r(twitter::twitter_search(TwitterSearchInput {
                     query,
-                    limit: Some(limit as u32),
+                    limit: Some(limit),
                     search_mode: mode,
                     output: OutputOptions { format: None },
                 }, &settings)
@@ -1917,7 +1919,7 @@ async fn main() -> anyhow::Result<()> {
             YoutubeAction::Search { query, limit } => {
                 let result = r(youtube::youtube_search(YoutubeSearchInput {
                     query,
-                    limit: Some(limit as u32),
+                    limit: Some(limit),
                 })
                 .await)?;
                 output(fmt, &result);
@@ -2377,7 +2379,7 @@ async fn main() -> anyhow::Result<()> {
             // Insights tools require the shared InsightStorage from the server.
             // For CLI use, we create a standalone server instance to access
             // the insight engine.
-            let server = IgsMcpServer::new()?;
+            let server = IgsMcpServer::new().await?;
             match action {
                 InsightsAction::FindConnections {
                     entity,
