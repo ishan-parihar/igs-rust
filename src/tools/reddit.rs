@@ -14,7 +14,7 @@ const REDDIT_USER_AGENT: &str =
 // ─── Reddit API Response Types ─────────────────────────────────
 // These mirror the Reddit JSON API shape. Some fields are deserialized for
 // schema completeness even though we don't currently read them — they're
-// marked `#[allow(dead_code)]` to silence the unused-field warning without
+// marked `#[expect(dead_code)]` to silence the unused-field warning without
 // dropping them from the response model.
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +25,7 @@ struct RedditListingResponse {
 #[derive(Debug, Deserialize)]
 struct RedditListingData {
     children: Vec<RedditChild>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     after: Option<String>,
 }
 
@@ -45,7 +45,7 @@ struct RedditPost {
     created_utc: f64,
     selftext: Option<String>,
     url: Option<String>,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     thumbnail: Option<String>,
     is_self: bool,
 }

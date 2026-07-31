@@ -39,6 +39,8 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 base64 = "0.22"
+tokio-tungstenite = { version = "0.30", features = ["native-tls"] }
+futures-util = "0.3"
 sha2 = "0.10"
 hex = "0.4"
 rand = "0.8"
@@ -53,3 +55,10 @@ openssl-sys = { version = "0.9.117", features = ["vendored"] }
 toon-helper = { path = "../toon-helper" }
 flate2 = "1.1.9"
 tar = "0.4.46"
+
+[lints.clippy]
+unwrap_used = "allow"      # ponytail: IGS is a CLI/MCP binary; unwrap is acceptable at trust boundaries
+expect_used = "allow"       # ponytail: expect with clear messages is fine in binary
+todo = "warn"
+unimplemented = "warn"
+large_enum_variant = "allow" # ponytail: CLI enums are one-shot, variant size doesn't matter

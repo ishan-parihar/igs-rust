@@ -268,7 +268,7 @@ enum SourceAction {
 }
 
 #[derive(Subcommand)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum NewsAction {
     /// Fetch news from configured sources
     Fetch {
@@ -542,6 +542,20 @@ enum WebAction {
         query: String,
         #[arg(long, default_value = "10")]
         max_results: i32,
+    },
+    /// Capture a screenshot of a URL via Obscura CDP headless browser
+    Screenshot {
+        #[arg(long)]
+        url: String,
+        /// Image format: png (default) or jpeg
+        #[arg(long, default_value = "png")]
+        format: String,
+        /// JPEG quality 1-100 (ignored for png)
+        #[arg(long)]
+        quality: Option<u32>,
+        /// Wait event: load, domcontentloaded, networkidle (default), done
+        #[arg(long)]
+        wait_until: Option<String>,
     },
 }
 
@@ -1846,6 +1860,26 @@ async fn main() -> anyhow::Result<()> {
                 output(fmt, &result);
                 print_next_step(&[
                     "igs web scrape --url <image_source_page> for full page content",
+                ]);
+            }
+            WebAction::Screenshot {
+                url,
+                format,
+                quality,
+                wait_until,
+            } => {
+                let settings = igs_rust_mcp::config::load_settings().await?;
+                let result = r(web::web_screenshot(WebScreenshotInput {
+                    url,
+                    format: Some(format),
+                    quality,
+                    wait_until,
+                }, &settings)
+                .await)?;
+                output(fmt, &result);
+                print_next_step(&[
+                    "The screenshot is returned as base64 — decode with: echo '<base64>' | base64 -d > screenshot.png",
+                    "igs web scrape --url <page> for markdown content instead",
                 ]);
             }
         },

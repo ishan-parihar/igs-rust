@@ -9,7 +9,6 @@ use crate::tools::{
     types::*,
     weather, web, youtube,
 };
-#[allow(unused_imports)]
 use crate::types::*;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -23,7 +22,6 @@ use tokio::sync::Mutex;
 
 // ─── Internal Server State ──────────────────────────────────────
 
-#[allow(dead_code)]
 pub struct InsightStorage {
     articles: Vec<ArticleInsight>,
     entity_index: std::collections::HashMap<String, Vec<usize>>,
@@ -452,9 +450,7 @@ pub struct IgsMcpServer {
     insights: Arc<Mutex<InsightStorage>>,
     /// Tool groups for progressive discovery. Empty = all groups available.
     tool_groups: Vec<String>,
-    #[allow(dead_code)] // reserved for future tool use
     http_client: Arc<HttpClient>,
-    #[allow(dead_code)] // used by dump() in non-test builds
     settings: Arc<Settings>,
     /// Real-time monitoring & alerting manager
     monitor: Arc<crate::tools::monitor::MonitorManager>,
@@ -1316,6 +1312,22 @@ impl IgsMcpServer {
         let output = web::web_extract(params.0, &self.settings).await?;
         self.dump("web.extract", &_subject, &output);
         Ok(format_output(&output, &format))
+    }
+
+    #[tool(
+        name = "web.screenshot",
+        description = "Capture a screenshot of a URL using Obscura headless browser via CDP. Returns base64-encoded PNG or JPEG. Useful for visual verification, capturing dynamic content (charts, maps), and archiving page snapshots."
+    )]
+    async fn web_screenshot(
+        &self,
+        params: Parameters<WebScreenshotInput>,
+    ) -> Result<CallToolResult, String> {
+        let _subject = url::Url::parse(&params.0.url)
+            .map(|u| u.host_str().unwrap_or("unknown").to_string())
+            .unwrap_or_else(|_| params.0.url.clone());
+        let output = web::web_screenshot(params.0, &self.settings).await?;
+        self.dump("web.screenshot", &_subject, &output);
+        Ok(format_output(&output, "json"))
     }
 
     #[tool(
