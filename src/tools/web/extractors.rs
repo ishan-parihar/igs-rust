@@ -660,7 +660,7 @@ async fn web_extract_batch(
                 extract_images,
                 wait_selector,
                 include_html,
-                clean_content: clean_content,
+                clean_content,
                 query,
                 output_schema: output_schema.clone(),
                 extract_prompt: extract_prompt.clone(),
@@ -817,11 +817,7 @@ async fn extract_single_url(
     };
 
     // Extract structured data via output_schema (P2.1)
-    let extracted_data = if let Some(ref schema) = input.output_schema {
-        Some(extract_by_schema(&doc, schema))
-    } else {
-        None
-    };
+    let extracted_data = input.output_schema.as_ref().map(|schema| extract_by_schema(&doc, schema));
 
     // Include raw HTML if requested
     let html_output = if input.include_html.unwrap_or(false) {
@@ -1033,7 +1029,11 @@ pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) ->
 ///    `{"title": "h1", "description": "meta[name='description']"}`
 /// 2. Object with field names as keys and objects with `selector` + `attr` + `mode`:
 ///    `{"title": {"selector": "h1", "attr": "text"}}`
-/// Modes: "text" (default, inner text), "html" (inner HTML), "attr" (attribute value)
+/// Supports three extraction modes:
+///
+/// - `"text"` — inner text (default)
+/// - `"html"` — inner HTML
+/// - `"attr"` — attribute value
 pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value) -> serde_json::Value {
     let Some(obj) = schema.as_object() else {
         return serde_json::json!({});

@@ -272,7 +272,7 @@ pub fn compute_answer_confidence(results: &[WebSearchResult]) -> f64 {
 
     // Average individual confidence (uses full confidence signal: relevance + snippet + highlights)
     let avg_confidence: f64 = results.iter()
-        .map(|r| compute_confidence(r))
+        .map(compute_confidence)
         .sum::<f64>() / results.len() as f64;
 
     // Source diversity: unique domains = more trustworthy
