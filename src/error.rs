@@ -1,72 +1,40 @@
-use std::fmt;
-
 /// Unified error type for IGS internal operations.
 ///
 /// Server tool handlers remain `Result<T, String>` at the rmcp boundary,
 /// but internal tool functions use `AppError` for structured error handling.
 /// The `From<AppError> for String` impl enables `?` in handlers.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AppError {
     /// Configuration / settings / pool / source file errors.
+    #[error("Configuration error: {0}")]
     Config(String),
+
     /// HTTP client or network errors.
-    Http(reqwest::Error),
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+
     /// JSON serialization / deserialization errors.
-    Json(serde_json::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
     /// File I/O errors.
-    Io(std::io::Error),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
     /// Feed parsing errors.
+    #[error("Feed parsing error: {0}")]
     Feed(String),
+
     /// Input validation errors.
+    #[error("Validation error: {0}")]
     Validation(String),
+
     /// Generic catch-all (keeps migration simple for edge cases).
+    #[error("{0}")]
     Other(String),
 }
 
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AppError::Config(e) => write!(f, "Configuration error: {e}"),
-            AppError::Http(e) => write!(f, "HTTP error: {e}"),
-            AppError::Json(e) => write!(f, "JSON error: {e}"),
-            AppError::Io(e) => write!(f, "IO error: {e}"),
-            AppError::Feed(e) => write!(f, "Feed parsing error: {e}"),
-            AppError::Validation(e) => write!(f, "Validation error: {e}"),
-            AppError::Other(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-impl std::error::Error for AppError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            AppError::Http(e) => Some(e),
-            AppError::Json(e) => Some(e),
-            AppError::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-// ─── From impls for ergonomic ? operator ──────────────────────
-
-impl From<reqwest::Error> for AppError {
-    fn from(e: reqwest::Error) -> Self {
-        AppError::Http(e)
-    }
-}
-
-impl From<serde_json::Error> for AppError {
-    fn from(e: serde_json::Error) -> Self {
-        AppError::Json(e)
-    }
-}
-
-impl From<std::io::Error> for AppError {
-    fn from(e: std::io::Error) -> Self {
-        AppError::Io(e)
-    }
-}
+// ─── Boundary From impls (not auto-derived by thiserror) ──────
 
 /// Convert AppError → String for rmcp boundary handlers.
 /// Enables `?` in `fn handler() -> Result<CallToolResult, String>`.
