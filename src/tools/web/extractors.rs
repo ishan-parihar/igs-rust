@@ -647,8 +647,6 @@ async fn web_extract_batch(
         let selectors = input.selectors.clone();
         let wait_selector = input.wait_selector.clone();
         let output_schema = input.output_schema.clone();
-        let extract_prompt = input.extract_prompt.clone();
-
         handles.push(tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
             let batch_input = WebExtractInput {
@@ -663,7 +661,6 @@ async fn web_extract_batch(
                 clean_content,
                 query,
                 output_schema: output_schema.clone(),
-                extract_prompt: extract_prompt.clone(),
                 output: crate::tools::types_base::OutputOptions { format: None },
             };
             extract_single_url(&batch_input.url, &batch_input, &settings).await

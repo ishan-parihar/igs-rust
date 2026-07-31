@@ -821,9 +821,7 @@ pub struct WebExtractInput {
     /// JSON schema for structured extraction (returns validated JSON conforming to schema)
     #[serde(default)]
     pub output_schema: Option<serde_json::Value>,
-    /// Natural language extraction prompt (used with output_schema for schema-based extraction)
-    #[serde(default)]
-    pub extract_prompt: Option<String>,
+
     #[serde(flatten)]
     pub output: OutputOptions,
 }
