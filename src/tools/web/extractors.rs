@@ -649,7 +649,7 @@ async fn web_extract_batch(
         let wait_selector = input.wait_selector.clone();
         let output_schema = input.output_schema.clone();
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let _permit = sem.acquire().await.map_err(|e| format!("Semaphore closed: {e}"))?;
             let batch_input = WebExtractInput {
                 url,
                 urls: None,
@@ -690,7 +690,7 @@ async fn web_extract_batch(
     let count = results.len();
 
     // Return first successful result with batch metadata
-    let mut first = results.into_iter().next().unwrap();
+    let mut first = results.into_iter().next().expect("checked non-empty above");
     first.meta.elapsed_ms = elapsed_ms;
     first.meta.provider = format!("obscura (batch: {} urls, {} succeeded)", urls.len(), count);
     Ok(first)

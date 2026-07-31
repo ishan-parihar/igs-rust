@@ -299,7 +299,7 @@ impl ObscuraManager {
 
         // Wait for the WebSocket debugger URL from stdout
         let ws_url = {
-            let stdout = child.stdout.take().unwrap();
+            let stdout = child.stdout.take().expect("stdout piped above");
             let mut reader = tokio::io::BufReader::new(stdout).lines();
             let start = std::time::Instant::now();
             let mut found_url = None;
