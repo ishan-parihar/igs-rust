@@ -95,7 +95,7 @@ pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient) -> AppResu
     };
 
     let data: serde_json::Value =
-        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {e}"))?;
 
     let mut observations = Vec::new();
     if let Some(results) = data["value"].as_array() {

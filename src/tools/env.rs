@@ -34,7 +34,7 @@ pub async fn env_epa_facilities(
     };
 
     let data: serde_json::Value =
-        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {e}"))?;
 
     let mut facilities = Vec::new();
     if let Some(results) = data.as_array() {
@@ -82,7 +82,7 @@ pub async fn env_epa_emissions(
     };
 
     let data: serde_json::Value =
-        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {e}"))?;
 
     let mut facilities = Vec::new();
     if let Some(results) = data.as_array() {

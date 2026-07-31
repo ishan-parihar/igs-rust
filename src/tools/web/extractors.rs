@@ -282,6 +282,17 @@ pub(super) async fn web_crawl_lightpanda(
         }
 
         while let Some((url_str, depth)) = queue.pop_front() {
+            // SSRF protection: validate URL before fetching
+            if let Err(e) = crate::http::validate_public_url(&url_str) {
+                pages.push(CrawledPage {
+                    url: url_str.clone(),
+                    title: None,
+                    content: format!("SSRF check failed: {}", e),
+                    depth,
+                    status: "error".to_string(),
+                });
+                continue;
+            }
             if pages.len() >= max_pages as usize {
                 break;
             }
@@ -310,6 +321,10 @@ pub(super) async fn web_crawl_lightpanda(
                         let doc = scraper::Html::parse_document(&content);
                         let sel = scraper::Selector::parse("a[href]").expect("valid selector");
                         for link_url in extract_internal_links(&doc, &sel, &base_url, &base_host) {
+                            // SSRF protection: validate link URL before queuing
+                            if crate::http::validate_public_url(&link_url).is_err() {
+                                continue;
+                            }
                             if !visited.contains(&link_url)
                                 && pages.len() + queue.len() < max_pages as usize
                             {
@@ -430,6 +445,17 @@ pub(super) async fn web_crawl_obscura(
         }
 
         while let Some((url_str, depth)) = queue.pop_front() {
+            // SSRF protection: validate URL before fetching
+            if let Err(e) = crate::http::validate_public_url(&url_str) {
+                pages.push(CrawledPage {
+                    url: url_str.clone(),
+                    title: None,
+                    content: format!("SSRF check failed: {}", e),
+                    depth,
+                    status: "error".to_string(),
+                });
+                continue;
+            }
             if pages.len() >= max_pages as usize {
                 break;
             }
@@ -458,6 +484,10 @@ pub(super) async fn web_crawl_obscura(
                         let doc = scraper::Html::parse_document(&content);
                         let sel = scraper::Selector::parse("a[href]").expect("valid selector");
                         for link_url in extract_internal_links(&doc, &sel, &base_url, &base_host) {
+                            // SSRF protection: validate link URL before queuing
+                            if crate::http::validate_public_url(&link_url).is_err() {
+                                continue;
+                            }
                             if !visited.contains(&link_url)
                                 && pages.len() + queue.len() < max_pages as usize
                             {

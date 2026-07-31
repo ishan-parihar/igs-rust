@@ -391,6 +391,223 @@ impl InsightStorage {
     }
 }
 
+// ─── Read-Only Snapshot for Lock-Free Reads ───────────────────────
+
+/// A read-only snapshot of the index data for lock-free concurrent reads.
+/// Contains cloned copies of the in-memory indices and articles.
+#[derive(Clone)]
+pub struct InsightSnapshot {
+    pub articles: Vec<ArticleInsight>,
+    pub entity_index: std::collections::HashMap<String, Vec<usize>>,
+    pub domain_index: std::collections::HashMap<String, Vec<usize>>,
+}
+
+impl InsightStorage {
+    /// Create a read-only snapshot of the current state for lock-free reads.
+    /// The caller should hold the lock while calling this, then release it
+    /// before performing read operations on the snapshot.
+    pub fn snapshot(&self) -> InsightSnapshot {
+        InsightSnapshot {
+            articles: self.articles.clone(),
+            entity_index: self.entity_index.clone(),
+            domain_index: self.domain_index.clone(),
+        }
+    }
+
+    /// Find cross-domain connections for an entity using a snapshot.
+    pub fn find_inter_domain_connections_snapshot(
+        snapshot: &InsightSnapshot,
+        entity: &str,
+        min_domains: usize,
+    ) -> Vec<EntityConnection> {
+        let key = entity.to_lowercase();
+        let (domain_map, entity_type) = Self::build_domain_map_for_entity_snapshot(snapshot, &key);
+
+        let domains_vec: Vec<DomainConnection> = domain_map.into_values().collect();
+        let ndomains = domains_vec.len();
+        if ndomains >= min_domains {
+            vec![EntityConnection {
+                entity: entity.to_string(),
+                entity_type,
+                domains: domains_vec,
+                connection_strength: ndomains as f64,
+            }]
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn find_all_inter_domain_connections_snapshot(
+        snapshot: &InsightSnapshot,
+        min_domains: usize,
+    ) -> Vec<EntityConnection> {
+        let mut results: Vec<EntityConnection> = Vec::new();
+
+        for key in snapshot.entity_index.keys() {
+            let (domain_map, etype) = Self::build_domain_map_for_entity_snapshot(snapshot, key);
+            let nd = domain_map.len();
+            if nd >= min_domains {
+                results.push(EntityConnection {
+                    entity: key.clone(),
+                    entity_type: etype,
+                    domains: domain_map.into_values().collect(),
+                    connection_strength: nd as f64,
+                });
+            }
+        }
+
+        results
+    }
+
+    pub fn stats_snapshot(snapshot: &InsightSnapshot) -> InsightStats {
+        let total_articles = snapshot.articles.len();
+        InsightStats {
+            total_articles,
+            total_entities: snapshot.entity_index.len(),
+            total_domains: snapshot.domain_index.len(),
+            avg_entities_per_article: if total_articles > 0 {
+                snapshot
+                    .articles
+                    .iter()
+                    .map(|a| a.entities.len() as f64)
+                    .sum::<f64>()
+                    / total_articles as f64
+            } else {
+                0.0
+            },
+            avg_domains_per_article: if total_articles > 0 {
+                snapshot
+                    .articles
+                    .iter()
+                    .map(|a| a.domains.len() as f64)
+                    .sum::<f64>()
+                    / total_articles as f64
+            } else {
+                0.0
+            },
+        }
+    }
+
+    pub fn detect_trending_snapshot(
+        snapshot: &InsightSnapshot,
+        time_window_ms: i64,
+        min_growth: f64,
+        min_current: u32,
+    ) -> Vec<TrendingEntity> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let cutoff = now - time_window_ms;
+        let half_cutoff = now - (time_window_ms * 2);
+
+        let mut results: Vec<TrendingEntity> = Vec::new();
+
+        for (name, indices) in &snapshot.entity_index {
+            let mut current_count: u32 = 0;
+            let mut previous_count: u32 = 0;
+            let mut etype = String::new();
+
+            for &idx in indices {
+                let article = &snapshot.articles[idx];
+                let t = chrono::DateTime::parse_from_rfc3339(&article.pub_date)
+                    .ok()
+                    .map(|dt| dt.timestamp_millis())
+                    .unwrap_or(0);
+
+                if etype.is_empty() {
+                    etype = article
+                        .entities
+                        .iter()
+                        .find(|e| e.name.to_lowercase() == name.as_str())
+                        .map(|e| e.entity_type.clone())
+                        .unwrap_or_default();
+                }
+
+                if t >= cutoff {
+                    current_count += 1;
+                } else if t >= half_cutoff {
+                    previous_count += 1;
+                }
+            }
+
+            if current_count < min_current {
+                continue;
+            }
+            let growth = if previous_count > 0 {
+                current_count as f64 / previous_count as f64
+            } else {
+                current_count as f64
+            };
+            if growth < min_growth {
+                continue;
+            }
+
+            results.push(TrendingEntity {
+                entity: name.clone(),
+                entity_type: etype,
+                current_mentions: current_count,
+                previous_mentions: previous_count,
+                growth,
+                normalized_growth: (growth / (1.0 + growth)).min(1.0),
+            });
+        }
+
+        results
+    }
+
+    // Helper for snapshot operations
+    fn build_domain_map_for_entity_snapshot(
+        snapshot: &InsightSnapshot,
+        key: &str,
+    ) -> (std::collections::HashMap<String, DomainConnection>, String) {
+        let mut domain_map: std::collections::HashMap<String, DomainConnection> =
+            std::collections::HashMap::new();
+        let mut entity_type = String::new();
+
+        // Primary index lookup: articles where the entity name matches `key`.
+        if let Some(indices) = snapshot.entity_index.get(key) {
+            for &idx in indices {
+                let article = &snapshot.articles[idx];
+                if entity_type.is_empty() {
+                    entity_type = article
+                        .entities
+                        .iter()
+                        .find(|e| e.name.to_lowercase() == key)
+                        .map(|e| e.entity_type.clone())
+                        .unwrap_or_default();
+                }
+                Self::add_article_domains_to_map(article, &mut domain_map);
+            }
+        }
+
+        // Alias sweep: articles where the entity appears only via normalized_id.
+        for article in &snapshot.articles {
+            let matches_normalized = article.entities.iter().any(|e| {
+                e.normalized_id
+                    .as_ref()
+                    .is_some_and(|id| id.to_lowercase() == key)
+                    && !e.name.to_lowercase().eq(key)
+            });
+            if !matches_normalized {
+                continue;
+            }
+            if entity_type.is_empty() {
+                entity_type = article
+                    .entities
+                    .iter()
+                    .find(|e| {
+                        e.normalized_id
+                            .as_ref()
+                            .is_some_and(|id| id.to_lowercase() == key)
+                    })
+                    .map(|e| e.entity_type.clone())
+                    .unwrap_or_default();
+            }
+            Self::add_article_domains_to_map(article, &mut domain_map);
+        }
+
+        (domain_map, entity_type)
+    }
+}
+
 // ─── Sync Settings Loader ───────────────────────────────────────
 
 /// Load settings synchronously (for use in non-async constructors).

@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Mutex;
 use tokio::time::Duration as TokioDuration;
 use tokio_util::sync::CancellationToken;
 
@@ -399,7 +399,7 @@ impl MonitorManager {
 
         tokio::spawn(async move {
             let mut next_poll: HashMap<String, u64> = HashMap::new();
-            let mut interval = TokioDuration::from_secs(10);
+            let interval = TokioDuration::from_secs(10);
 
             loop {
                 tokio::select! {

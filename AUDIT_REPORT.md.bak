@@ -7,19 +7,20 @@
 
 ---
 
-
 ## Executive Summary
 
-| Severity | Count | Categories | Status |
-|----------|-------|------------|--------|
-| **CRITICAL** | 11 | Production panics, SSRF, unbounded memory, poisoned mutexes | ✅ **FIXED** |
-| **HIGH** | 18 | Error-chain loss, input validation gaps, concurrency races, version skew | ✅ **FIXED** |
-| **MEDIUM** | 23 | Unused error variants, O(N²) rebuilds, TOCTOU, schema defaults | ✅ **4 HIGH-IMPACT FIXED**, 19 remaining |
-| **LOW** | 13 | Install/UX polish, test naming, doc coverage | ⏳ Deferred
+| Severity | Count | Categories |
+|----------|-------|------------|
+| **CRITICAL** | 11 | Production panics, SSRF, unbounded memory, poisoned mutexes |
+| **HIGH** | 18 | Error-chain loss, input validation gaps, concurrency races, version skew |
+| **MEDIUM** | 23 | Unused error variants, O(N²) rebuilds, TOCTOU, schema defaults |
+| **LOW** | 13 | Install/UX polish, test naming, doc coverage |
 
-**Key takeaway:** The codebase is functional and well-structured for its domain. **All CRITICAL, HIGH, and 4 HIGH-IMPACT MEDIUM findings have been resolved** — the server no longer crashes on bad input, has SSRF protection (including BFS crawl), bounded memory, correct versioning, batch inserts for semantic index, cache TOCTOU fixed, and lock-free reads via snapshots. 19 MEDIUM and 13 LOW findings remain (mostly ergonomics/polish).
+**Key takeaway:** The codebase is functional and well-structured for its domain, but has **zero SSRF protection**, **unbounded response sizes**, and **several production panic paths** that can crash the MCP server on a single malformed request. The monitor subsystem is the largest single risk surface.
 
-## CRITICAL Findings (Fix Immediately) ✅ **ALL FIXED**
+---
+
+## CRITICAL Findings (Fix Immediately)
 
 ### 1. `load_settings_sync().expect("Failed to load settings")` — Process crash on startup
 **File:** `src/server.rs:500`
@@ -96,7 +97,7 @@ self.lru_order.lock().unwrap()
 
 ---
 
-## HIGH Findings ✅ **ALL FIXED**
+## HIGH Findings
 
 ### 12. Systemic `.map_err(|e| format!("X error: {}", e))?` — 53+ sites lose error chain
 **Pattern:** Every tool file (finance, gdelt, govt, politics, health, env, data_sources, weather, legal, patents, climate, plugins, research, news, monitor, sources, pools, reddit, youtube, lp_mcp, web/extractors, web/engines, server, satellite).
@@ -262,7 +263,7 @@ let tool_groups = settings.tool_groups.unwrap_or_default();
 | **P1 — Security Boundary** | 2, 3, 12, 13, 18, 19, 20 | SSRF, memory DoS, path traversal, error chain loss |
 | **P2 — Correctness** | 9, 10, 11, 14, 15, 16, 17 | Version skew, invariant coupling, blocking in async, semaphore leak |
 | **P3 — Ergonomics** | 21, 22, 23, 24, 25, 26, 27, 28, 29 | UX polish, defaults, docs, test coverage |
-| **P4 — Architecture** | 30-33, 35, 37, 39-52 | Variant usage, schema hygiene (O(N²), lock contention, cache TOCTOU, web_crawl SSRF fixed) |
+| **P4 — Architecture** | 30-52 | Variant usage, O(N²), lock contention, schema hygiene |
 | **P5 — Polish** | 53-65 | Install, hooks, docs, minor asymmetry |
 
 ---
@@ -272,12 +273,12 @@ let tool_groups = settings.tool_groups.unwrap_or_default();
 | # | Change | Effort |
 |---|--------|--------|
 | 1 | `load_settings_sync().expect(...) → ?` | 1 line |
-| 7 | `HeaderValue::from_str(...).expect(...) → .map_err(AppError::validation(...))?` | 4 lines × 4 sites | ✅ **DONE**
-| 9 | `"0.2.0" → env!("CARGO_PKG_VERSION")` | 1 line | ✅ **DONE**
-| 27 | Read `settings.output.default_format` in `resolve_format` | 3 lines | ✅ **DONE**
-| 28 | Default `tool_groups` to minimal safe set | 1 line + config | ✅ **DONE**
-| 37 | `Selector::parse(...).ok()? → match + warn` | 2 lines × 9 sites | ❌ Not done
-| 41 | Validate `NewsTestInput.id` non-empty & known | 5 lines | ❌ Not done
+| 7 | `HeaderValue::from_str(...).expect(...) → .map_err(AppError::validation(...))?` | 4 lines × 4 sites |
+| 9 | `"0.2.0" → env!("CARGO_PKG_VERSION")` | 1 line |
+| 27 | Read `settings.output.default_format` in `resolve_format` | 3 lines |
+| 28 | Default `tool_groups` to minimal safe set | 1 line + config |
+| 37 | `Selector::parse(...).ok()? → match + warn` | 2 lines × 9 sites |
+| 41 | Validate `NewsTestInput.id` non-empty & known | 5 lines |
 
 ---
 
@@ -295,11 +296,10 @@ let tool_groups = settings.tool_groups.unwrap_or_default();
 
 ## Next Steps
 
-1. ✅ **Applied P0 patches** (11 fixes) — crash-free baseline restored
-2. ✅ **Implemented `validate_public_url` helper** + wired at all entry points — SSRF closed
-3. ✅ **Added redirect policy** to `HttpClient::new` — memory DoS mitigated
-4. ✅ **Fixed 4 high-impact MEDIUM issues**: SemanticIndex batch inserts, FeedCache TOCTOU, InsightStorage snapshots, web_crawl BFS SSRF
-5. **Run `cargo audit` and add to CI** — ongoing supply-chain hygiene
-6. **Fix remaining 19 MEDIUM + 13 LOW** — ergonomics, docs, polish
+1. **Apply P0 patches** (11 fixes, ~50 LOC) — restores crash-free baseline
+2. **Implement `validate_public_url` helper** + wire at 7 entry points — closes SSRF
+3. **Add `body_limit` + redirect policy** to `HttpClient::new` — closes memory DoS
+4. **Run `cargo audit` and add to CI** — ongoing supply-chain hygiene
+5. **Fix `tool_groups` default + version skew** — improves fresh-user experience
 
 All findings are from read-only analysis. No files were modified.

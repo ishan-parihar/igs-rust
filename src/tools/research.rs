@@ -452,7 +452,7 @@ pub async fn research_pubmed_search(
     };
 
     let search_data: serde_json::Value = serde_json::from_str(&search_resp.body_text)
-        .map_err(|e| format!("JSON parse error: ${e}"))?;
+        .map_err(|e| format!("JSON parse error: {e}"))?;
 
     let pmids: Vec<String> = search_data["esearchresult"]["idlist"]
         .as_array()
@@ -487,7 +487,7 @@ pub async fn research_pubmed_search(
     };
 
     let detail_data: serde_json::Value = serde_json::from_str(&detail_resp.body_text)
-        .map_err(|e| format!("JSON parse error: ${e}"))?;
+        .map_err(|e| format!("JSON parse error: {e}"))?;
 
     let mut papers = Vec::new();
     if let Some(result) = detail_data["result"].as_object() {

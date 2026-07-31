@@ -357,25 +357,6 @@ impl Default for CacheSettings {
     }
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            http: HttpSettings::default(),
-            cache: CacheSettings::default(),
-            browser: BrowserSettings::default(),
-            nlp: NlpSettings::default(),
-            output: OutputSettings::default(),
-            tool_groups: None,
-            openweather: None,
-            noaa: None,
-            courtlistener: None,
-            comtrade: None,
-            twitter: None,
-            reddit: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NoaaSettings {
@@ -405,7 +386,7 @@ pub struct RedditSettings {
     pub cookie: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Settings {
     pub http: HttpSettings,
     pub cache: CacheSettings,

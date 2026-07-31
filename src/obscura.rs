@@ -1,6 +1,5 @@
 use std::os::unix::fs::PermissionsExt;
 use std::io::Read;
-use tempfile;
 use crate::config;
 use crate::types::ObscuraSettings;
 use anyhow::{Context, Result};
@@ -211,7 +210,7 @@ impl ObscuraManager {
 
         // Validate each entry before extracting
         for entry in archive.entries().context("Failed to read archive entries")? {
-            let mut entry = entry.context("Failed to read archive entry")?;
+            let entry = entry.context("Failed to read archive entry")?;
             let path = entry.path().context("Failed to get entry path")?;
             
             // Prevent path traversal

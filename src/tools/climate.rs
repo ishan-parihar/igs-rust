@@ -45,7 +45,7 @@ pub async fn climate_noaa_observations(
     };
 
     let data: serde_json::Value =
-        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {e}"))?;
 
     if let Some(err) = data["message"].as_str() {
         return Err(AppError::other(format!("NOAA error: {}", err)));
@@ -105,7 +105,7 @@ pub async fn climate_noaa_stations(
     };
 
     let data: serde_json::Value =
-        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: ${e}"))?;
+        serde_json::from_str(&resp.body_text).map_err(|e| format!("JSON parse error: {e}"))?;
 
     if let Some(err) = data["message"].as_str() {
         return Err(AppError::other(format!("NOAA error: {}", err)));

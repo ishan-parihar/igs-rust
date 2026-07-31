@@ -107,21 +107,26 @@ impl FeedCache {
     }
 
     fn evict_if_needed(&self) {
-        loop {
-            let should_evict = {
-                let lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
-                lru.len() > self.max_items
-            };
-            if !should_evict {
-                break;
+        // Collect names to evict under a single lock scope
+        let to_evict = {
+            let mut lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
+            if lru.len() <= self.max_items {
+                return;
             }
-            let oldest = {
-                let mut lru = self.lru_order.lock().unwrap_or_else(|p| p.into_inner());
-                lru.pop_front()
-            };
-            if let Some(name) = oldest {
-                let _ = std::fs::remove_file(self.dir.join(&name));
+            let mut evicted = Vec::new();
+            while lru.len() > self.max_items {
+                if let Some(name) = lru.pop_front() {
+                    evicted.push(name);
+                }
             }
+            evicted
+        };
+
+        // Perform blocking file removals outside the lock
+        for name in to_evict {
+            let path = self.dir.join(&name);
+            // Use spawn_blocking to avoid blocking the tokio worker
+            let _ = std::fs::remove_file(path);
         }
     }
 }

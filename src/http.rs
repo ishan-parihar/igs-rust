@@ -4,7 +4,7 @@ use crate::{AppError, AppResult};
 use anyhow::Result;
 use reqwest::Client;
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -150,7 +150,7 @@ impl HttpClient {
             .brotli(true)
             .deflate(true)
             .build()
-            .map_err(|e| AppError::Http(e))?;
+            .map_err(AppError::Http)?;
 
         Ok(Self {
             cache: FeedCache::new(cache_dir),

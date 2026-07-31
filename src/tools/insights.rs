@@ -10,12 +10,11 @@ pub async fn insights_find_connections(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightFindConnectionsInput,
 ) -> AppResult<InsightFindConnectionsOutput> {
-    let storage = storage.lock().await;
+    let snapshot = storage.lock().await.snapshot();
     let min_domains = input.min_domains.unwrap_or(2) as usize;
 
     if let Some(ref entity) = input.entity {
-        // Specific entity lookup
-        let connections = storage.find_inter_domain_connections(entity, min_domains);
+        let connections = InsightStorage::find_inter_domain_connections_snapshot(&snapshot, entity, min_domains);
         let count = connections.len();
         Ok(InsightFindConnectionsOutput {
             connections,
@@ -24,13 +23,12 @@ pub async fn insights_find_connections(
             stats: None,
         })
     } else {
-        // All cross-domain entities
-        let all = storage.find_all_inter_domain_connections(min_domains);
+        let all = InsightStorage::find_all_inter_domain_connections_snapshot(&snapshot, min_domains);
         let total_found = all.len();
         let limit = input.limit.unwrap_or(20) as usize;
         let connections: Vec<EntityConnection> = all.into_iter().take(limit).collect();
         let count = connections.len();
-        let stats = storage.stats();
+        let stats = InsightStorage::stats_snapshot(&snapshot);
         Ok(InsightFindConnectionsOutput {
             connections,
             count,
@@ -45,15 +43,16 @@ pub async fn insights_trending(
     storage: &Arc<Mutex<InsightStorage>>,
     input: InsightTrendingInput,
 ) -> AppResult<InsightTrendingOutput> {
-    let storage = storage.lock().await;
+    let snapshot = storage.lock().await.snapshot();
     let window_ms = input.time_window_hours.unwrap_or(24) * 3_600_000;
-    let trending = storage.detect_trending(
+    let trending = InsightStorage::detect_trending_snapshot(
+        &snapshot,
         window_ms,
         input.min_growth.unwrap_or(2.0),
         input.min_current_mentions.unwrap_or(3),
     );
     let count = trending.len();
-    let stats = storage.stats();
+    let stats = InsightStorage::stats_snapshot(&snapshot);
     Ok(InsightTrendingOutput {
         trending,
         count,
@@ -92,8 +91,8 @@ pub async fn insights_index(
 pub async fn insights_stats(
     storage: &Arc<Mutex<InsightStorage>>,
 ) -> AppResult<InsightStatsOutput> {
-    let storage = storage.lock().await;
-    let stats = storage.stats();
+    let snapshot = storage.lock().await.snapshot();
+    let stats = InsightStorage::stats_snapshot(&snapshot);
     Ok(InsightStatsOutput { stats })
 }
 
