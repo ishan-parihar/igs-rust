@@ -265,7 +265,7 @@ pub(super) async fn web_crawl_lightpanda(
             .map_err(|e| format!("Invalid URL '{}': {}", input.url, e))?;
         let base_host = base_url.host_str().unwrap_or("").to_string();
 
-        let mut queue: std::collections::VecDeque<(String, i32)> =
+        let mut queue: std::collections::VecDeque<(String, u32)> =
             std::collections::VecDeque::new();
         let mut visited = std::collections::HashSet::new();
         visited.insert(input.url.clone());
@@ -428,7 +428,7 @@ pub(super) async fn web_crawl_obscura(
             .map_err(|e| format!("Invalid URL '{}': {}", input.url, e))?;
         let base_host = base_url.host_str().unwrap_or("").to_string();
 
-        let mut queue: std::collections::VecDeque<(String, i32)> =
+        let mut queue: std::collections::VecDeque<(String, u32)> =
             std::collections::VecDeque::new();
         let mut visited = std::collections::HashSet::new();
         visited.insert(input.url.clone());

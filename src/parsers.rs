@@ -295,89 +295,94 @@ async fn parse_generic_html(source: &Source, html: &str) -> Vec<NewsItem> {
     let mut items = Vec::new();
 
     for sel_str in &selectors {
-        if let Ok(sel) = scraper::Selector::parse(sel_str) {
-            for element in document.select(&sel) {
-                let title = extract_first_text(&element, title_sub)
-                    .or_else(|| {
-                        element
-                            .text()
-                            .collect::<String>()
-                            .split('\n')
-                            .find(|s| !s.trim().is_empty())
-                            .map(|s| s.trim().to_string())
-                    })
-                    .unwrap_or_default();
+        let sel = match scraper::Selector::parse(sel_str) {
+            Ok(sel) => sel,
+            Err(e) => {
+                tracing::warn!("Invalid CSS selector '{}' for source {}: {}", sel_str, source.id, e);
+                continue;
+            }
+        };
+        for element in document.select(&sel) {
+            let title = extract_first_text(&element, title_sub)
+                .or_else(|| {
+                    element
+                        .text()
+                        .collect::<String>()
+                        .split('\n')
+                        .find(|s| !s.trim().is_empty())
+                        .map(|s| s.trim().to_string())
+                })
+                .unwrap_or_default();
 
-                if title.is_empty() {
-                    continue;
-                }
+            if title.is_empty() {
+                continue;
+            }
 
-                let link = extract_attr(&element, link_sel, "href")
-                    .or_else(|| element.attr("href").map(|s| s.to_string()))
-                    .unwrap_or_default();
+            let link = extract_attr(&element, link_sel, "href")
+                .or_else(|| element.attr("href").map(|s| s.to_string()))
+                .unwrap_or_default();
 
-                let link = if link.starts_with('/') {
-                    let base = source.url.trim_end_matches('/').to_string();
-                    format!("{}{}", base, link)
-                } else {
-                    link
-                };
+            let link = if link.starts_with('/') {
+                let base = source.url.trim_end_matches('/').to_string();
+                format!("{}{}", base, link)
+            } else {
+                link
+            };
 
-                let content_snippet = element
-                    .text()
-                    .collect::<String>()
-                    .split_whitespace()
-                    .take(100)
-                    .collect::<Vec<_>>()
-                    .join(" ");
+            let content_snippet = element
+                .text()
+                .collect::<String>()
+                .split_whitespace()
+                .take(100)
+                .collect::<Vec<_>>()
+                .join(" ");
 
-                let date_sel = source
-                    .parser_config
-                    .as_ref()
-                    .and_then(|c| c.selectors.as_ref())
-                    .and_then(|s| s.date.as_deref());
+            let date_sel = source
+                .parser_config
+                .as_ref()
+                .and_then(|c| c.selectors.as_ref())
+                .and_then(|s| s.date.as_deref());
 
-                let (pub_date, date_confidence) = if let Some(sel_str) = date_sel {
-                    if let Ok(_sel) = scraper::Selector::parse(sel_str) {
-                        extract_first_text(&element, sel_str)
-                            .map(|raw| {
-                                let (parsed, conf) = parse_date_with_confidence(&raw);
-                                (parsed, Some(conf))
-                            })
-                            .unwrap_or_else(|| {
-                                let now = Utc::now().to_rfc3339();
-                                (now, Some("low".to_string()))
-                            })
-                    } else {
-                        let now = Utc::now().to_rfc3339();
-                        (now, Some("low".to_string()))
-                    }
+            let (pub_date, date_confidence) = if let Some(sel_str) = date_sel {
+                if let Ok(_sel) = scraper::Selector::parse(sel_str) {
+                    extract_first_text(&element, sel_str)
+                        .map(|raw| {
+                            let (parsed, conf) = parse_date_with_confidence(&raw);
+                            (parsed, Some(conf))
+                        })
+                        .unwrap_or_else(|| {
+                            let now = Utc::now().to_rfc3339();
+                            (now, Some("low".to_string()))
+                        })
                 } else {
                     let now = Utc::now().to_rfc3339();
                     (now, Some("low".to_string()))
-                };
-
-                let freshness_score = Some(calculate_freshness(&pub_date));
-                let item_id = make_item_id(&title, &link, &pub_date, &source.id);
-
-                items.push(NewsItem {
-                    id: item_id,
-                    title,
-                    link,
-                    pub_date,
-                    source_name: source_name.clone(),
-                    pool_id: pool_id.clone(),
-                    content_snippet,
-                    author: None,
-                    media_url: extract_attr(&element, "img", "src"),
-                    date_confidence,
-                    freshness_score,
-                });
-
-                // Limit per source
-                if items.len() >= 50 {
-                    break;
                 }
+            } else {
+                let now = Utc::now().to_rfc3339();
+                (now, Some("low".to_string()))
+            };
+
+            let freshness_score = Some(calculate_freshness(&pub_date));
+            let item_id = make_item_id(&title, &link, &pub_date, &source.id);
+
+            items.push(NewsItem {
+                id: item_id,
+                title,
+                link,
+                pub_date,
+                source_name: source_name.clone(),
+                pool_id: pool_id.clone(),
+                content_snippet,
+                author: None,
+                media_url: extract_attr(&element, "img", "src"),
+                date_confidence,
+                freshness_score,
+            });
+
+            // Limit per source
+            if items.len() >= 50 {
+                break;
             }
         }
         if !items.is_empty() {

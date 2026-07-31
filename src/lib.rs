@@ -1,6 +1,10 @@
 // Public API surface: `server` (IgsMcpServer), `config` (load_settings),
 // `tools` (tool implementations + types). Everything else is pub(crate)
 // to lock down the internal implementation from external consumers.
+
+// Enforce documentation on public API items.
+#![warn(missing_docs)]
+
 pub mod config;
 pub mod server;
 pub mod tools;

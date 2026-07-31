@@ -442,7 +442,7 @@ enum WebAction {
         #[arg(long)]
         query: String,
         #[arg(long, default_value = "10")]
-        max_results: i32,
+        max_results: u32,
         #[arg(long)]
         topic: Option<String>,
         /// Comma-separated list of engines: duckduckgo, wikipedia, github, hackernews, stackoverflow, youtube
@@ -469,7 +469,7 @@ enum WebAction {
         time_range: Option<TimeRange>,
         /// Return top-N BM25-scored chunks per result (chunked content)
         #[arg(long)]
-        chunks_per_source: Option<i32>,
+        chunks_per_source: Option<u32>,
     },
     /// Scrape a URL to structured markdown
     Scrape {
@@ -491,9 +491,9 @@ enum WebAction {
         #[arg(long)]
         url: String,
         #[arg(long, default_value = "2")]
-        max_depth: i32,
+        max_depth: u32,
         #[arg(long, default_value = "20")]
-        max_pages: i32,
+        max_pages: u32,
         #[arg(long)]
         obey_robots: bool,
         #[arg(long, default_value = "markdown")]
@@ -541,7 +541,7 @@ enum WebAction {
         #[arg(long)]
         query: String,
         #[arg(long, default_value = "10")]
-        max_results: i32,
+        max_results: u32,
     },
     /// Capture a screenshot of a URL via Obscura CDP headless browser
     Screenshot {
@@ -697,7 +697,7 @@ enum SecurityAction {
         #[arg(long)]
         query: String,
         #[arg(long)]
-        days_back: Option<i32>,
+        days_back: Option<u32>,
     },
     /// Search GitHub Security Advisories
     Advisories {
@@ -2102,7 +2102,7 @@ async fn main() -> anyhow::Result<()> {
                 let result = r(security::security_cve_search(CveSearchInput {
                     query,
                     severity: None,
-                    days_back: days_back.map(|d| d as u32),
+                    days_back,
                     limits: LimitInput { limit: None },
                     output: OutputOptions { format: None },
                 }, &http_client)

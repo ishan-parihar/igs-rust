@@ -62,16 +62,34 @@ pub async fn satellite_firms_fires(
         };
 
         hotspots.push(FireHotspot {
-            latitude: get_field("latitude").parse().unwrap_or(0.0),
-            longitude: get_field("longitude").parse().unwrap_or(0.0),
-            bright_ti4: get_field("bright_ti4").parse().unwrap_or(0.0),
-            scan: get_field("scan").parse().unwrap_or(0.0),
-            track: get_field("track").parse().unwrap_or(0.0),
+            latitude: get_field("latitude").parse().unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse latitude: {}", e);
+                0.0
+            }),
+            longitude: get_field("longitude").parse().unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse longitude: {}", e);
+                0.0
+            }),
+            bright_ti4: get_field("bright_ti4").parse().unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse bright_ti4: {}", e);
+                0.0
+            }),
+            scan: get_field("scan").parse().unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse scan: {}", e);
+                0.0
+            }),
+            track: get_field("track").parse().unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse track: {}", e);
+                0.0
+            }),
             acq_date: get_field("acq_date"),
             acq_time: get_field("acq_time"),
             satellite: get_field("satellite"),
             confidence: get_field("confidence"),
-            frp: get_field("frp").parse().unwrap_or(0.0),
+            frp: get_field("frp").parse().unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse frp: {}", e);
+                0.0
+            }),
             daynight: get_field("daynight"),
         });
     }

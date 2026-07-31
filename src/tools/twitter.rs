@@ -155,23 +155,23 @@ fn extract_tweet_from_result(result: &serde_json::Value) -> Option<TwitterTweet>
 
     let likes = legacy
         .get("favorite_count")
-        .and_then(|v| v.as_i64())
-        .map(|v| v as i32);
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
     let retweets = legacy
         .get("retweet_count")
-        .and_then(|v| v.as_i64())
-        .map(|v| v as i32);
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
     let replies = legacy
         .get("reply_count")
-        .and_then(|v| v.as_i64())
-        .map(|v| v as i32);
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32);
 
     let views = legacy
         .get("views")
         .and_then(|v| v.get("count"))
         .and_then(|v| v.as_str())
-        .and_then(|s| s.parse::<i64>().ok())
-        .map(|v| v as i32);
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(|v| v as u32);
 
     let hashtags: Vec<String> = legacy
         .get("entities")

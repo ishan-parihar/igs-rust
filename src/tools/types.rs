@@ -576,7 +576,7 @@ pub struct WebSearchInput {
     /// Search query
     pub query: String,
     /// Max results (default: 10)
-    pub max_results: Option<i32>,
+    pub max_results: Option<u32>,
     /// Search engines to use (auto-selected by topic if omitted).
     /// Options: duckduckgo, wikipedia, github, hackernews, stackoverflow
     pub engines: Option<Vec<String>>,
@@ -600,13 +600,13 @@ pub struct WebSearchInput {
     /// Exclude domains
     pub exclude_domains: Option<Vec<String>>,
     /// Days back (for news topic)
-    pub days: Option<i32>,
+    pub days: Option<u32>,
     /// Time range filter: "day", "week", "month", "year" (applies to HN engine)
     pub time_range: Option<String>,
     /// Number of BM25-scored chunks to return per result (for RAG workflows).
     /// When set, content is split into paragraphs, scored by query relevance,
     /// and top-N chunks are returned in the `chunks` field.
-    pub chunks_per_source: Option<i32>,
+    pub chunks_per_source: Option<u32>,
     /// Provider (backward compat, ignored)
     pub provider: Option<String>,
     #[serde(flatten)]
@@ -745,9 +745,9 @@ pub struct WebCrawlInput {
     /// Provider
     pub provider: Option<String>,
     /// Max BFS depth (default: 2)
-    pub max_depth: Option<i32>,
+    pub max_depth: Option<u32>,
     /// Max pages (default: 20)
-    pub max_pages: Option<i32>,
+    pub max_pages: Option<u32>,
     /// Respect robots.txt
     pub obey_robots: Option<bool>,
     /// Dump format
@@ -769,15 +769,15 @@ pub struct CrawledPage {
     pub url: String,
     pub title: Option<String>,
     pub content: String,
-    pub depth: i32,
+    pub depth: u32,
     pub status: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct WebCrawlMeta {
     pub provider: String,
-    pub max_depth: i32,
-    pub max_pages: i32,
+    pub max_depth: u32,
+    pub max_pages: u32,
     pub obey_robots: bool,
     pub dump_format: String,
     pub wait_until: String,
@@ -928,7 +928,7 @@ pub struct WebImageSearchInput {
     /// Search query
     pub query: String,
     /// Max results (default: 10, max: 30)
-    pub max_results: Option<i32>,
+    pub max_results: Option<u32>,
     /// Image size filter: "small", "medium", "large", "wallpaper"
     pub size: Option<String>,
     /// Image type filter: "photo", "illustration", "clipart"
@@ -2041,10 +2041,10 @@ pub struct TwitterTweet {
     pub username: String,
     pub created_at: String,
     pub url: String,
-    pub likes: Option<i32>,
-    pub retweets: Option<i32>,
-    pub replies: Option<i32>,
-    pub views: Option<i32>,
+    pub likes: Option<u32>,
+    pub retweets: Option<u32>,
+    pub replies: Option<u32>,
+    pub views: Option<u32>,
     pub is_retweet: bool,
     pub is_reply: bool,
     pub hashtags: Vec<String>,
