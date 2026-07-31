@@ -136,6 +136,7 @@ async fn merge_missing_default_sources() -> Result<()> {
     Ok(())
 }
 
+/// Load pool definitions from `pools.yml`.
 pub async fn load_pools() -> Result<PoolsFile> {
     ensure_bootstrapped().await?;
     let file = user_config_dir().join("pools.yml");
@@ -143,12 +144,14 @@ pub async fn load_pools() -> Result<PoolsFile> {
     Ok(parsed)
 }
 
+/// Save pool definitions to `pools.yml`.
 pub async fn save_pools(data: &PoolsFile) -> Result<()> {
     let file = user_config_dir().join("pools.yml");
     write_yaml(&file, data).await?;
     Ok(())
 }
 
+/// Load source definitions from `sources.yml`, merging any missing defaults.
 pub async fn load_sources() -> Result<SourcesFile> {
     ensure_bootstrapped().await?;
     merge_missing_default_sources().await?;
@@ -157,12 +160,14 @@ pub async fn load_sources() -> Result<SourcesFile> {
     Ok(parsed)
 }
 
+/// Save source definitions to `sources.yml`.
 pub async fn save_sources(data: &SourcesFile) -> Result<()> {
     let file = user_config_dir().join("sources.yml");
     write_yaml(&file, data).await?;
     Ok(())
 }
 
+/// Load application settings from `settings.yml`.
 pub async fn load_settings() -> Result<Settings> {
     ensure_bootstrapped().await?;
     let file = user_config_dir().join("settings.yml");
@@ -170,6 +175,7 @@ pub async fn load_settings() -> Result<Settings> {
     Ok(parsed)
 }
 
+/// Load country definitions from `countries.yml`.
 pub async fn load_countries() -> Result<serde_json::Value> {
     ensure_bootstrapped().await?;
     let user_file = user_config_dir().join("countries.yml");
