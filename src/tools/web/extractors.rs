@@ -1026,6 +1026,7 @@ pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) ->
 ///    `{"title": "h1", "description": "meta[name='description']"}`
 /// 2. Object with field names as keys and objects with `selector` + `attr` + `mode`:
 ///    `{"title": {"selector": "h1", "attr": "text"}}`
+///
 /// Supports three extraction modes:
 ///
 /// - `"text"` — inner text (default)
