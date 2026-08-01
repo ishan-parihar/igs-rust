@@ -1,8 +1,8 @@
-use std::os::unix::fs::PermissionsExt;
-use std::io::Read;
 use crate::config;
 use crate::types::ObscuraSettings;
 use anyhow::{Context, Result};
+use std::io::Read;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::info;
@@ -66,10 +66,7 @@ impl ObscuraManager {
 
         let arch = Self::detect_arch()?;
         let asset_name = format!("obscura-{}.tar.gz", arch);
-        let url = format!(
-            "{}/{}/{}",
-            GITHUB_DOWNLOAD_BASE, latest_version, asset_name
-        );
+        let url = format!("{}/{}/{}", GITHUB_DOWNLOAD_BASE, latest_version, asset_name);
 
         info!("Downloading Obscura {} from {}", latest_version, url);
         self.download_and_extract_binary(&url).await?;
@@ -188,47 +185,67 @@ impl ObscuraManager {
         // Check Content-Length if available
         if let Some(len) = resp.content_length() {
             if len > MAX_DOWNLOAD_SIZE {
-                anyhow::bail!("Download too large: {} bytes (max {})", len, MAX_DOWNLOAD_SIZE);
+                anyhow::bail!(
+                    "Download too large: {} bytes (max {})",
+                    len,
+                    MAX_DOWNLOAD_SIZE
+                );
             }
         }
 
         // Download with size limit
-        let bytes = resp.bytes().await.context("Failed to download Obscura binary")?;
+        let bytes = resp
+            .bytes()
+            .await
+            .context("Failed to download Obscura binary")?;
         if (bytes.len() as u64) > MAX_DOWNLOAD_SIZE {
-            anyhow::bail!("Download exceeded size limit: {} bytes (max {})", bytes.len(), MAX_DOWNLOAD_SIZE);
+            anyhow::bail!(
+                "Download exceeded size limit: {} bytes (max {})",
+                bytes.len(),
+                MAX_DOWNLOAD_SIZE
+            );
         }
 
         let temp_dir = tempfile::tempdir().context("Failed to create temp dir")?;
         let temp_path = temp_dir.path().join("obscura.tar.gz");
-        tokio::fs::write(&temp_path, &bytes).await.context("Failed to write Obscura archive")?;
+        tokio::fs::write(&temp_path, &bytes)
+            .await
+            .context("Failed to write Obscura archive")?;
 
         // Extract with size limit and path validation
-        let tar_gz = std::fs::File::open(&temp_path).context("Failed to open downloaded archive")?;
+        let tar_gz =
+            std::fs::File::open(&temp_path).context("Failed to open downloaded archive")?;
         let tar_gz = flate2::read::GzDecoder::new(tar_gz);
         let tar_gz = tar_gz.take(MAX_EXTRACTED_SIZE); // Limit decompression
         let mut archive = tar::Archive::new(tar_gz);
 
         // Validate each entry before extracting
-        for entry in archive.entries().context("Failed to read archive entries")? {
+        for entry in archive
+            .entries()
+            .context("Failed to read archive entries")?
+        {
             let entry = entry.context("Failed to read archive entry")?;
             let path = entry.path().context("Failed to get entry path")?;
-            
+
             // Prevent path traversal
             let path = path.strip_prefix("").unwrap_or(&path);
-            if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            if path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
                 anyhow::bail!("Archive contains path traversal: {}", path.display());
             }
             if path.is_absolute() {
                 anyhow::bail!("Archive contains absolute path: {}", path.display());
             }
         }
-        
+
         // Rewind and extract
         let tar_gz = std::fs::File::open(&temp_path).context("Failed to reopen archive")?;
         let tar_gz = flate2::read::GzDecoder::new(tar_gz);
         let tar_gz = tar_gz.take(MAX_EXTRACTED_SIZE);
         let mut archive = tar::Archive::new(tar_gz);
-        
+
         archive
             .unpack(&self.binary_dir)
             .context("Failed to extract Obscura archive")?;
@@ -242,9 +259,7 @@ impl ObscuraManager {
             for entry in std::fs::read_dir(&self.binary_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                if path.is_file()
-                    && path.file_name().and_then(|n| n.to_str()) == Some("obscura")
-                {
+                if path.is_file() && path.file_name().and_then(|n| n.to_str()) == Some("obscura") {
                     std::fs::rename(&path, &self.binary_path)
                         .context("Failed to move Obscura binary")?;
                     break;
@@ -319,11 +334,12 @@ impl ObscuraManager {
         use tokio::io::AsyncBufReadExt;
 
         let binary = self.ensure_ready().await?;
-        let port = 9222 + (SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            % 1000) as u16;
+        let port = 9222
+            + (SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+                % 1000) as u16;
 
         // Start Obscura in serve mode
         let mut cmd = tokio::process::Command::new(&binary);

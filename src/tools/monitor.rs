@@ -452,7 +452,7 @@ impl MonitorManager {
 
                             let handle = tokio::spawn(async move {
                                 let result = poll_monitor(&monitor_for_task, &http, &settings).await;
-                                
+
                                 // Remove from in-flight when done
                                 in_flight_clone.lock().await.remove(&monitor_id_for_spawn);
 

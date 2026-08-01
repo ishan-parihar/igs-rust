@@ -32,7 +32,9 @@ async fn file_exists(p: &Path) -> bool {
 async fn ensure_bootstrapped() -> AppResult<()> {
     let user_dir = user_config_dir();
     let pkg_dir = package_config_dir();
-    fs::create_dir_all(&user_dir).await.map_err(AppError::from)?;
+    fs::create_dir_all(&user_dir)
+        .await
+        .map_err(AppError::from)?;
 
     for f in &["pools.yml", "sources.yml", "settings.yml", "countries.yml"] {
         let target = user_dir.join(f);
@@ -93,10 +95,15 @@ async fn read_yaml<T: serde::de::DeserializeOwned>(file: &Path) -> AppResult<T> 
 
 async fn write_yaml<T: serde::Serialize>(file: &Path, data: &T) -> AppResult<()> {
     if let Some(parent) = file.parent() {
-        fs::create_dir_all(parent).await.map_err(|e| AppError::from(format!("Failed to create dir {}: {}", parent.display(), e)))?;
+        fs::create_dir_all(parent).await.map_err(|e| {
+            AppError::from(format!("Failed to create dir {}: {}", parent.display(), e))
+        })?;
     }
-    let txt = serde_yaml::to_string(data).map_err(|e| AppError::config(format!("Failed to serialize: {}", e)))?;
-    fs::write(file, txt.as_bytes()).await.map_err(|e| AppError::from(format!("Failed to write {}: {}", file.display(), e)))?;
+    let txt = serde_yaml::to_string(data)
+        .map_err(|e| AppError::config(format!("Failed to serialize: {}", e)))?;
+    fs::write(file, txt.as_bytes())
+        .await
+        .map_err(|e| AppError::from(format!("Failed to write {}: {}", file.display(), e)))?;
     Ok(())
 }
 
@@ -180,15 +187,20 @@ pub async fn load_countries() -> AppResult<serde_json::Value> {
     ensure_bootstrapped().await?;
     let user_file = user_config_dir().join("countries.yml");
     let content = if file_exists(&user_file).await {
-        fs::read_to_string(&user_file).await.map_err(AppError::from)?
+        fs::read_to_string(&user_file)
+            .await
+            .map_err(AppError::from)?
     } else {
         let pkg_file = package_config_dir().join("countries.yml");
         if file_exists(&pkg_file).await {
-            fs::read_to_string(&pkg_file).await.map_err(AppError::from)?
+            fs::read_to_string(&pkg_file)
+                .await
+                .map_err(AppError::from)?
         } else {
             return Ok(serde_json::json!({"countries": []}));
         }
     };
-    let val: serde_json::Value = serde_yaml::from_str(&content).map_err(|e| AppError::config(format!("Failed to parse YAML: {}", e)))?;
+    let val: serde_json::Value = serde_yaml::from_str(&content)
+        .map_err(|e| AppError::config(format!("Failed to parse YAML: {}", e)))?;
     Ok(val)
 }

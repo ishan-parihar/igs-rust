@@ -1,5 +1,5 @@
-use crate::tools::types::*;
 use crate::error::AppResult;
+use crate::tools::types::*;
 
 /// List available parser keys
 pub async fn parsers_list() -> AppResult<ParserListOutput> {

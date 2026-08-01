@@ -2,19 +2,23 @@
 //! Handles multi-provider scraping (default HTTP, Lightpanda, Obscura),
 //! BFS crawling, structured content extraction, and sitemap discovery.
 
+use super::scoring::{bm25_score_chunks, extract_internal_links, BM25_MIN_THRESHOLD};
 use crate::config;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
-use super::scoring::{extract_internal_links, bm25_score_chunks, BM25_MIN_THRESHOLD};
 use std::collections::HashMap;
-use crate::error::{AppError, AppResult};
 
-
-
-pub async fn web_scrape(input: WebScrapeInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<WebScrapeOutput> {
-
+pub async fn web_scrape(
+    input: WebScrapeInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
+) -> AppResult<WebScrapeOutput> {
     // Determine provider: explicit input, or browser.default from settings
-    let provider = input.provider.as_deref().unwrap_or(&settings.browser.default);
+    let provider = input
+        .provider
+        .as_deref()
+        .unwrap_or(&settings.browser.default);
 
     match provider {
         "lightpanda" => web_scrape_lightpanda(&input, settings).await,
@@ -29,14 +33,18 @@ pub(super) async fn web_scrape_default(
     http: &HttpClient,
     _settings: &crate::types::Settings,
 ) -> AppResult<WebScrapeOutput> {
-
     let body = match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                return Err(AppError::other("unexpected cached response for bypass mode"));
+                return Err(AppError::other(
+                    "unexpected cached response for bypass mode",
+                ));
             };
             if resp.status < 200 || resp.status >= 400 {
-                return Err(AppError::from(format!("HTTP {} for URL: {}", resp.status, input.url)));
+                return Err(AppError::from(format!(
+                    "HTTP {} for URL: {}",
+                    resp.status, input.url
+                )));
             }
             resp.body_text
         }
@@ -195,8 +203,10 @@ pub(super) fn extract_scrape_output(
     })
 }
 
-pub async fn web_crawl(input: WebCrawlInput, settings: &crate::types::Settings) -> AppResult<WebCrawlOutput> {
-
+pub async fn web_crawl(
+    input: WebCrawlInput,
+    settings: &crate::types::Settings,
+) -> AppResult<WebCrawlOutput> {
     // Use browser.default from settings
     let provider = &settings.browser.default;
 
@@ -217,8 +227,7 @@ pub(super) async fn web_crawl_lightpanda(
     let lp_settings = &settings.browser.lightpanda;
     if !lp_settings.enabled {
         return Err(
-            "Lightpanda is not enabled. Set browser.lightpanda.enabled=true in settings.yml"
-                .into(),
+            "Lightpanda is not enabled. Set browser.lightpanda.enabled=true in settings.yml".into(),
         );
     }
 
@@ -542,10 +551,19 @@ pub(super) async fn web_crawl_obscura(
 /// Uses space-delimited tokenization to avoid corrupting words like "cookies" → "".
 pub(super) fn remove_boilerplate(text: &str) -> String {
     let boilerplate_phrases = [
-        "privacy policy", "terms of service", "all rights reserved",
-        "subscribe to", "sign up for", "newsletter",
-        "follow us on", "share this", "tweet this",
-        "sponsored content", "loading...", "click here to", "read more:",
+        "privacy policy",
+        "terms of service",
+        "all rights reserved",
+        "subscribe to",
+        "sign up for",
+        "newsletter",
+        "follow us on",
+        "share this",
+        "tweet this",
+        "sponsored content",
+        "loading...",
+        "click here to",
+        "read more:",
     ];
     let boilerplate_words = ["cookie", "copyright", "advertisement"];
     let mut result = text.to_string();
@@ -580,7 +598,9 @@ pub(super) fn detect_content_type(doc: &scraper::Html) -> Option<String> {
     // Check JSON-LD type
     if let Ok(sel) = scraper::Selector::parse("script[type='application/ld+json']") {
         for el in doc.select(&sel) {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&el.text().collect::<String>()) {
+            if let Ok(json) =
+                serde_json::from_str::<serde_json::Value>(&el.text().collect::<String>())
+            {
                 if let Some(t) = json["@type"].as_str() {
                     return Some(t.to_string());
                 }
@@ -633,7 +653,10 @@ pub(super) fn detect_language(doc: &scraper::Html) -> Option<String> {
 /// Single-URL mode: extracts content from `input.url`.
 /// Batch mode: if `input.urls` has multiple entries, processes them in parallel
 /// (capped at 5 concurrent extractions) and returns the first successful result.
-pub async fn web_extract(input: WebExtractInput, settings: &crate::types::Settings) -> AppResult<WebExtractOutput> {
+pub async fn web_extract(
+    input: WebExtractInput,
+    settings: &crate::types::Settings,
+) -> AppResult<WebExtractOutput> {
     let obs_settings = &settings.browser.obscura;
 
     if !obs_settings.enabled {
@@ -679,7 +702,10 @@ async fn web_extract_batch(
         let wait_selector = input.wait_selector.clone();
         let output_schema = input.output_schema.clone();
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.map_err(|e| format!("Semaphore closed: {e}"))?;
+            let _permit = sem
+                .acquire()
+                .await
+                .map_err(|e| format!("Semaphore closed: {e}"))?;
             let batch_input = WebExtractInput {
                 url,
                 urls: None,
@@ -790,7 +816,11 @@ async fn extract_single_url(
                     // Reassemble in original reading order
                     let mut ordered = filtered;
                     ordered.sort_by_key(|(i, _)| *i);
-                    ordered.into_iter().map(|(_, c)| c).collect::<Vec<_>>().join("\n\n")
+                    ordered
+                        .into_iter()
+                        .map(|(_, c)| c)
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
                 } else {
                     content
                 }
@@ -845,7 +875,10 @@ async fn extract_single_url(
     };
 
     // Extract structured data via output_schema (P2.1)
-    let extracted_data = input.output_schema.as_ref().map(|schema| extract_by_schema(&doc, schema));
+    let extracted_data = input
+        .output_schema
+        .as_ref()
+        .map(|schema| extract_by_schema(&doc, schema));
 
     // Include raw HTML if requested
     let html_output = if input.include_html.unwrap_or(false) {
@@ -907,32 +940,38 @@ pub(super) fn extract_main_text(doc: &scraper::Html) -> String {
 
 /// Extract page metadata (description, OpenGraph, author, publish date)
 pub(super) fn extract_page_metadata(doc: &scraper::Html) -> ExtractMetadata {
-    let description = doc.select(&scraper::Selector::parse("meta[name='description']").unwrap())
+    let description = doc
+        .select(&scraper::Selector::parse("meta[name='description']").unwrap())
         .next()
         .and_then(|el| el.attr("content"))
         .map(|s| s.to_string());
 
-    let og_title = doc.select(&scraper::Selector::parse("meta[property='og:title']").unwrap())
+    let og_title = doc
+        .select(&scraper::Selector::parse("meta[property='og:title']").unwrap())
         .next()
         .and_then(|el| el.attr("content"))
         .map(|s| s.to_string());
 
-    let og_description = doc.select(&scraper::Selector::parse("meta[property='og:description']").unwrap())
+    let og_description = doc
+        .select(&scraper::Selector::parse("meta[property='og:description']").unwrap())
         .next()
         .and_then(|el| el.attr("content"))
         .map(|s| s.to_string());
 
-    let og_image = doc.select(&scraper::Selector::parse("meta[property='og:image']").unwrap())
+    let og_image = doc
+        .select(&scraper::Selector::parse("meta[property='og:image']").unwrap())
         .next()
         .and_then(|el| el.attr("content"))
         .map(|s| s.to_string());
 
-    let author = doc.select(&scraper::Selector::parse("meta[name='author']").unwrap())
+    let author = doc
+        .select(&scraper::Selector::parse("meta[name='author']").unwrap())
         .next()
         .and_then(|el| el.attr("content"))
         .map(|s| s.to_string());
 
-    let publish_date = doc.select(&scraper::Selector::parse("meta[property='article:published_time']").unwrap())
+    let publish_date = doc
+        .select(&scraper::Selector::parse("meta[property='article:published_time']").unwrap())
         .next()
         .and_then(|el| el.attr("content"))
         .or_else(|| {
@@ -954,7 +993,7 @@ pub(super) fn extract_page_metadata(doc: &scraper::Html) -> ExtractMetadata {
         publish_date,
         word_count,
         reading_time_minutes: Some((word_count as u32 / 200).max(1)),
-        language: None, // populated by caller via detect_language()
+        language: None,     // populated by caller via detect_language()
         content_type: None, // populated by caller via detect_content_type()
     }
 }
@@ -972,7 +1011,14 @@ pub(super) fn extract_structured_data(doc: &scraper::Html) -> Option<StructuredD
 
     // Extract OpenGraph
     let mut opengraph: HashMap<String, String> = HashMap::new();
-    for prop in &["og:title", "og:description", "og:image", "og:url", "og:type", "og:site_name"] {
+    for prop in &[
+        "og:title",
+        "og:description",
+        "og:image",
+        "og:url",
+        "og:type",
+        "og:site_name",
+    ] {
         if let Ok(sel) = scraper::Selector::parse(&format!("meta[property='{}']", prop)) {
             if let Some(el) = doc.select(&sel).next() {
                 if let Some(content) = el.attr("content") {
@@ -986,8 +1032,16 @@ pub(super) fn extract_structured_data(doc: &scraper::Html) -> Option<StructuredD
         None
     } else {
         Some(StructuredData {
-            json_ld: if json_ld.is_empty() { None } else { Some(json_ld) },
-            opengraph: if opengraph.is_empty() { None } else { Some(opengraph) },
+            json_ld: if json_ld.is_empty() {
+                None
+            } else {
+                Some(json_ld)
+            },
+            opengraph: if opengraph.is_empty() {
+                None
+            } else {
+                Some(opengraph)
+            },
         })
     }
 }
@@ -1008,7 +1062,11 @@ pub(super) fn extract_page_links(doc: &scraper::Html) -> Option<Vec<ExtractedLin
             }
         }
     }
-    if links.is_empty() { None } else { Some(links) }
+    if links.is_empty() {
+        None
+    } else {
+        Some(links)
+    }
 }
 
 /// Extract all images from the page
@@ -1029,11 +1087,18 @@ pub(super) fn extract_page_images(doc: &scraper::Html) -> Option<Vec<ExtractedIm
             }
         }
     }
-    if images.is_empty() { None } else { Some(images) }
+    if images.is_empty() {
+        None
+    } else {
+        Some(images)
+    }
 }
 
 /// Extract elements by CSS selectors
-pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) -> Option<Vec<ExtractedElement>> {
+pub(super) fn extract_by_selectors(
+    doc: &scraper::Html,
+    selectors: &[String],
+) -> Option<Vec<ExtractedElement>> {
     let mut elements = Vec::new();
     for selector_str in selectors {
         if let Ok(sel) = scraper::Selector::parse(selector_str) {
@@ -1048,7 +1113,11 @@ pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) ->
             }
         }
     }
-    if elements.is_empty() { None } else { Some(elements) }
+    if elements.is_empty() {
+        None
+    } else {
+        Some(elements)
+    }
 }
 
 /// Extract structured data by matching a JSON schema to CSS selectors.
@@ -1063,7 +1132,10 @@ pub(super) fn extract_by_selectors(doc: &scraper::Html, selectors: &[String]) ->
 /// - `"text"` — inner text (default)
 /// - `"html"` — inner HTML
 /// - `"attr"` — attribute value
-pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value) -> serde_json::Value {
+pub(super) fn extract_by_schema(
+    doc: &scraper::Html,
+    schema: &serde_json::Value,
+) -> serde_json::Value {
     let Some(obj) = schema.as_object() else {
         return serde_json::json!({});
     };
@@ -1075,7 +1147,8 @@ pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value)
             // Simple form: {"title": "h1"} — CSS selector as string value
             serde_json::Value::String(selector_str) => {
                 if let Ok(sel) = scraper::Selector::parse(selector_str) {
-                    let values: Vec<String> = doc.select(&sel)
+                    let values: Vec<String> = doc
+                        .select(&sel)
                         .map(|el| el.text().collect::<String>().trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect();
@@ -1103,13 +1176,12 @@ pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value)
                 }
 
                 if let Ok(sel) = scraper::Selector::parse(selector_str) {
-                    let values: Vec<String> = doc.select(&sel)
-                        .filter_map(|el| {
-                            match mode {
-                                "html" => Some(el.html()),
-                                "attr" => attr.and_then(|a| el.attr(a)).map(|s| s.to_string()),
-                                _ => Some(el.text().collect::<String>().trim().to_string()),
-                            }
+                    let values: Vec<String> = doc
+                        .select(&sel)
+                        .filter_map(|el| match mode {
+                            "html" => Some(el.html()),
+                            "attr" => attr.and_then(|a| el.attr(a)).map(|s| s.to_string()),
+                            _ => Some(el.text().collect::<String>().trim().to_string()),
                         })
                         .filter(|s| !s.is_empty())
                         .collect();
@@ -1135,7 +1207,10 @@ pub(super) fn extract_by_schema(doc: &scraper::Html, schema: &serde_json::Value)
 }
 
 /// Take a screenshot of a URL via Obscura's CDP headless browser.
-pub async fn web_screenshot(input: WebScreenshotInput, settings: &crate::types::Settings) -> AppResult<WebScreenshotOutput> {
+pub async fn web_screenshot(
+    input: WebScreenshotInput,
+    settings: &crate::types::Settings,
+) -> AppResult<WebScreenshotOutput> {
     let obs_settings = &settings.browser.obscura;
     if !obs_settings.enabled {
         return Err(
@@ -1172,7 +1247,11 @@ pub async fn web_screenshot(input: WebScreenshotInput, settings: &crate::types::
 }
 
 /// Discover URLs on a website by analyzing sitemap and links.
-pub async fn web_map(input: WebMapInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<WebMapOutput> {
+pub async fn web_map(
+    input: WebMapInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
+) -> AppResult<WebMapOutput> {
     let _cache_dir = http_mod::resolve_cache_dir(settings, &config::user_config_dir());
 
     let base_url = input.url.trim_end_matches('/');

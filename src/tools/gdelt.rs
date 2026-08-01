@@ -8,13 +8,13 @@
 //! - Article list: query the GDELT DOC 2.0 API for article metadata
 //! - Timeline: get mention volume over time for a topic
 
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::LimitInput;
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GdeltEvent {
@@ -84,7 +84,10 @@ pub struct GdeltArticleListOutput {
 }
 
 /// Search GDELT Events 2.0 API for events matching the query.
-pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient) -> AppResult<GdeltSearchOutput> {
+pub async fn gdelt_search(
+    input: GdeltSearchInput,
+    http: &HttpClient,
+) -> AppResult<GdeltSearchOutput> {
     let limit = input.limit.unwrap_or(50).min(250);
     let query_enc = urlencoding(&input.query);
 
@@ -107,7 +110,9 @@ pub async fn gdelt_search(input: GdeltSearchInput, http: &HttpClient) -> AppResu
         .map_err(|e| format!("GDELT API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -164,7 +169,9 @@ pub async fn gdelt_article_list(
         .map_err(|e| format!("GDELT API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)

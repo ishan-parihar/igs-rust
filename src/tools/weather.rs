@@ -1,6 +1,6 @@
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
-use crate::error::{AppError, AppResult};
 
 /// Get weather forecast for a location using OpenWeatherMap 5-day/3-hour forecast API.
 pub async fn weather_forecast(
@@ -34,7 +34,9 @@ pub async fn weather_forecast(
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -91,7 +93,11 @@ pub async fn weather_forecast(
 }
 
 /// Get current weather for a location using OpenWeatherMap current weather API.
-pub async fn weather_current(input: WeatherCurrentInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<WeatherCurrentOutput> {
+pub async fn weather_current(
+    input: WeatherCurrentInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
+) -> AppResult<WeatherCurrentOutput> {
     let api_key = settings
         .openweather
         .as_ref()
@@ -115,7 +121,9 @@ pub async fn weather_current(input: WeatherCurrentInput, http: &HttpClient, sett
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -157,7 +165,11 @@ pub async fn weather_current(input: WeatherCurrentInput, http: &HttpClient, sett
 }
 
 /// Get weather alerts for a lat/lon location using OpenWeatherMap One Call API.
-pub async fn weather_alerts(input: WeatherAlertsInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<WeatherAlertsOutput> {
+pub async fn weather_alerts(
+    input: WeatherAlertsInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
+) -> AppResult<WeatherAlertsOutput> {
     let api_key = settings
         .openweather
         .as_ref()
@@ -180,7 +192,9 @@ pub async fn weather_alerts(input: WeatherAlertsInput, http: &HttpClient, settin
         .map_err(|e| format!("OpenWeatherMap API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)

@@ -1,10 +1,10 @@
 use crate::config;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::find_feed_url;
 use crate::tools::types::*;
 use crate::types::*;
 use std::collections::HashMap;
-use crate::error::{AppError, AppResult};
 
 /// List sources with optional pool/active filters
 pub async fn sources_list(params: SourceListInput) -> AppResult<SourceListOutput> {
@@ -80,11 +80,16 @@ pub async fn sources_delete(input: SourceDeleteInput) -> AppResult<SourceDeleteO
 }
 
 /// Auto-discover feeds/selectors from a homepage URL
-pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -> AppResult<AutodiscoverOutput> {
+pub async fn sources_autodiscover(
+    input: AutodiscoverInput,
+    http: &HttpClient,
+) -> AppResult<AutodiscoverOutput> {
     match http.fetch(&input.url, None, "bypass").await {
         Ok(outcome) => {
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                return Err(AppError::other("unexpected cached response for bypass mode"));
+                return Err(AppError::other(
+                    "unexpected cached response for bypass mode",
+                ));
             };
             let body = resp.body_text;
             let feed_url = find_feed_url(&body, &input.url);
@@ -96,8 +101,7 @@ pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -
                     sample: vec![],
                 })
             } else {
-                let sitemap_url =
-                    format!("{}/sitemap.xml", input.url.trim_end_matches('/'));
+                let sitemap_url = format!("{}/sitemap.xml", input.url.trim_end_matches('/'));
                 match http.fetch(&sitemap_url, None, "bypass").await {
                     Ok(_) => Ok(AutodiscoverOutput {
                         kind: "sitemap".into(),
@@ -117,9 +121,7 @@ pub async fn sources_autodiscover(input: AutodiscoverInput, http: &HttpClient) -
 }
 
 /// Enable generic HTML scraping for a source
-pub async fn sources_enable_scraper(
-    input: EnableScraperInput,
-) -> AppResult<EnableScraperOutput> {
+pub async fn sources_enable_scraper(input: EnableScraperInput) -> AppResult<EnableScraperOutput> {
     match config::load_sources().await {
         Ok(mut sf) => {
             if let Some(idx) = sf.sources.iter().position(|s| s.id == input.id) {

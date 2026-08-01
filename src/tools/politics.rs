@@ -1,9 +1,12 @@
 use super::types::*;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
-use crate::error::{AppError, AppResult};
 
-pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient) -> AppResult<PoliticsFecOutput> {
+pub async fn politics_fec_candidates(
+    input: PoliticsFecInput,
+    http: &HttpClient,
+) -> AppResult<PoliticsFecOutput> {
     let name = urlencoding(&input.name);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -25,7 +28,9 @@ pub async fn politics_fec_candidates(input: PoliticsFecInput, http: &HttpClient)
         .map_err(|e| format!("FEC API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =
@@ -84,7 +89,9 @@ pub async fn politics_fec_committees(
         .map_err(|e| format!("FEC API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =

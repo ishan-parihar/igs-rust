@@ -1,9 +1,9 @@
+use crate::error::AppResult;
 use crate::server::InsightStorage;
 use crate::tools::types::*;
 use crate::types::*;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::error::AppResult;
 
 /// Unified connection finder: specific entity OR all cross-domain entities
 pub async fn insights_find_connections(
@@ -14,7 +14,8 @@ pub async fn insights_find_connections(
     let min_domains = input.min_domains.unwrap_or(2) as usize;
 
     if let Some(ref entity) = input.entity {
-        let connections = InsightStorage::find_inter_domain_connections_snapshot(&snapshot, entity, min_domains);
+        let connections =
+            InsightStorage::find_inter_domain_connections_snapshot(&snapshot, entity, min_domains);
         let count = connections.len();
         Ok(InsightFindConnectionsOutput {
             connections,
@@ -23,7 +24,8 @@ pub async fn insights_find_connections(
             stats: None,
         })
     } else {
-        let all = InsightStorage::find_all_inter_domain_connections_snapshot(&snapshot, min_domains);
+        let all =
+            InsightStorage::find_all_inter_domain_connections_snapshot(&snapshot, min_domains);
         let total_found = all.len();
         let limit = input.limit.unwrap_or(20) as usize;
         let connections: Vec<EntityConnection> = all.into_iter().take(limit).collect();
@@ -88,18 +90,14 @@ pub async fn insights_index(
 }
 
 /// Get statistics about indexed articles
-pub async fn insights_stats(
-    storage: &Arc<Mutex<InsightStorage>>,
-) -> AppResult<InsightStatsOutput> {
+pub async fn insights_stats(storage: &Arc<Mutex<InsightStorage>>) -> AppResult<InsightStatsOutput> {
     let snapshot = storage.lock().await.snapshot();
     let stats = InsightStorage::stats_snapshot(&snapshot);
     Ok(InsightStatsOutput { stats })
 }
 
 /// Clear all indexed articles from the insight engine
-pub async fn insights_clear(
-    storage: &Arc<Mutex<InsightStorage>>,
-) -> AppResult<InsightClearOutput> {
+pub async fn insights_clear(storage: &Arc<Mutex<InsightStorage>>) -> AppResult<InsightClearOutput> {
     let mut storage = storage.lock().await;
     storage.clear();
     Ok(InsightClearOutput { cleared: true })

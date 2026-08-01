@@ -1,10 +1,13 @@
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use chrono::{Duration, Utc};
-use crate::error::{AppError, AppResult};
 
-pub async fn security_cve_search(input: CveSearchInput, http: &HttpClient) -> AppResult<CveSearchOutput> {
+pub async fn security_cve_search(
+    input: CveSearchInput,
+    http: &HttpClient,
+) -> AppResult<CveSearchOutput> {
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
     let days_back = input.days_back.unwrap_or(30);
     let query_enc = urlencoding(&input.query);
@@ -255,7 +258,12 @@ pub async fn security_advisories(
                 }
             }
         }
-        Err(e) => return Err(AppError::other(format!("GitHub Advisory API request failed: {}", e))),
+        Err(e) => {
+            return Err(AppError::other(format!(
+                "GitHub Advisory API request failed: {}",
+                e
+            )))
+        }
     }
 
     Ok(SecurityAdvisoryOutput {

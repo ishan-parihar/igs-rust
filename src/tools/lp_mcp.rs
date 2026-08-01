@@ -1,8 +1,8 @@
 use crate::tools::types::*;
 use tokio::sync::Mutex;
 
-use std::sync::OnceLock;
 use crate::error::AppResult;
+use std::sync::OnceLock;
 
 static CURRENT_URL: OnceLock<Mutex<String>> = OnceLock::new();
 

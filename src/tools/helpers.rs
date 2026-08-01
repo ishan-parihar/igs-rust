@@ -1,8 +1,10 @@
 // Re-export shared toon-helper functions
-pub use toon_helper::{toon_encode, format_text, truncate_str, truncate_json_strings, print_output};
+pub use toon_helper::{
+    format_text, print_output, toon_encode, truncate_json_strings, truncate_str,
+};
 
 // Re-export NLP utilities for backward compatibility
-pub use super::nlp::{extract_topics, extract_basic_entities, basic_sentiment};
+pub use super::nlp::{basic_sentiment, extract_basic_entities, extract_topics};
 
 /// URL-encode a string
 pub fn urlencoding(s: &str) -> String {

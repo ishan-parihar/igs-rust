@@ -1,8 +1,8 @@
 use super::types::*;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use std::collections::HashMap;
-use crate::error::{AppError, AppResult};
 
 pub async fn climate_noaa_observations(
     input: ClimateNoaaInput,
@@ -41,7 +41,9 @@ pub async fn climate_noaa_observations(
         .map_err(|e| format!("NOAA API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =
@@ -101,7 +103,9 @@ pub async fn climate_noaa_stations(
         .map_err(|e| format!("NOAA API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =

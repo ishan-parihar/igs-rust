@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue};
 
-use crate::tools::types::*;
 use crate::error::{AppError, AppResult};
+use crate::tools::types::*;
 
 // ── Constants ───────────────────────────────────────────────
 
@@ -291,7 +291,10 @@ fn extract_tweets_from_timeline(data: &serde_json::Value) -> Vec<TwitterTweet> {
 
 // ── Public API ─────────────────────────────────────────────
 
-pub async fn twitter_search(input: TwitterSearchInput, settings: &crate::types::Settings) -> AppResult<TwitterSearchOutput> {
+pub async fn twitter_search(
+    input: TwitterSearchInput,
+    settings: &crate::types::Settings,
+) -> AppResult<TwitterSearchOutput> {
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
         return Err(
@@ -343,7 +346,10 @@ pub async fn twitter_search(input: TwitterSearchInput, settings: &crate::types::
     })
 }
 
-pub async fn twitter_read(input: TwitterReadInput, settings: &crate::types::Settings) -> AppResult<TwitterReadOutput> {
+pub async fn twitter_read(
+    input: TwitterReadInput,
+    settings: &crate::types::Settings,
+) -> AppResult<TwitterReadOutput> {
     let twitter = settings.twitter.as_ref().ok_or("Twitter not configured")?;
     if !twitter.enabled {
         return Err(

@@ -18,7 +18,10 @@ mod platform_tests {
 
         let output = result.unwrap();
         assert!(output.count > 0, "Expected at least 1 result");
-        assert!(!output.videos.is_empty(), "Videos vector should not be empty");
+        assert!(
+            !output.videos.is_empty(),
+            "Videos vector should not be empty"
+        );
 
         let video = &output.videos[0];
         assert!(!video.id.is_empty(), "Video ID should not be empty");
@@ -122,8 +125,13 @@ mod platform_tests {
             output: OutputOptions { format: None },
         };
 
-        let Ok(settings) = igs_rust_mcp::config::load_settings().await else { return; };
-        let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+        let Ok(settings) = igs_rust_mcp::config::load_settings().await else {
+            return;
+        };
+        let cache_dir = igs_rust_mcp::http::resolve_cache_dir(
+            &settings,
+            &igs_rust_mcp::config::user_config_dir(),
+        );
         let _http = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
         let result = twitter::twitter_search(input, &settings).await;
         if let Err(err) = result {
@@ -138,8 +146,13 @@ mod platform_tests {
             output: OutputOptions { format: None },
         };
 
-        let Ok(settings) = igs_rust_mcp::config::load_settings().await else { return; };
-        let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+        let Ok(settings) = igs_rust_mcp::config::load_settings().await else {
+            return;
+        };
+        let cache_dir = igs_rust_mcp::http::resolve_cache_dir(
+            &settings,
+            &igs_rust_mcp::config::user_config_dir(),
+        );
         let _http = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir);
         let result = twitter::twitter_read(input, &settings).await;
         assert!(result.is_err(), "Twitter read without cookie should fail");

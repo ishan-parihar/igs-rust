@@ -2,7 +2,10 @@ use super::helpers::urlencoding;
 use super::types::*;
 use crate::error::{AppError, AppResult};
 
-pub async fn legal_search_cases(input: LegalSearchInput, settings: &crate::types::Settings) -> AppResult<LegalSearchOutput> {
+pub async fn legal_search_cases(
+    input: LegalSearchInput,
+    settings: &crate::types::Settings,
+) -> AppResult<LegalSearchOutput> {
     let api_key = settings
         .courtlistener
         .as_ref()

@@ -1,7 +1,7 @@
 use crate::config;
+use crate::error::{AppError, AppResult};
 use crate::tools::types::*;
 use crate::types::*;
-use crate::error::{AppError, AppResult};
 
 /// List all configured pools
 pub async fn pools_list() -> AppResult<PoolListOutput> {

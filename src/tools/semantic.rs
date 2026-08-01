@@ -231,7 +231,6 @@ impl Default for SemanticIndex {
 
 use super::nlp::tokenize;
 
-
 fn cosine_similarity(a: &HashMap<String, f64>, b: &HashMap<String, f64>) -> f64 {
     let mut dot = 0.0;
     let a_shorter = a.len() < b.len();

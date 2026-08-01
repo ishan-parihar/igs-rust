@@ -19,31 +19,56 @@ pub fn text_density(html: &str) -> f64 {
 /// Copied from CRW's readability.rs selector list.
 pub const SCORED_SELECTORS: &[&str] = &[
     // Priority: semantic HTML first
-    "article", "main", "[role='main']",
+    "article",
+    "main",
+    "[role='main']",
     // Content containers
-    ".post-content", ".article-body", ".entry-content",
-    ".article-content", ".post-body", ".story-body",
-    ".content-body", "#main-content", "#article",
-    "#content", ".content", ".main",
-    "[itemprop='articleBody']", "[itemprop='text']",
+    ".post-content",
+    ".article-body",
+    ".entry-content",
+    ".article-content",
+    ".post-body",
+    ".story-body",
+    ".content-body",
+    "#main-content",
+    "#article",
+    "#content",
+    ".content",
+    ".main",
+    "[itemprop='articleBody']",
+    "[itemprop='text']",
     // MDN
     ".main-page-content",
     // StackOverflow
-    ".js-post-body", ".s-prose", "#question",
+    ".js-post-body",
+    ".s-prose",
+    "#question",
     // Generic
-    ".page-content", "#page-content", "[role='article']",
+    ".page-content",
+    "#page-content",
+    "[role='article']",
     // Wikipedia / MediaWiki
-    ".mw-parser-output", "#mw-content-text",
-    "#bodyContent", ".mw-body-content",
+    ".mw-parser-output",
+    "#mw-content-text",
+    "#bodyContent",
+    ".mw-body-content",
 ];
 
 /// Inner selectors for drill-down when a priority selector is too broad (>90% of body).
 pub const DRILL_DOWN_SELECTORS: &[&str] = &[
-    ".main-page-content", ".article-content", ".post-content",
-    ".entry-content", ".content-body", ".article-body",
-    "[itemprop='articleBody']", "[itemprop='text']",
-    ".mw-parser-output", "#mw-content-text", "#content",
-    ".content", "article",
+    ".main-page-content",
+    ".article-content",
+    ".post-content",
+    ".entry-content",
+    ".content-body",
+    ".article-body",
+    "[itemprop='articleBody']",
+    "[itemprop='text']",
+    ".mw-parser-output",
+    "#mw-content-text",
+    "#content",
+    ".content",
+    "article",
 ];
 
 /// When a priority selector is "too broad" (>90% of body), drill down into it
@@ -143,4 +168,3 @@ pub fn extract_ddg_redirect_url(href: &str) -> Option<String> {
         .find(|(k, _)| k == "x")
         .map(|(_, v)| v.to_string())
 }
-

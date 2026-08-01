@@ -1,4 +1,5 @@
 use crate::config;
+use crate::error::{AppError, AppResult};
 use crate::parsers;
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
@@ -7,7 +8,6 @@ use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
-use crate::error::{AppError, AppResult};
 
 const REDDIT_USER_AGENT: &str =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Brave/Chrome/145.0.0.0 Safari/537.36";
@@ -63,7 +63,9 @@ async fn load_reddit_cookie() -> AppResult<String> {
         .reddit
         .and_then(|r| r.cookie)
         .filter(|c| !c.is_empty())
-        .ok_or_else(|| AppError::from("Reddit cookie not configured. Add reddit.cookie to settings.yml"))
+        .ok_or_else(|| {
+            AppError::from("Reddit cookie not configured. Add reddit.cookie to settings.yml")
+        })
 }
 
 /// Build a dedicated reqwest Client for Reddit with browser-like headers.
@@ -146,7 +148,10 @@ async fn reddit_get(client: &Client, url: &str) -> AppResult<String> {
                     return Err(AppError::from(format!("HTTP {} from {}", status, url)));
                 }
 
-                return resp.text().await.map_err(|e| AppError::from(format!("Read error: {}", e)));
+                return resp
+                    .text()
+                    .await
+                    .map_err(|e| AppError::from(format!("Read error: {}", e)));
             }
             Err(e) => {
                 last_err = e.to_string();

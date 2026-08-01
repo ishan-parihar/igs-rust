@@ -1117,14 +1117,14 @@ fn print_next_step(hints: &[&str]) {
 }
 
 /// Helper: load settings + create HttpClient (eliminates 3-line boilerplate)
-async fn cli_http_client() -> anyhow::Result<(igs_rust_mcp::Settings, igs_rust_mcp::http::HttpClient)> {
+async fn cli_http_client(
+) -> anyhow::Result<(igs_rust_mcp::Settings, igs_rust_mcp::http::HttpClient)> {
     let settings = igs_rust_mcp::config::load_settings().await?;
-    let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
+    let cache_dir =
+        igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
     let http_client = igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?;
     Ok((settings, http_client))
 }
-
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -1137,8 +1137,14 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let settings = igs_rust_mcp::config::load_settings().await.unwrap_or_default();
-    let fmt = cli.format.as_deref().or(Some(settings.output.default_format.as_str())).unwrap_or("toon");
+    let settings = igs_rust_mcp::config::load_settings()
+        .await
+        .unwrap_or_default();
+    let fmt = cli
+        .format
+        .as_deref()
+        .or(Some(settings.output.default_format.as_str()))
+        .unwrap_or("toon");
     let full = cli.full;
     match cli.command {
         // ── AXI §8 + §10: no-args home view shows live state + tool identity ──
@@ -1161,10 +1167,22 @@ async fn main() -> anyhow::Result<()> {
             let groups = registry::TOOL_GROUPS;
             let total_tools: usize = groups.iter().map(|g| g.tools.len()).sum();
             // AXI §4: Include total count header
-            println!("count: {} tool groups ({} total tools)", groups.len(), total_tools);
-            println!("tool_groups[{}]{{name,description,tool_count}}:", groups.len());
+            println!(
+                "count: {} tool groups ({} total tools)",
+                groups.len(),
+                total_tools
+            );
+            println!(
+                "tool_groups[{}]{{name,description,tool_count}}:",
+                groups.len()
+            );
             for g in groups {
-                println!("  {},{},{}", g.name, truncate_str(g.description, 60), g.tools.len());
+                println!(
+                    "  {},{},{}",
+                    g.name,
+                    truncate_str(g.description, 60),
+                    g.tools.len()
+                );
             }
             println!();
 
@@ -1181,38 +1199,58 @@ async fn main() -> anyhow::Result<()> {
 
                     // AXI §8: Quick news snapshot from first active pool
                     if let Some(first_pool) = pools.pools.first() {
-                        let Ok(axi_settings) = igs_rust_mcp::config::load_settings().await else { return Ok(()); };
-                        let axi_cache = igs_rust_mcp::http::resolve_cache_dir(&axi_settings, &igs_rust_mcp::config::user_config_dir());
-                        let axi_http = std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&axi_settings.http, &axi_cache)?);
-                        if let Ok(result) = news::news_fetch(NewsFetchInput {
-                            filters: DiscoveryFilters {
-                                pools: Some(vec![first_pool.id.clone()]),
-                                sources: None,
-                                countries: None,
-                                cities: None,
-                                domains: None,
-                                start: None,
-                                end: None,
-                                keywords: None,
-                                exclude_keywords: None,
-                                match_all: None,
-                                limit: Some(3),
-                                cache_mode: Some("fresh".to_string()),
+                        let Ok(axi_settings) = igs_rust_mcp::config::load_settings().await else {
+                            return Ok(());
+                        };
+                        let axi_cache = igs_rust_mcp::http::resolve_cache_dir(
+                            &axi_settings,
+                            &igs_rust_mcp::config::user_config_dir(),
+                        );
+                        let axi_http = std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(
+                            &axi_settings.http,
+                            &axi_cache,
+                        )?);
+                        if let Ok(result) = news::news_fetch(
+                            NewsFetchInput {
+                                filters: DiscoveryFilters {
+                                    pools: Some(vec![first_pool.id.clone()]),
+                                    sources: None,
+                                    countries: None,
+                                    cities: None,
+                                    domains: None,
+                                    start: None,
+                                    end: None,
+                                    keywords: None,
+                                    exclude_keywords: None,
+                                    match_all: None,
+                                    limit: Some(3),
+                                    cache_mode: Some("fresh".to_string()),
+                                },
+                                discovery_mode: None,
+                                urgency: None,
+                                skip_enrich: Some(true),
+                                skip_index: Some(true),
+                                depth_opts: DepthOptions { depth: None },
+                                output: OutputOptions { format: None },
                             },
-                            discovery_mode: None,
-                            urgency: None,
-                            skip_enrich: Some(true),
-                            skip_index: Some(true),
-                            depth_opts: DepthOptions { depth: None },
-                            output: OutputOptions { format: None },
-                        }, axi_http.clone(), &axi_settings)
+                            axi_http.clone(),
+                            &axi_settings,
+                        )
                         .await
                         {
                             if !result.items.is_empty() {
                                 println!();
-                                println!("recent[{}]{{title,source,published}}:", result.items.len());
+                                println!(
+                                    "recent[{}]{{title,source,published}}:",
+                                    result.items.len()
+                                );
                                 for item in &result.items {
-                                    println!("  {},{},{}", truncate_str(&item.title, 80), item.source_name, truncate_str(&item.pub_date, 10));
+                                    println!(
+                                        "  {},{},{}",
+                                        truncate_str(&item.title, 80),
+                                        item.source_name,
+                                        truncate_str(&item.pub_date, 10)
+                                    );
                                 }
                             }
                         }
@@ -1449,7 +1487,11 @@ async fn main() -> anyhow::Result<()> {
             SourceAction::Discover { url, pool, name } => {
                 let pools = pool.map(|p| vec![p]);
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(sources::sources_autodiscover(AutodiscoverInput { url, pools, name }, &http_client).await)?;
+                let result = r(sources::sources_autodiscover(
+                    AutodiscoverInput { url, pools, name },
+                    &http_client,
+                )
+                .await)?;
                 output(fmt, &result);
             }
             SourceAction::Countries => {
@@ -1480,9 +1522,7 @@ async fn main() -> anyhow::Result<()> {
                 if result.domains.is_empty() {
                     eprintln!("  0 domains found — igs sources upsert to add sources first");
                 }
-                print_next_step(&[
-                    "igs sources list to see sources by domain",
-                ]);
+                print_next_step(&["igs sources list to see sources by domain"]);
             }
         },
 
@@ -1508,28 +1548,32 @@ async fn main() -> anyhow::Result<()> {
                 let (settings, http_client) = cli_http_client().await?;
 
                 let http_client = std::sync::Arc::new(http_client);
-                let result = r(news::news_fetch(NewsFetchInput {
-                    filters: DiscoveryFilters {
-                        pools,
-                        sources: srcs,
-                        countries,
-                        cities,
-                        domains,
-                        start,
-                        end,
-                        keywords: kw,
-                        exclude_keywords,
-                        match_all: Some(match_all),
-                        limit: Some(limit),
-                        cache_mode: Some(cache_mode),
+                let result = r(news::news_fetch(
+                    NewsFetchInput {
+                        filters: DiscoveryFilters {
+                            pools,
+                            sources: srcs,
+                            countries,
+                            cities,
+                            domains,
+                            start,
+                            end,
+                            keywords: kw,
+                            exclude_keywords,
+                            match_all: Some(match_all),
+                            limit: Some(limit),
+                            cache_mode: Some(cache_mode),
+                        },
+                        discovery_mode: None,
+                        urgency: None,
+                        skip_enrich: Some(skip_enrich),
+                        skip_index: Some(skip_index),
+                        depth_opts: DepthOptions { depth },
+                        output: OutputOptions { format: None },
                     },
-                    discovery_mode: None,
-                    urgency: None,
-                    skip_enrich: Some(skip_enrich),
-                    skip_index: Some(skip_index),
-                    depth_opts: DepthOptions { depth },
-                    output: OutputOptions { format: None },
-                }, http_client.clone(), &settings)
+                    http_client.clone(),
+                    &settings,
+                )
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1540,16 +1584,17 @@ async fn main() -> anyhow::Result<()> {
             }
             NewsAction::Test { id, cache_mode } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(news::news_test_source(NewsTestInput {
-                    id,
-                    cache_mode: Some(cache_mode),
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(news::news_test_source(
+                    NewsTestInput {
+                        id,
+                        cache_mode: Some(cache_mode),
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs news fetch --sources <id> to fetch news from this source",
-                ]);
+                print_next_step(&["igs news fetch --sources <id> to fetch news from this source"]);
             }
             NewsAction::Enrich { input, extract } => {
                 let items_json = if let Some(path) = input {
@@ -1611,9 +1656,7 @@ async fn main() -> anyhow::Result<()> {
                 })
                 .await)?;
                 output_truncated(fmt, &result, full);
-                print_next_step(&[
-                    "igs reddit search --query \"...\" to search within subreddit",
-                ]);
+                print_next_step(&["igs reddit search --query \"...\" to search within subreddit"]);
             }
         },
 
@@ -1627,15 +1670,18 @@ async fn main() -> anyhow::Result<()> {
                 limit,
             } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(research::research_search(ResearchSearchInput {
-                    query,
-                    sources: Some(srcs),
-                    categories,
-                    year_from,
-                    year_to,
-                    limit: Some(limit),
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(research::research_search(
+                    ResearchSearchInput {
+                        query,
+                        sources: Some(srcs),
+                        categories,
+                        year_from,
+                        year_to,
+                        limit: Some(limit),
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1649,12 +1695,16 @@ async fn main() -> anyhow::Result<()> {
                 include_references,
             } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(research::research_paper(ResearchPaperInput {
-                    paper_id: id,
-                    include_citations: Some(include_citations),
-                    include_references: Some(include_references),
-                    extract_pdf: None,
-                }, &http_client, &settings)
+                let result = r(research::research_paper(
+                    ResearchPaperInput {
+                        paper_id: id,
+                        include_citations: Some(include_citations),
+                        include_references: Some(include_references),
+                        extract_pdf: None,
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1668,12 +1718,16 @@ async fn main() -> anyhow::Result<()> {
                 convert_to_markdown,
             } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(research::research_download(ResearchDownloadInput {
-                    paper_id: id,
-                    output_path: out,
-                    output: OutputOptions { format: None },
-                    convert_to_markdown: Some(convert_to_markdown),
-                }, &http_client, &settings)
+                let result = r(research::research_download(
+                    ResearchDownloadInput {
+                        paper_id: id,
+                        output_path: out,
+                        output: OutputOptions { format: None },
+                        convert_to_markdown: Some(convert_to_markdown),
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1683,13 +1737,14 @@ async fn main() -> anyhow::Result<()> {
             }
             ResearchAction::PubMedSearch { query, limit } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(research::research_pubmed_search(ResearchPubMedInput {
-                    query,
-                    limits: LimitInput {
-                        limit: Some(limit),
+                let result = r(research::research_pubmed_search(
+                    ResearchPubMedInput {
+                        query,
+                        limits: LimitInput { limit: Some(limit) },
+                        output: OutputOptions { format: None },
                     },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1715,24 +1770,34 @@ async fn main() -> anyhow::Result<()> {
                 chunks_per_source,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
-                let result = r(web::web_search(WebSearchInput {
-                    query,
-                    max_results: Some(max_results),
-                    engines,
-                    depth: depth.map(|d| d.as_str().into()),
-                    topic,
-                    content_length,
-                    include_highlights: Some(include_highlights),
-                    include_answer: Some(include_answer),
-                    include_domains,
-                    exclude_domains,
-                    days: None,
-                    time_range: time_range.map(|tr| tr.as_str().into()),
-                    chunks_per_source,
-                    provider: None,
-                    output: OutputOptions { format: None },
-                }, std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?), &settings)
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(
+                    &settings,
+                    &igs_rust_mcp::config::user_config_dir(),
+                );
+                let result = r(web::web_search(
+                    WebSearchInput {
+                        query,
+                        max_results: Some(max_results),
+                        engines,
+                        depth: depth.map(|d| d.as_str().into()),
+                        topic,
+                        content_length,
+                        include_highlights: Some(include_highlights),
+                        include_answer: Some(include_answer),
+                        include_domains,
+                        exclude_domains,
+                        days: None,
+                        time_range: time_range.map(|tr| tr.as_str().into()),
+                        chunks_per_source,
+                        provider: None,
+                        output: OutputOptions { format: None },
+                    },
+                    std::sync::Arc::new(igs_rust_mcp::http::HttpClient::new(
+                        &settings.http,
+                        &cache_dir,
+                    )?),
+                    &settings,
+                )
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1749,18 +1814,25 @@ async fn main() -> anyhow::Result<()> {
                 include_frames,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
-                let result = r(web::web_scrape(WebScrapeInput {
-                    url,
-                    provider: Some(provider),
-                    formats: None,
-                    wait_selector,
-                    strip_mode,
-                    structured_data: None,
-                    include_frames: Some(include_frames),
-                    wait_until,
-                    output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?, &settings)
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(
+                    &settings,
+                    &igs_rust_mcp::config::user_config_dir(),
+                );
+                let result = r(web::web_scrape(
+                    WebScrapeInput {
+                        url,
+                        provider: Some(provider),
+                        formats: None,
+                        wait_selector,
+                        strip_mode,
+                        structured_data: None,
+                        include_frames: Some(include_frames),
+                        wait_until,
+                        output: OutputOptions { format: None },
+                    },
+                    &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1777,19 +1849,22 @@ async fn main() -> anyhow::Result<()> {
                 wait_selector,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(web::web_crawl(WebCrawlInput {
-                    url,
-                    provider: None,
-                    max_depth: Some(max_depth),
-                    max_pages: Some(max_pages),
-                    obey_robots: Some(obey_robots),
-                    dump_format: Some(dump_format),
-                    wait_until: None,
-                    include_frames: None,
-                    wait_selector,
-                    strip_mode: None,
-                    output: OutputOptions { format: None },
-                }, &settings)
+                let result = r(web::web_crawl(
+                    WebCrawlInput {
+                        url,
+                        provider: None,
+                        max_depth: Some(max_depth),
+                        max_pages: Some(max_pages),
+                        obey_robots: Some(obey_robots),
+                        dump_format: Some(dump_format),
+                        wait_until: None,
+                        include_frames: None,
+                        wait_selector,
+                        strip_mode: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &settings,
+                )
                 .await)?;
                 output_truncated(fmt, &result, full);
                 print_next_step(&[
@@ -1798,14 +1873,21 @@ async fn main() -> anyhow::Result<()> {
             }
             WebAction::Map { url, limit, search } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
-                let result = r(web::web_map(WebMapInput {
-                    url,
-                    provider: None,
-                    limit: Some(limit),
-                    search,
-                    output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?, &settings)
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(
+                    &settings,
+                    &igs_rust_mcp::config::user_config_dir(),
+                );
+                let result = r(web::web_map(
+                    WebMapInput {
+                        url,
+                        provider: None,
+                        limit: Some(limit),
+                        search,
+                        output: OutputOptions { format: None },
+                    },
+                    &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1824,20 +1906,23 @@ async fn main() -> anyhow::Result<()> {
                 urls,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(web::web_extract(WebExtractInput {
-                    url,
-                    urls,
-                    selectors,
-                    structured_data: Some(structured_data),
-                    extract_links: Some(extract_links),
-                    extract_images: Some(extract_images),
-                    wait_selector: None,
-                    include_html: Some(include_html),
-                    clean_content: None,
-                    query,
-                    output_schema: None,
-                    output: OutputOptions { format: None },
-                }, &settings)
+                let result = r(web::web_extract(
+                    WebExtractInput {
+                        url,
+                        urls,
+                        selectors,
+                        structured_data: Some(structured_data),
+                        extract_links: Some(extract_links),
+                        extract_images: Some(extract_images),
+                        wait_selector: None,
+                        include_html: Some(include_html),
+                        clean_content: None,
+                        query,
+                        output_schema: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1845,19 +1930,22 @@ async fn main() -> anyhow::Result<()> {
                     "igs web search --query \"...\" for broader search",
                 ]);
             }
-            WebAction::ImageSearch {
-                query,
-                max_results,
-            } => {
+            WebAction::ImageSearch { query, max_results } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(&settings, &igs_rust_mcp::config::user_config_dir());
-                let result = r(web::web_image_search(WebImageSearchInput {
-                    query,
-                    max_results: Some(max_results),
-                    size: None,
-                    image_type: None,
-                    output: OutputOptions { format: None },
-                }, &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?)
+                let cache_dir = igs_rust_mcp::http::resolve_cache_dir(
+                    &settings,
+                    &igs_rust_mcp::config::user_config_dir(),
+                );
+                let result = r(web::web_image_search(
+                    WebImageSearchInput {
+                        query,
+                        max_results: Some(max_results),
+                        size: None,
+                        image_type: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &igs_rust_mcp::http::HttpClient::new(&settings.http, &cache_dir)?,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1871,12 +1959,15 @@ async fn main() -> anyhow::Result<()> {
                 wait_until,
             } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(web::web_screenshot(WebScreenshotInput {
-                    url,
-                    format: Some(format),
-                    quality,
-                    wait_until,
-                }, &settings)
+                let result = r(web::web_screenshot(
+                    WebScreenshotInput {
+                        url,
+                        format: Some(format),
+                        quality,
+                        wait_until,
+                    },
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -1889,29 +1980,31 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Twitter { action }) => match action {
             TwitterAction::Search { query, limit, mode } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(twitter::twitter_search(TwitterSearchInput {
-                    query,
-                    limit: Some(limit),
-                    search_mode: mode,
-                    output: OutputOptions { format: None },
-                }, &settings)
+                let result = r(twitter::twitter_search(
+                    TwitterSearchInput {
+                        query,
+                        limit: Some(limit),
+                        search_mode: mode,
+                        output: OutputOptions { format: None },
+                    },
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs twitter read --url <tweet_url> for full tweet details",
-                ]);
+                print_next_step(&["igs twitter read --url <tweet_url> for full tweet details"]);
             }
             TwitterAction::Read { url } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(twitter::twitter_read(TwitterReadInput {
-                    url,
-                    output: OutputOptions { format: None },
-                }, &settings)
+                let result = r(twitter::twitter_read(
+                    TwitterReadInput {
+                        url,
+                        output: OutputOptions { format: None },
+                    },
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "Use the tweet URL to share or reference this content",
-                ]);
+                print_next_step(&["Use the tweet URL to share or reference this content"]);
             }
         },
 
@@ -1931,9 +2024,7 @@ async fn main() -> anyhow::Result<()> {
             YoutubeAction::Metadata { url } => {
                 let result = r(youtube::youtube_metadata(YoutubeMetadataInput { url }).await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs youtube subtitles --url <video_url> for transcript",
-                ]);
+                print_next_step(&["igs youtube subtitles --url <video_url> for transcript"]);
             }
             YoutubeAction::Subtitles { url, lang } => {
                 let result = r(youtube::youtube_subtitles(YoutubeSubtitlesInput {
@@ -2017,11 +2108,15 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Weather { action }) => match action {
             WeatherAction::Forecast { location, days } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(weather::weather_forecast(WeatherForecastInput {
-                    location,
-                    days,
-                    output: OutputOptions { format: None },
-                }, &http_client, &settings)
+                let result = r(weather::weather_forecast(
+                    WeatherForecastInput {
+                        location,
+                        days,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2031,38 +2126,45 @@ async fn main() -> anyhow::Result<()> {
             }
             WeatherAction::Current { location } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(weather::weather_current(WeatherCurrentInput {
-                    location,
-                    output: OutputOptions { format: None },
-                }, &http_client, &settings)
+                let result = r(weather::weather_current(
+                    WeatherCurrentInput {
+                        location,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs weather forecast --location <loc> for multi-day outlook",
-                ]);
+                print_next_step(&["igs weather forecast --location <loc> for multi-day outlook"]);
             }
             WeatherAction::Alerts { lat, lon } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(weather::weather_alerts(WeatherAlertsInput {
-                    latitude: lat,
-                    longitude: lon,
-                    output: OutputOptions { format: None },
-                }, &http_client, &settings)
+                let result = r(weather::weather_alerts(
+                    WeatherAlertsInput {
+                        latitude: lat,
+                        longitude: lon,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs weather forecast --location <loc> for detailed forecast",
-                ]);
+                print_next_step(&["igs weather forecast --location <loc> for detailed forecast"]);
             }
         },
 
         Some(Commands::Finance { action }) => match action {
             FinanceAction::Market { symbols } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(finance::finance_market(FinanceMarketInput {
-                    symbols,
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(finance::finance_market(
+                    FinanceMarketInput {
+                        symbols,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2072,40 +2174,45 @@ async fn main() -> anyhow::Result<()> {
             }
             FinanceAction::Crypto { symbols } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(finance::finance_crypto(FinanceCryptoInput {
-                    symbols,
-                    ids: vec![],
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(finance::finance_crypto(
+                    FinanceCryptoInput {
+                        symbols,
+                        ids: vec![],
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs finance market --symbols <ticker> for stock quotes",
-                ]);
+                print_next_step(&["igs finance market --symbols <ticker> for stock quotes"]);
             }
             FinanceAction::Trending => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(finance::finance_trending(FinanceTrendingInput {
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(finance::finance_trending(
+                    FinanceTrendingInput {
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs finance crypto --symbols <coin> for specific coin details",
-                ]);
+                print_next_step(&["igs finance crypto --symbols <coin> for specific coin details"]);
             }
         },
 
         Some(Commands::Security { action }) => match action {
             SecurityAction::Cve { query, days_back } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(security::security_cve_search(CveSearchInput {
-                    query,
-                    severity: None,
-                    days_back,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(security::security_cve_search(
+                    CveSearchInput {
+                        query,
+                        severity: None,
+                        days_back,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2114,12 +2221,15 @@ async fn main() -> anyhow::Result<()> {
             }
             SecurityAction::Advisories { ecosystem } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(security::security_advisories(SecurityAdvisoriesInput {
-                    ecosystem,
-                    severity: None,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(security::security_advisories(
+                    SecurityAdvisoriesInput {
+                        ecosystem,
+                        severity: None,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2131,89 +2241,95 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Govt { action }) => match action {
             GovtAction::Bills { query, congress } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(govt::govt_bills(GovtBillsInput {
-                    query,
-                    congress,
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(govt::govt_bills(
+                    GovtBillsInput {
+                        query,
+                        congress,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs govt regulations --query <topic> for regulatory documents",
-                ]);
+                print_next_step(&["igs govt regulations --query <topic> for regulatory documents"]);
             }
             GovtAction::Regulations { query } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(govt::govt_regulations(GovtRegulationsInput {
-                    query,
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(govt::govt_regulations(
+                    GovtRegulationsInput {
+                        query,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs govt bills --query <topic> for congressional bills",
-                ]);
+                print_next_step(&["igs govt bills --query <topic> for congressional bills"]);
             }
         },
 
         Some(Commands::Politics { action }) => match action {
             PoliticsAction::FecCandidates { query } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(politics::politics_fec_candidates(PoliticsFecInput {
-                    name: query,
-                    office: None,
-                    party: None,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(politics::politics_fec_candidates(
+                    PoliticsFecInput {
+                        name: query,
+                        office: None,
+                        party: None,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs politics fec-committees --query <name> for committee data",
-                ]);
+                print_next_step(&["igs politics fec-committees --query <name> for committee data"]);
             }
             PoliticsAction::FecCommittees { query } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(politics::politics_fec_committees(PoliticsFecCommitteesInput {
-                    name: query,
-                    committee_type: None,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(politics::politics_fec_committees(
+                    PoliticsFecCommitteesInput {
+                        name: query,
+                        committee_type: None,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs politics fec-candidates --query <name> for candidate data",
-                ]);
+                print_next_step(&["igs politics fec-candidates --query <name> for candidate data"]);
             }
         },
 
         Some(Commands::Patents { action }) => match action {
             PatentsAction::Search { query } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(patents::patents_search(PatentSearchInput {
-                    query,
-                    office: None,
-                    years_back: None,
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(patents::patents_search(
+                    PatentSearchInput {
+                        query,
+                        office: None,
+                        years_back: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs patents details --id <patent_id> for full patent info",
-                ]);
+                print_next_step(&["igs patents details --id <patent_id> for full patent info"]);
             }
             PatentsAction::Details { id } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(patents::patents_details(PatentDetailsInput {
-                    patent_id: id,
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(patents::patents_details(
+                    PatentDetailsInput {
+                        patent_id: id,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs patents search --query <keyword> for related patents",
-                ]);
+                print_next_step(&["igs patents search --query <keyword> for related patents"]);
             }
         },
 
@@ -2228,14 +2344,17 @@ async fn main() -> anyhow::Result<()> {
                 let lat_offset = radius / 111.0;
                 let lon_offset = radius / (111.0 * lat.to_radians().cos().abs().max(0.01));
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(satellite::satellite_firms_fires(SatelliteFirmsInput {
-                    west: lon - lon_offset,
-                    south: lat - lat_offset,
-                    east: lon + lon_offset,
-                    north: lat + lat_offset,
-                    source: None,
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(satellite::satellite_firms_fires(
+                    SatelliteFirmsInput {
+                        west: lon - lon_offset,
+                        south: lat - lat_offset,
+                        east: lon + lon_offset,
+                        north: lat + lat_offset,
+                        source: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2247,62 +2366,66 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Env { action }) => match action {
             EnvAction::EpaFacilities { query } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(env::env_epa_facilities(EnvEpaFacilitiesInput {
-                    state: None,
-                    name: Some(query),
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(env::env_epa_facilities(
+                    EnvEpaFacilitiesInput {
+                        state: None,
+                        name: Some(query),
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs env epa-emissions --query <state_code> for emissions data",
-                ]);
+                print_next_step(&["igs env epa-emissions --query <state_code> for emissions data"]);
             }
             EnvAction::EpaEmissions { query } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(env::env_epa_emissions(EnvEpaEmissionsInput {
-                    state: Some(query),
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(env::env_epa_emissions(
+                    EnvEpaEmissionsInput {
+                        state: Some(query),
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs env epa-facilities --query <name> for facility details",
-                ]);
+                print_next_step(&["igs env epa-facilities --query <name> for facility details"]);
             }
         },
 
         Some(Commands::Legal { action }) => match action {
             LegalAction::SearchCases { query } => {
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(legal::legal_search_cases(LegalSearchInput {
-                    query,
-                    court: None,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &settings)
+                let result = r(legal::legal_search_cases(
+                    LegalSearchInput {
+                        query,
+                        court: None,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs legal case-details --id <case_id> for full case info",
-                ]);
+                print_next_step(&["igs legal case-details --id <case_id> for full case info"]);
             }
             LegalAction::CaseDetails { id } => {
                 let case_id: u32 = id
                     .parse()
                     .map_err(|e| anyhow::anyhow!("Invalid case ID (must be numeric): {}", e))?;
                 let settings = igs_rust_mcp::config::load_settings().await?;
-                let result = r(legal::legal_case_details(LegalCaseDetailsInput {
-                    case_id,
-                    output: OutputOptions { format: None },
-                }, &settings)
+                let result = r(legal::legal_case_details(
+                    LegalCaseDetailsInput {
+                        case_id,
+                        output: OutputOptions { format: None },
+                    },
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs legal search-cases --query <keyword> for related cases",
-                ]);
+                print_next_step(&["igs legal search-cases --query <keyword> for related cases"]);
             }
         },
 
@@ -2323,13 +2446,16 @@ async fn main() -> anyhow::Result<()> {
             }
             HealthAction::WhoGho { indicator } => {
                 let (_settings, http_client) = cli_http_client().await?;
-                let result = r(health::health_who_gho(HealthWhoInput {
-                    indicator: Some(indicator),
-                    country: None,
-                    year: None,
-                    limits: LimitInput { limit: None },
-                    output: OutputOptions { format: None },
-                }, &http_client)
+                let result = r(health::health_who_gho(
+                    HealthWhoInput {
+                        indicator: Some(indicator),
+                        country: None,
+                        year: None,
+                        limits: LimitInput { limit: None },
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2345,15 +2471,19 @@ async fn main() -> anyhow::Result<()> {
                 end,
             } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(climate::climate_noaa_observations(ClimateNoaaInput {
-                    dataset: None,
-                    location: Some(location),
-                    station: None,
-                    start_date: start,
-                    end_date: end,
-                    limit: None,
-                    output: OutputOptions { format: None },
-                }, &http_client, &settings)
+                let result = r(climate::climate_noaa_observations(
+                    ClimateNoaaInput {
+                        dataset: None,
+                        location: Some(location),
+                        station: None,
+                        start_date: start,
+                        end_date: end,
+                        limit: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2362,11 +2492,15 @@ async fn main() -> anyhow::Result<()> {
             }
             ClimateAction::NoaaStations { location } => {
                 let (settings, http_client) = cli_http_client().await?;
-                let result = r(climate::climate_noaa_stations(ClimateNoaaStationsInput {
-                    location: Some(location),
-                    limit: None,
-                    output: OutputOptions { format: None },
-                }, &http_client, &settings)
+                let result = r(climate::climate_noaa_stations(
+                    ClimateNoaaStationsInput {
+                        location: Some(location),
+                        limit: None,
+                        output: OutputOptions { format: None },
+                    },
+                    &http_client,
+                    &settings,
+                )
                 .await)?;
                 output(fmt, &result);
                 print_next_step(&[
@@ -2386,7 +2520,8 @@ async fn main() -> anyhow::Result<()> {
                     min_domains,
                     limit,
                 } => {
-                    let result = r(insights::insights_find_connections(                         server.insights(),
+                    let result = r(insights::insights_find_connections(
+                        server.insights(),
                         InsightFindConnectionsInput {
                             entity,
                             min_domains,
@@ -2406,7 +2541,8 @@ async fn main() -> anyhow::Result<()> {
                     min_growth,
                     min_current_mentions,
                 } => {
-                    let result = r(insights::insights_trending(                         server.insights(),
+                    let result = r(insights::insights_trending(
+                        server.insights(),
                         InsightTrendingInput {
                             time_window_hours,
                             min_growth,
@@ -2429,26 +2565,25 @@ async fn main() -> anyhow::Result<()> {
                         std::fs::read_to_string(&input_path)?
                     };
                     let articles: Vec<InsightIndexArticle> = serde_json::from_str(&items_json)?;
-                    let result = r(insights::insights_index(                         server.insights(),
+                    let result = r(insights::insights_index(
+                        server.insights(),
                         InsightIndexInput { articles },
                     )
                     .await)?;
                     output(fmt, &result);
-                    print_next_step(&[
-                        "Run `igs insights stats` to check index status",
-                    ]);
+                    print_next_step(&["Run `igs insights stats` to check index status"]);
                 }
-                InsightsAction::Stats => {                     let result = r(insights::insights_stats(server.insights()).await)?;
+                InsightsAction::Stats => {
+                    let result = r(insights::insights_stats(server.insights()).await)?;
                     output(fmt, &result);
                     print_next_step(&[
                         "Run `igs insights find-connections` to analyze indexed articles",
                     ]);
                 }
-                InsightsAction::ClearIndex => {                     let result = r(insights::insights_clear(server.insights()).await)?;
+                InsightsAction::ClearIndex => {
+                    let result = r(insights::insights_clear(server.insights()).await)?;
                     output(fmt, &result);
-                    print_next_step(&[
-                        "Run `igs news fetch --depth deep` to re-index articles",
-                    ]);
+                    print_next_step(&["Run `igs news fetch --depth deep` to re-index articles"]);
                 }
             }
         }
@@ -2457,9 +2592,7 @@ async fn main() -> anyhow::Result<()> {
             SopAction::List => {
                 let result = sop::sop_list();
                 output(fmt, &result);
-                print_next_step(&[
-                    "igs sop execute --chain <name> to run a workflow",
-                ]);
+                print_next_step(&["igs sop execute --chain <name> to run a workflow"]);
             }
             SopAction::Execute {
                 chain,
@@ -2475,9 +2608,7 @@ async fn main() -> anyhow::Result<()> {
                     output: OutputOptions { format: None },
                 }))?;
                 output(fmt, &result);
-                print_next_step(&[
-                    "Run the output through `igs news enrich` for deeper analysis",
-                ]);
+                print_next_step(&["Run the output through `igs news enrich` for deeper analysis"]);
             }
         },
 
@@ -2809,7 +2940,8 @@ async fn main() -> anyhow::Result<()> {
                         api_key,
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
-                    }, &http_client,
+                    },
+                    &http_client,
                 )
                 .await)?;
                 output(fmt, &result);
@@ -2821,7 +2953,8 @@ async fn main() -> anyhow::Result<()> {
                         email,
                         api_key,
                         output: OutputOptions { format: None },
-                    }, &http_client,
+                    },
+                    &http_client,
                 )
                 .await)?;
                 output(fmt, &result);
@@ -2845,7 +2978,8 @@ async fn main() -> anyhow::Result<()> {
                         email,
                         limits: LimitInput { limit: None },
                         output: OutputOptions { format: None },
-                    }, &http_client,
+                    },
+                    &http_client,
                 )
                 .await)?;
                 output(fmt, &result);

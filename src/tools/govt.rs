@@ -1,7 +1,7 @@
 use super::types::*;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
-use crate::error::{AppError, AppResult};
 
 pub async fn govt_bills(input: GovtBillsInput, http: &HttpClient) -> AppResult<GovtBillsOutput> {
     let query = urlencoding(&input.query);
@@ -18,7 +18,9 @@ pub async fn govt_bills(input: GovtBillsInput, http: &HttpClient) -> AppResult<G
         .map_err(|e| format!("Congress.gov API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =
@@ -68,7 +70,9 @@ pub async fn govt_regulations(
         .map_err(|e| format!("Federal Register API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =

@@ -1,12 +1,12 @@
 //! Search engine implementations (DDG, Wikipedia, GitHub, HN, SO, YouTube).
 //! All engines are free, no API keys required.
 
+use super::readability::extract_ddg_redirect_url;
+use super::scoring::extract_domain;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types::*;
-use super::scoring::extract_domain;
-use super::readability::extract_ddg_redirect_url;
 use std::collections::HashMap;
-use crate::error::{AppError, AppResult};
 
 // ─── YouTube Search Engine (via yt-dlp) ──────────────────────
 
@@ -47,9 +47,13 @@ pub(super) async fn search_youtube(
 
     for line in stdout.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let parts: Vec<&str> = line.splitn(4, "|||").collect();
-        if parts.len() < 3 { continue; }
+        if parts.len() < 3 {
+            continue;
+        }
 
         let video_id = parts[0];
         let title = parts[1];
@@ -74,7 +78,7 @@ pub(super) async fn search_youtube(
             domain: Some("youtube.com".to_string()),
             published_date: None,
             favicon: None,
-                chunks: None,
+            chunks: None,
         });
     }
 
@@ -84,9 +88,13 @@ pub(super) async fn search_youtube(
 /// Search for images via Wikimedia Commons REST API (key-free).
 /// Uses the Wikimedia Commons API to find freely licensed images.
 /// No API key required — Wikimedia is completely open.
-pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient) -> AppResult<WebImageSearchOutput> {
+pub async fn web_image_search(
+    input: WebImageSearchInput,
+    http: &HttpClient,
+) -> AppResult<WebImageSearchOutput> {
     let max_results = input.max_results.unwrap_or(10).min(30) as usize;
-    let query_encoded = url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
+    let query_encoded =
+        url::form_urlencoded::byte_serialize(input.query.as_bytes()).collect::<String>();
 
     let start = std::time::Instant::now();
 
@@ -143,34 +151,33 @@ pub async fn web_image_search(input: WebImageSearchInput, http: &HttpClient) -> 
 
                                 if !url.is_empty() {
                                     // Extract image description from Wikimedia extmetadata
-                                let description = info["extmetadata"]
-                                    .as_object()
-                                    .and_then(|em| em.get("ImageDescription"))
-                                    .and_then(|desc| desc.get("value"))
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| {
-                                        // Strip HTML tags using scraper for clean text extraction
-                                        let doc = scraper::Html::parse_fragment(s);
-                                        doc.root_element().text().collect::<Vec<_>>().join(" ")
-                                    })
-                                    .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
-                                    .filter(|s| !s.is_empty());
+                                    let description = info["extmetadata"]
+                                        .as_object()
+                                        .and_then(|em| em.get("ImageDescription"))
+                                        .and_then(|desc| desc.get("value"))
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| {
+                                            // Strip HTML tags using scraper for clean text extraction
+                                            let doc = scraper::Html::parse_fragment(s);
+                                            doc.root_element().text().collect::<Vec<_>>().join(" ")
+                                        })
+                                        .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
+                                        .filter(|s| !s.is_empty());
 
-                                results.push(WebImageResult {
-                                    title,
-                                    url,
-                                    thumbnail: thumb_url,
-                                    source_url,
-                                    width,
-                                    height,
-                                    source: Some("wikimedia_commons".to_string()),
-                                    description,
-                                });
+                                    results.push(WebImageResult {
+                                        title,
+                                        url,
+                                        thumbnail: thumb_url,
+                                        source_url,
+                                        width,
+                                        height,
+                                        source: Some("wikimedia_commons".to_string()),
+                                        description,
+                                    });
                                 }
                             }
                         }
                     }
-
                 }
 
                 // Fallback: if total_available wasn't set, use results count
@@ -248,13 +255,15 @@ fn parse_duckduckgo_html(html: &str, max_results: usize) -> Vec<WebSearchResult>
                                 domain,
                                 published_date: None,
                                 favicon: None,
-                chunks: None,
+                                chunks: None,
                             });
                         }
                     }
                 }
             }
-            if !results.is_empty() { break; }
+            if !results.is_empty() {
+                break;
+            }
         }
     }
     results.truncate(max_results);
@@ -295,7 +304,10 @@ pub(super) async fn search_duckduckgo(
 
     // Optionally fetch DDG Instant Answer API for a synthesized answer
     let answer = if include_answer {
-        let ia_url = format!("https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1", query_encoded);
+        let ia_url = format!(
+            "https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1",
+            query_encoded
+        );
         match http.fetch(&ia_url, None, "bypass").await {
             Ok(http_mod::FetchOutcome::Response(resp, _, _)) => {
                 serde_json::from_str::<serde_json::Value>(&resp.body_text)
@@ -311,9 +323,6 @@ pub(super) async fn search_duckduckgo(
 
     Ok(("duckduckgo".to_string(), results, answer))
 }
-
-
-
 
 // ─── Wikipedia REST API Engine ────────────────────────────────
 
@@ -333,10 +342,15 @@ pub(super) async fn search_wikipedia(
     let mut results = Vec::new();
     let mut answer = None;
 
-    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&search_url, None, "bypass").await {
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) =
+        http.fetch(&search_url, None, "bypass").await
+    {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
             if let Some(title) = json["title"].as_str() {
-                let url = json["content_urls"]["desktop"]["page"].as_str().unwrap_or("").to_string();
+                let url = json["content_urls"]["desktop"]["page"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
                 let extract = json["extract"].as_str().unwrap_or("").to_string();
                 let thumbnail = json["thumbnail"]["source"].as_str().map(|s| s.to_string());
 
@@ -353,7 +367,7 @@ pub(super) async fn search_wikipedia(
                         domain: Some("wikipedia.org".to_string()),
                         published_date: None,
                         favicon: thumbnail,
-                chunks: None,
+                        chunks: None,
                     });
                 }
             }
@@ -366,12 +380,15 @@ pub(super) async fn search_wikipedia(
         query_encoded, max_results
     );
 
-    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&search_api_url, None, "bypass").await {
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) =
+        http.fetch(&search_api_url, None, "bypass").await
+    {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
             if let Some(search_results) = json["query"]["search"].as_array() {
                 for r in search_results.iter().take(max_results) {
                     let title = r["title"].as_str().unwrap_or("").to_string();
-                    let snippet = r["snippet"].as_str()
+                    let snippet = r["snippet"]
+                        .as_str()
                         .unwrap_or("")
                         .replace("<span class=\"searchmatch\">", "")
                         .replace("</span>", "")
@@ -379,12 +396,18 @@ pub(super) async fn search_wikipedia(
                     let url = format!("https://en.wikipedia.org/wiki/{}", title.replace(' ', "_"));
 
                     // Skip if we already have this URL from the summary endpoint
-                    if results.iter().any(|existing| existing.url == url) { continue; }
+                    if results.iter().any(|existing| existing.url == url) {
+                        continue;
+                    }
 
                     results.push(WebSearchResult {
                         title,
                         url,
-                        content: if snippet.is_empty() { None } else { Some(snippet) },
+                        content: if snippet.is_empty() {
+                            None
+                        } else {
+                            Some(snippet)
+                        },
                         score: Some(0.8),
                         highlights: None,
                         raw_content: None,
@@ -392,7 +415,7 @@ pub(super) async fn search_wikipedia(
                         domain: Some("wikipedia.org".to_string()),
                         published_date: None,
                         favicon: None,
-                chunks: None,
+                        chunks: None,
                     });
                 }
             }
@@ -415,15 +438,21 @@ pub(super) async fn search_github(
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let search_url = format!(
         "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page={}",
-        query_encoded, max_results.min(10)
+        query_encoded,
+        max_results.min(10)
     );
 
     let mut headers: HashMap<String, String> = HashMap::new();
-    headers.insert("Accept".to_string(), "application/vnd.github.v3+json".to_string());
+    headers.insert(
+        "Accept".to_string(),
+        "application/vnd.github.v3+json".to_string(),
+    );
 
     let mut results = Vec::new();
 
-    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&search_url, Some(&headers), "bypass").await {
+    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) =
+        http.fetch(&search_url, Some(&headers), "bypass").await
+    {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
             if let Some(items) = json["items"].as_array() {
                 for r in items.iter().take(max_results) {
@@ -434,10 +463,7 @@ pub(super) async fn search_github(
                     let language = r["language"].as_str().unwrap_or("").to_string();
                     let updated = r["updated_at"].as_str().map(|s| s.to_string());
 
-                    let content = format!(
-                        "⭐ {} stars | 📝 {} | {}",
-                        stars, language, description
-                    );
+                    let content = format!("⭐ {} stars | 📝 {} | {}", stars, language, description);
 
                     results.push(WebSearchResult {
                         title: name,
@@ -450,7 +476,7 @@ pub(super) async fn search_github(
                         domain: Some("github.com".to_string()),
                         published_date: updated,
                         favicon: None,
-                chunks: None,
+                        chunks: None,
                     });
                 }
             }
@@ -459,42 +485,59 @@ pub(super) async fn search_github(
 
     // Also search code when topic is explicitly code-related
     if topic == "code" {
-    let code_url = format!(
-        "https://api.github.com/search/code?q={}&per_page={}",
-        query_encoded, max_results.min(5)
-    );
+        let code_url = format!(
+            "https://api.github.com/search/code?q={}&per_page={}",
+            query_encoded,
+            max_results.min(5)
+        );
 
-    if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) = http.fetch(&code_url, Some(&headers), "bypass").await {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
-            if let Some(items) = json["items"].as_array() {
-                for r in items.iter().take(5) {
-                    let path = r["path"].as_str().unwrap_or("").to_string();
-                    let repo = r["repository"]["full_name"].as_str().unwrap_or("").to_string();
-                    let html_url = r["html_url"].as_str().unwrap_or("").to_string();
-                    let score_val = r["score"].as_f64().unwrap_or(0.0);
+        if let Ok(http_mod::FetchOutcome::Response(resp, _, _)) =
+            http.fetch(&code_url, Some(&headers), "bypass").await
+        {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
+                if let Some(items) = json["items"].as_array() {
+                    for r in items.iter().take(5) {
+                        let path = r["path"].as_str().unwrap_or("").to_string();
+                        let repo = r["repository"]["full_name"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string();
+                        let html_url = r["html_url"].as_str().unwrap_or("").to_string();
+                        let score_val = r["score"].as_f64().unwrap_or(0.0);
 
-                    let title = format!("{}/{}", repo, path);
-                    let content = r["text_matches"].as_array()
-                        .map(|tm| tm.iter().take(2).map(|m| m["fragment"].as_str().unwrap_or("")).collect::<Vec<_>>().join(" ... "))
-                        .unwrap_or_default();
+                        let title = format!("{}/{}", repo, path);
+                        let content = r["text_matches"]
+                            .as_array()
+                            .map(|tm| {
+                                tm.iter()
+                                    .take(2)
+                                    .map(|m| m["fragment"].as_str().unwrap_or(""))
+                                    .collect::<Vec<_>>()
+                                    .join(" ... ")
+                            })
+                            .unwrap_or_default();
 
-                    results.push(WebSearchResult {
-                        title,
-                        url: html_url,
-                        content: if content.is_empty() { None } else { Some(content) },
-                        score: Some(score_val),
-                        highlights: None,
-                        raw_content: None,
-                        source: Some("github".to_string()),
-                        domain: Some("github.com".to_string()),
-                        published_date: None,
-                        favicon: None,
-                chunks: None,
-                    });
+                        results.push(WebSearchResult {
+                            title,
+                            url: html_url,
+                            content: if content.is_empty() {
+                                None
+                            } else {
+                                Some(content)
+                            },
+                            score: Some(score_val),
+                            highlights: None,
+                            raw_content: None,
+                            source: Some("github".to_string()),
+                            domain: Some("github.com".to_string()),
+                            published_date: None,
+                            favicon: None,
+                            chunks: None,
+                        });
+                    }
                 }
             }
         }
-    }
     } // end if topic == "code"
 
     Ok(("github".to_string(), results, None))
@@ -513,13 +556,14 @@ pub(super) async fn search_hackernews(
     let query_encoded = url::form_urlencoded::byte_serialize(query.as_bytes()).collect::<String>();
     let hits = max_results.min(30);
     // Add time range filter via numericFilters (unix timestamp)
-    let time_filter = chrono::Utc::now().timestamp() - match time_range {
-        "day" => 86400,
-        "week" => 604800,
-        "month" => 2592000,
-        "year" => 31536000,
-        _ => 0,
-    };
+    let time_filter = chrono::Utc::now().timestamp()
+        - match time_range {
+            "day" => 86400,
+            "week" => 604800,
+            "month" => 2592000,
+            "year" => 31536000,
+            _ => 0,
+        };
     let url = if time_filter > 0 {
         format!(
             "https://hn.algolia.com/api/v1/search?query={}&tags=story&hitsPerPage={}&numericFilters=created_at_i>{}",
@@ -542,8 +586,12 @@ pub(super) async fn search_hackernews(
             if let Some(hits_arr) = json["hits"].as_array() {
                 for hit in hits_arr.iter().take(max_results) {
                     let title = hit["title"].as_str().unwrap_or("").to_string();
-                    let url_str = hit["url"].as_str()
-                        .unwrap_or(&format!("https://news.ycombinator.com/item?id={}", hit["objectID"].as_str().unwrap_or("")))
+                    let url_str = hit["url"]
+                        .as_str()
+                        .unwrap_or(&format!(
+                            "https://news.ycombinator.com/item?id={}",
+                            hit["objectID"].as_str().unwrap_or("")
+                        ))
                         .to_string();
                     let author = hit["author"].as_str().unwrap_or("").to_string();
                     let points = hit["points"].as_u64().unwrap_or(0);
@@ -566,7 +614,7 @@ pub(super) async fn search_hackernews(
                         domain: Some("news.ycombinator.com".to_string()),
                         published_date: Some(created_at),
                         favicon: None,
-                chunks: None,
+                        chunks: None,
                     });
                 }
             }
@@ -613,8 +661,13 @@ pub(super) async fn search_stackoverflow(
                     let score = item["score"].as_i64().unwrap_or(0);
                     let answer_count = item["answer_count"].as_u64().unwrap_or(0);
                     let is_answered = item["is_answered"].as_bool().unwrap_or(false);
-                    let tags: Vec<String> = item["tags"].as_array()
-                        .map(|arr| arr.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect())
+                    let tags: Vec<String> = item["tags"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|t| t.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     let created = item["creation_date"].as_i64().unwrap_or(0);
                     let view_count = item["view_count"].as_u64().unwrap_or(0);
@@ -632,7 +685,11 @@ pub(super) async fn search_stackoverflow(
                     let answered_marker = if is_answered { "✅" } else { "⏳" };
                     let content = format!(
                         "{} {} score | {} answers | 👁️ {} views | tags: {}",
-                        answered_marker, score, answer_count, view_count, tags.join(", ")
+                        answered_marker,
+                        score,
+                        answer_count,
+                        view_count,
+                        tags.join(", ")
                     );
 
                     results.push(WebSearchResult {
@@ -644,9 +701,13 @@ pub(super) async fn search_stackoverflow(
                         raw_content: None,
                         source: Some("stackoverflow".to_string()),
                         domain: Some("stackoverflow.com".to_string()),
-                        published_date: if date_str.is_empty() { None } else { Some(date_str) },
+                        published_date: if date_str.is_empty() {
+                            None
+                        } else {
+                            Some(date_str)
+                        },
                         favicon: None,
-                chunks: None,
+                        chunks: None,
                     });
                 }
             }

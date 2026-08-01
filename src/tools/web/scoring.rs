@@ -1,10 +1,9 @@
 //! Relevance scoring, caching, BM25 chunk scoring, dedup, and engine routing.
-use crate::tools::types::*;
 use crate::tools::nlp::tokenize;
+use crate::tools::types::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
-
 
 // ─── Answer Synthesis (TextRank-based, no external LLM) ───────
 
@@ -12,36 +11,59 @@ use std::time::{Duration, Instant};
 /// Takes the top 5 highest-scored results, splits into sentences,
 /// and returns the top-N most query-relevant sentences.
 pub fn extractive_answer(results: &[WebSearchResult], query: &str) -> Option<String> {
-    if results.is_empty() { return None; }
+    if results.is_empty() {
+        return None;
+    }
 
     // Collect text from top 5 results (up from 3 for better coverage)
-    let query_words: Vec<String> = query.to_lowercase().split_whitespace()
-        .filter(|w| w.len() > 1).map(String::from).collect();
-    if query_words.is_empty() { return None; }
+    let query_words: Vec<String> = query
+        .to_lowercase()
+        .split_whitespace()
+        .filter(|w| w.len() > 1)
+        .map(String::from)
+        .collect();
+    if query_words.is_empty() {
+        return None;
+    }
 
     let mut candidates: Vec<(f64, String)> = Vec::new();
     for result in results.iter().take(5) {
-        let text = result.raw_content.as_deref().or(result.content.as_deref()).unwrap_or("");
+        let text = result
+            .raw_content
+            .as_deref()
+            .or(result.content.as_deref())
+            .unwrap_or("");
         // Split into sentences
         for sentence in text.split(['.', '!', '?']) {
             let trimmed = sentence.trim();
-            if trimmed.len() < 30 { continue; }
+            if trimmed.len() < 30 {
+                continue;
+            }
             // Score by query word overlap
             let lower = trimmed.to_lowercase();
-            let score: f64 = query_words.iter().map(|w| if lower.contains(w.as_str()) { 1.0 } else { 0.0 }).sum();
+            let score: f64 = query_words
+                .iter()
+                .map(|w| if lower.contains(w.as_str()) { 1.0 } else { 0.0 })
+                .sum();
             if score > 0.0 {
                 candidates.push((score, trimmed.to_string()));
             }
         }
     }
 
-    if candidates.is_empty() { return None; }
+    if candidates.is_empty() {
+        return None;
+    }
 
     // Sort by score, take top 5 (matches the 5 results we scan)
     candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     let top: Vec<&str> = candidates.iter().take(5).map(|(_, s)| s.as_str()).collect();
     let answer = top.join(". ");
-    if answer.is_empty() { None } else { Some(answer) }
+    if answer.is_empty() {
+        None
+    } else {
+        Some(answer)
+    }
 }
 
 // ─── In-Memory Search Cache ───────────────────────────────────
@@ -52,10 +74,10 @@ pub static SEARCH_CACHE: LazyLock<std::sync::Mutex<HashMap<String, CacheEntry>>>
     LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
 
 // Cache TTL constants
-pub const CACHE_TTL_NEWS: u64 = 300;          // 5 min for news
-pub const CACHE_TTL_CODE: u64 = 43_200;       // 12 hours for code
-pub const CACHE_TTL_GENERAL: u64 = 3_600;     // 1 hour for general
-pub const CACHE_MAX_AGE: u64 = 86_400;         // 24h eviction ceiling
+pub const CACHE_TTL_NEWS: u64 = 300; // 5 min for news
+pub const CACHE_TTL_CODE: u64 = 43_200; // 12 hours for code
+pub const CACHE_TTL_GENERAL: u64 = 3_600; // 1 hour for general
+pub const CACHE_MAX_AGE: u64 = 86_400; // 24h eviction ceiling
 pub const CACHE_MAX_ENTRIES: usize = 100;
 
 /// TTL for search results based on query type
@@ -68,8 +90,23 @@ pub fn cache_ttl(topic: &str) -> Duration {
 }
 
 /// Check cache for a matching query. Returns None if miss or expired.
-pub fn cache_get(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool) -> Option<WebSearchOutput> {
-    let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
+pub fn cache_get(
+    query: &str,
+    topic: &str,
+    max_results: usize,
+    content_length: &str,
+    include_highlights: bool,
+    include_answer: bool,
+) -> Option<WebSearchOutput> {
+    let cache_key = format!(
+        "{}:{}:{}:{}:{}:{}",
+        topic,
+        query.to_lowercase(),
+        max_results,
+        content_length,
+        include_highlights,
+        include_answer
+    );
     let cache = match SEARCH_CACHE.lock() {
         Ok(c) => c,
         Err(p) => {
@@ -86,8 +123,24 @@ pub fn cache_get(query: &str, topic: &str, max_results: usize, content_length: &
 }
 
 /// Store search results in cache.
-pub fn cache_set(query: &str, topic: &str, max_results: usize, content_length: &str, include_highlights: bool, include_answer: bool, output: &WebSearchOutput) {
-    let cache_key = format!("{}:{}:{}:{}:{}:{}", topic, query.to_lowercase(), max_results, content_length, include_highlights, include_answer);
+pub fn cache_set(
+    query: &str,
+    topic: &str,
+    max_results: usize,
+    content_length: &str,
+    include_highlights: bool,
+    include_answer: bool,
+    output: &WebSearchOutput,
+) {
+    let cache_key = format!(
+        "{}:{}:{}:{}:{}:{}",
+        topic,
+        query.to_lowercase(),
+        max_results,
+        content_length,
+        include_highlights,
+        include_answer
+    );
     let mut cache = match SEARCH_CACHE.lock() {
         Ok(c) => c,
         Err(p) => {
@@ -175,7 +228,10 @@ pub fn domain_authority(domain: &str) -> f64 {
 /// Uses term frequency weighting.
 pub fn keyword_relevance(title: &str, content: &str, query: &str) -> f64 {
     let query_lower = query.to_lowercase();
-    let query_words: Vec<&str> = query_lower.split_whitespace().filter(|w| w.len() > 1).collect();
+    let query_words: Vec<&str> = query_lower
+        .split_whitespace()
+        .filter(|w| w.len() > 1)
+        .collect();
     if query_words.is_empty() {
         return 0.5;
     }
@@ -206,7 +262,7 @@ pub fn freshness_score(published_date: Option<&str>) -> f64 {
     // Try to parse ISO date or relative time
     if let Ok(dt) = chrono::NaiveDate::parse_from_str(
         date_str.split('T').next().unwrap_or(date_str),
-        "%Y-%m-%d"
+        "%Y-%m-%d",
     ) {
         let today = chrono::Utc::now().date_naive();
         let days_old = (today - dt).num_days().max(0);
@@ -226,7 +282,10 @@ pub fn freshness_score(published_date: Option<&str>) -> f64 {
         0.6
     } else if date_str.contains("day") {
         0.8
-    } else if date_str.contains("hour") || date_str.contains("minute") || date_str.contains("just now") {
+    } else if date_str.contains("hour")
+        || date_str.contains("minute")
+        || date_str.contains("just now")
+    {
         1.0
     } else {
         0.5
@@ -242,7 +301,11 @@ pub fn compute_relevance_score(result: &WebSearchResult, query: &str) -> f64 {
         query,
     );
     let freshness = freshness_score(result.published_date.as_deref());
-    let authority = result.domain.as_deref().map(domain_authority).unwrap_or(0.5);
+    let authority = result
+        .domain
+        .as_deref()
+        .map(domain_authority)
+        .unwrap_or(0.5);
 
     keyword * 0.5 + freshness * 0.2 + authority * 0.3
 }
@@ -256,9 +319,9 @@ pub fn compute_confidence(result: &WebSearchResult) -> f64 {
     // Snippet quality: longer content snippets with more query terms = higher confidence
     let snippet_len = result.content.as_ref().map(|c| c.len()).unwrap_or(0);
     let snippet_quality = match snippet_len {
-        0..=50 => 0.1,   // no snippet or very short
-        51..=200 => 0.4,  // DDG-style short snippet
-        201..=500 => 0.7, // standard excerpt
+        0..=50 => 0.1,     // no snippet or very short
+        51..=200 => 0.4,   // DDG-style short snippet
+        201..=500 => 0.7,  // standard excerpt
         501..=2000 => 0.9, // full excerpt (deep mode)
         _ => 1.0,          // very detailed
     };
@@ -282,29 +345,37 @@ pub fn compute_answer_confidence(results: &[WebSearchResult]) -> f64 {
     }
 
     // Average individual confidence (uses full confidence signal: relevance + snippet + highlights)
-    let avg_confidence: f64 = results.iter()
-        .map(compute_confidence)
-        .sum::<f64>() / results.len() as f64;
+    let avg_confidence: f64 =
+        results.iter().map(compute_confidence).sum::<f64>() / results.len() as f64;
 
     // Source diversity: unique domains = more trustworthy
-    let unique_domains: usize = results.iter()
+    let unique_domains: usize = results
+        .iter()
         .filter_map(|r| r.domain.as_ref())
         .collect::<HashSet<_>>()
         .len();
     let diversity_bonus = (unique_domains as f64 / results.len() as f64).min(0.2);
 
     // Score agreement: if top 3 results have similar scores, higher confidence
-    let top_scores: Vec<f64> = results.iter().take(3)
-        .filter_map(|r| r.score)
-        .collect();
+    let top_scores: Vec<f64> = results.iter().take(3).filter_map(|r| r.score).collect();
     let agreement_bonus = if top_scores.len() >= 2 {
-        let spread = top_scores.iter().fold((f64::MAX, f64::MIN), |(min, max), &s| {
-            (min.min(s), max.max(s))
-        });
+        let spread = top_scores
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(min, max), &s| {
+                (min.min(s), max.max(s))
+            });
         let range = spread.1 - spread.0;
-        if range < 0.1 { 0.15 } // high agreement
-        else if range < 0.3 { 0.08 } // moderate agreement
-        else { 0.0 } // low agreement
+        if range < 0.1 {
+            0.15
+        }
+        // high agreement
+        else if range < 0.3 {
+            0.08
+        }
+        // moderate agreement
+        else {
+            0.0
+        } // low agreement
     } else {
         0.0
     };
@@ -348,7 +419,11 @@ pub fn extract_highlights(text: &str, query: &str, max_highlights: usize) -> Vec
         .collect();
 
     scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    scored.into_iter().take(max_highlights).map(|(_, s)| s).collect()
+    scored
+        .into_iter()
+        .take(max_highlights)
+        .map(|(_, s)| s)
+        .collect()
 }
 
 /// Truncate content to the specified length mode.
@@ -366,9 +441,7 @@ pub fn truncate_content(content: Option<&str>, mode: &str) -> Option<String> {
         // Truncate to max chars, then trim to last word boundary
         let truncated: String = text.chars().take(max).collect();
         match truncated.rfind(' ') {
-            Some(byte_pos) => {
-                Some(format!("{}...", &truncated[..byte_pos]))
-            }
+            Some(byte_pos) => Some(format!("{}...", &truncated[..byte_pos])),
             _ => Some(format!("{}...", truncated)),
         }
     }
@@ -405,9 +478,15 @@ pub(crate) struct ScoredChunk {
 /// Standard BM25 algorithm (Robertson et al.).
 pub(crate) fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) -> Vec<ScoredChunk> {
     if chunks.is_empty() || query.trim().is_empty() {
-        return chunks.iter().enumerate().map(|(i, c)| ScoredChunk {
-            content: c.clone(), score: 0.0, index: i,
-        }).collect();
+        return chunks
+            .iter()
+            .enumerate()
+            .map(|(i, c)| ScoredChunk {
+                content: c.clone(),
+                score: 0.0,
+                index: i,
+            })
+            .collect();
     }
 
     let query_terms = tokenize(query, 2, false);
@@ -426,48 +505,69 @@ pub(crate) fn bm25_score_chunks(chunks: &[String], query: &str, top_k: usize) ->
         }
     }
 
-    let mut scored: Vec<(usize, f64)> = tokenized.iter().enumerate().map(|(i, doc)| {
-        let dl = doc.len() as f64;
-        let mut tf_map: HashMap<&str, usize> = HashMap::new();
-        for term in doc { *tf_map.entry(term.as_str()).or_insert(0) += 1; }
+    let mut scored: Vec<(usize, f64)> = tokenized
+        .iter()
+        .enumerate()
+        .map(|(i, doc)| {
+            let dl = doc.len() as f64;
+            let mut tf_map: HashMap<&str, usize> = HashMap::new();
+            for term in doc {
+                *tf_map.entry(term.as_str()).or_insert(0) += 1;
+            }
 
-        let score = query_terms.iter().map(|term| {
-            let tf = *tf_map.get(term.as_str()).unwrap_or(&0) as f64;
-            let df_t = *df.get(term.as_str()).unwrap_or(&0) as f64;
-            let idf = ((n - df_t + 0.5) / (df_t + 0.5) + 1.0).ln();
-            let tf_norm = (tf * (BM25_K1 + 1.0)) / (tf + BM25_K1 * (1.0 - BM25_B + BM25_B * dl / avgdl));
-            idf * tf_norm
-        }).sum::<f64>();
+            let score = query_terms
+                .iter()
+                .map(|term| {
+                    let tf = *tf_map.get(term.as_str()).unwrap_or(&0) as f64;
+                    let df_t = *df.get(term.as_str()).unwrap_or(&0) as f64;
+                    let idf = ((n - df_t + 0.5) / (df_t + 0.5) + 1.0).ln();
+                    let tf_norm = (tf * (BM25_K1 + 1.0))
+                        / (tf + BM25_K1 * (1.0 - BM25_B + BM25_B * dl / avgdl));
+                    idf * tf_norm
+                })
+                .sum::<f64>();
 
-        (i, score)
-    }).collect();
+            (i, score)
+        })
+        .collect();
 
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.truncate(top_k.max(1).min(chunks.len()));
-    scored.into_iter().map(|(i, score)| ScoredChunk {
-        content: chunks[i].clone(), score, index: i,
-    }).collect()
+    scored
+        .into_iter()
+        .map(|(i, score)| ScoredChunk {
+            content: chunks[i].clone(),
+            score,
+            index: i,
+        })
+        .collect()
 }
 
 /// Jaccard similarity between two word sets (0.0-1.0).
 pub fn jaccard_similarity(a: &str, b: &str) -> f64 {
-    let words_a: HashSet<String> = a.split_whitespace()
+    let words_a: HashSet<String> = a
+        .split_whitespace()
         .map(|w| w.to_lowercase())
         .filter(|w| w.len() > 1)
         .collect();
-    let words_b: HashSet<String> = b.split_whitespace()
+    let words_b: HashSet<String> = b
+        .split_whitespace()
         .map(|w| w.to_lowercase())
         .filter(|w| w.len() > 1)
         .collect();
-    
+
     if words_a.is_empty() || words_b.is_empty() {
         return 0.0;
     }
-    
+
     let intersection = words_a.intersection(&words_b).count() as f64;
     let union = words_a.union(&words_b).count() as f64;
-    
-    if union == 0.0 { 0.0 } else { intersection / union }
+
+    if union == 0.0 {
+        0.0
+    } else {
+        intersection / union
+    }
 }
 
 /// Cross-source semantic dedup: remove results with >80% title similarity.
@@ -475,12 +575,16 @@ pub fn jaccard_similarity(a: &str, b: &str) -> f64 {
 pub fn semantic_dedup(results: &mut Vec<WebSearchResult>) {
     let threshold = 0.8;
     let mut to_remove = HashSet::new();
-    
+
     for i in 0..results.len() {
-        if to_remove.contains(&i) { continue; }
+        if to_remove.contains(&i) {
+            continue;
+        }
         for j in (i + 1)..results.len() {
-            if to_remove.contains(&j) { continue; }
-            
+            if to_remove.contains(&j) {
+                continue;
+            }
+
             let sim = jaccard_similarity(&results[i].title, &results[j].title);
             if sim > threshold {
                 // Keep the one with higher score (tiebreak: keep earlier result)
@@ -496,7 +600,7 @@ pub fn semantic_dedup(results: &mut Vec<WebSearchResult>) {
             }
         }
     }
-    
+
     if !to_remove.is_empty() {
         let mut idx = 0;
         results.retain(|_| {
@@ -511,9 +615,8 @@ pub fn semantic_dedup(results: &mut Vec<WebSearchResult>) {
 pub fn domain_dedup(results: &mut Vec<WebSearchResult>) {
     // Common multi-part TLDs that should be treated as a single suffix
     static MULTI_PART_TLDS: &[&str] = &[
-        "co.uk", "com.au", "co.nz", "co.za", "co.in", "co.jp",
-        "com.br", "com.cn", "com.mx", "com.sg", "com.tw",
-        "or.jp", "ne.jp", "net.au", "org.au",
+        "co.uk", "com.au", "co.nz", "co.za", "co.in", "co.jp", "com.br", "com.cn", "com.mx",
+        "com.sg", "com.tw", "or.jp", "ne.jp", "net.au", "org.au",
     ];
 
     // Extract registrable domain (e.g., "bbc.co.uk" from "www.bbc.co.uk")
@@ -577,18 +680,34 @@ pub fn route_engines(topic: &str, query: &str) -> Vec<String> {
     // Detect topic from query keywords if not explicit
     let effective_topic = if topic != "general" {
         topic
-    } else if query_lower.contains("rust") || query_lower.contains("python") || query_lower.contains("javascript")
-        || query_lower.contains("code") || query_lower.contains("api") || query_lower.contains("library")
-        || query_lower.contains("function") || query_lower.contains("error") || query_lower.contains("bug")
-        || query_lower.contains("compiler") || query_lower.contains("package") || query_lower.contains("crate")
+    } else if query_lower.contains("rust")
+        || query_lower.contains("python")
+        || query_lower.contains("javascript")
+        || query_lower.contains("code")
+        || query_lower.contains("api")
+        || query_lower.contains("library")
+        || query_lower.contains("function")
+        || query_lower.contains("error")
+        || query_lower.contains("bug")
+        || query_lower.contains("compiler")
+        || query_lower.contains("package")
+        || query_lower.contains("crate")
     {
         "code"
-    } else if query_lower.contains("news") || query_lower.contains("breaking") || query_lower.contains("today")
-        || query_lower.contains("yesterday") || query_lower.contains("latest") || query_lower.contains("recent")
+    } else if query_lower.contains("news")
+        || query_lower.contains("breaking")
+        || query_lower.contains("today")
+        || query_lower.contains("yesterday")
+        || query_lower.contains("latest")
+        || query_lower.contains("recent")
     {
         "news"
-    } else if query_lower.contains("research") || query_lower.contains("paper") || query_lower.contains("study")
-        || query_lower.contains("journal") || query_lower.contains("clinical") || query_lower.contains("trial")
+    } else if query_lower.contains("research")
+        || query_lower.contains("paper")
+        || query_lower.contains("study")
+        || query_lower.contains("journal")
+        || query_lower.contains("clinical")
+        || query_lower.contains("trial")
     {
         "academic"
     } else {
@@ -609,16 +728,14 @@ pub fn route_engines(topic: &str, query: &str) -> Vec<String> {
             "hackernews".to_string(),
             "duckduckgo".to_string(),
         ],
-        "news" => vec![
-            "duckduckgo".to_string(),
-            "hackernews".to_string(),
-        ],
+        "news" => vec!["duckduckgo".to_string(), "hackernews".to_string()],
         "academic" => vec![
             "wikipedia".to_string(),
             "github".to_string(),
             "duckduckgo".to_string(),
         ],
-        _ => vec![ // general
+        _ => vec![
+            // general
             "duckduckgo".to_string(),
             "wikipedia".to_string(),
             "hackernews".to_string(),
@@ -632,4 +749,3 @@ pub fn route_engines(topic: &str, query: &str) -> Vec<String> {
 
     engines
 }
-

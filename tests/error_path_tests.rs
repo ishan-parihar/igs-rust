@@ -80,14 +80,17 @@ fn json_error_into_apperror() {
 
 #[test]
 fn appresult_question_mark_propagates() {
-    let result: AppResult<serde_json::Value> = serde_json::from_str("invalid").map_err(AppError::from);
+    let result: AppResult<serde_json::Value> =
+        serde_json::from_str("invalid").map_err(AppError::from);
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), AppError::Json(_)));
 }
 
 #[test]
 fn appresult_question_mark_io() {
-    let result: AppResult<String> = std::fs::read_to_string("/nonexistent/path/that/does/not/exist.json").map_err(AppError::from);
+    let result: AppResult<String> =
+        std::fs::read_to_string("/nonexistent/path/that/does/not/exist.json")
+            .map_err(AppError::from);
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), AppError::Io(_)));
 }
@@ -181,6 +184,9 @@ fn apperror_display_is_human_readable() {
         let s = e.to_string();
         assert!(!s.is_empty(), "Display should produce non-empty string");
         // Should not contain Rust debug formatting artifacts
-        assert!(!s.contains("AppError"), "Display should not leak enum name: {s}");
+        assert!(
+            !s.contains("AppError"),
+            "Display should not leak enum name: {s}"
+        );
     }
 }

@@ -1,22 +1,25 @@
+use crate::error::AppResult;
 use crate::http::HttpClient;
 use crate::tools::types::*;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
-use crate::error::AppResult;
 
-mod scoring;
-mod readability;
 mod engines;
 mod extractors;
-pub(crate) use scoring::*;
-pub use readability::{extract_semantic_excerpt, extract_ddg_redirect_url};
+mod readability;
+mod scoring;
 pub use engines::web_image_search;
-pub use extractors::{web_scrape, web_crawl, web_extract, web_map};
 pub use extractors::web_screenshot;
+pub use extractors::{web_crawl, web_extract, web_map, web_scrape};
+pub use readability::{extract_ddg_redirect_url, extract_semantic_excerpt};
+pub(crate) use scoring::*;
 
-pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: &crate::types::Settings) -> AppResult<WebSearchOutput> {
-
+pub async fn web_search(
+    input: WebSearchInput,
+    http: Arc<HttpClient>,
+    settings: &crate::types::Settings,
+) -> AppResult<WebSearchOutput> {
     let max_results: usize = input.max_results.unwrap_or(10) as usize;
     let depth = input.depth.as_deref().unwrap_or("fast");
     let topic = input.topic.as_deref().unwrap_or("general");
@@ -26,13 +29,23 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
 
     // Check cache first (skip for deep mode or explicit engines)
     if !is_deep && input.engines.is_none() {
-        if let Some(cached) = cache_get(&input.query, topic, max_results, content_length, include_highlights, input.include_answer.unwrap_or(false)) {
+        if let Some(cached) = cache_get(
+            &input.query,
+            topic,
+            max_results,
+            content_length,
+            include_highlights,
+            input.include_answer.unwrap_or(false),
+        ) {
             return Ok(cached);
         }
     }
 
     // Determine which engines to use
-    let engines = input.engines.clone().unwrap_or_else(|| route_engines(topic, &input.query));
+    let engines = input
+        .engines
+        .clone()
+        .unwrap_or_else(|| route_engines(topic, &input.query));
 
     let start = Instant::now();
 
@@ -48,7 +61,15 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
                 let http_clone = http.clone();
                 let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
-                    engines::search_duckduckgo(&q, max_results * 2, include_answer, &time_range_clone, &obs_settings, &http_clone).await
+                    engines::search_duckduckgo(
+                        &q,
+                        max_results * 2,
+                        include_answer,
+                        &time_range_clone,
+                        &obs_settings,
+                        &http_clone,
+                    )
+                    .await
                 }));
             }
 
@@ -72,7 +93,8 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
                 let http_clone = http.clone();
                 let time_range_clone = input.time_range.clone().unwrap_or_default();
                 handles.push(tokio::spawn(async move {
-                    engines::search_hackernews(&q, max_results, &http_clone, &time_range_clone).await
+                    engines::search_hackernews(&q, max_results, &http_clone, &time_range_clone)
+                        .await
                 }));
             }
             "stackoverflow" => {
@@ -155,7 +177,8 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
 
     // Sort by score (highest first)
     deduped.sort_by(|a, b| {
-        b.score.unwrap_or(0.0)
+        b.score
+            .unwrap_or(0.0)
             .partial_cmp(&a.score.unwrap_or(0.0))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
@@ -172,10 +195,12 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
                 {
                     let excerpt = extract_semantic_excerpt(&html, &result.title, 1500);
                     if !excerpt.is_empty() {
-                        result.raw_content = Some(html_to_markdown_rs::convert(&html, None)
-                            .ok()
-                            .and_then(|r| r.content)
-                            .unwrap_or_default());
+                        result.raw_content = Some(
+                            html_to_markdown_rs::convert(&html, None)
+                                .ok()
+                                .and_then(|r| r.content)
+                                .unwrap_or_default(),
+                        );
                         // Upgrade content if the excerpt is better than the snippet
                         if excerpt.len() > result.content.as_deref().unwrap_or("").len() {
                             result.content = Some(excerpt);
@@ -228,11 +253,16 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
                 continue;
             }
             let scored = bm25_score_chunks(&paragraphs, &input.query, cps);
-            result.chunks = Some(scored.into_iter().map(|c| ScoredChunkOutput {
-                content: c.content,
-                score: c.score,
-                index: c.index,
-            }).collect());
+            result.chunks = Some(
+                scored
+                    .into_iter()
+                    .map(|c| ScoredChunkOutput {
+                        content: c.content,
+                        score: c.score,
+                        index: c.index,
+                    })
+                    .collect(),
+            );
         }
     }
 
@@ -271,17 +301,25 @@ pub async fn web_search(input: WebSearchInput, http: Arc<HttpClient>, settings: 
 
     // Cache the results (skip for deep mode or explicit engines)
     if !is_deep && input.engines.is_none() {
-        cache_set(&input.query, topic, max_results, content_length, include_highlights, input.include_answer.unwrap_or(false), &output);
+        cache_set(
+            &input.query,
+            topic,
+            max_results,
+            content_length,
+            include_highlights,
+            input.include_answer.unwrap_or(false),
+            &output,
+        );
     }
 
     Ok(output)
 }
 #[cfg(test)]
 mod tests {
-    use crate::tools::nlp::tokenize;
-    use std::time::Duration;
     use super::readability::text_density;
     use super::*;
+    use crate::tools::nlp::tokenize;
+    use std::time::Duration;
 
     #[test]
     fn tokenize_basic() {
@@ -290,7 +328,7 @@ mod tests {
         assert!(tokens.contains(&"world".to_string()));
         assert!(tokens.contains(&"test".to_string()));
         assert!(tokens.contains(&"is".to_string())); // 2-char tokens are kept
-        // Single-char tokens filtered out
+                                                     // Single-char tokens filtered out
         assert!(!tokens.contains(&"a".to_string()));
     }
 
@@ -340,7 +378,11 @@ mod tests {
 
     #[test]
     fn keyword_relevance_basic() {
-        let score = keyword_relevance("Rust async tutorial", "Learn about async in Rust", "rust async");
+        let score = keyword_relevance(
+            "Rust async tutorial",
+            "Learn about async in Rust",
+            "rust async",
+        );
         assert!(score > 0.5);
     }
 
@@ -361,17 +403,27 @@ mod tests {
             WebSearchResult {
                 title: "How to learn Rust programming".to_string(),
                 url: "https://a.com".to_string(),
-                content: None, score: Some(0.9), highlights: None,
-                raw_content: None, source: None, domain: None,
-                published_date: None, favicon: None,
+                content: None,
+                score: Some(0.9),
+                highlights: None,
+                raw_content: None,
+                source: None,
+                domain: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
             WebSearchResult {
                 title: "How to learn Rust programming language".to_string(),
                 url: "https://b.com".to_string(),
-                content: None, score: Some(0.7), highlights: None,
-                raw_content: None, source: None, domain: None,
-                published_date: None, favicon: None,
+                content: None,
+                score: Some(0.7),
+                highlights: None,
+                raw_content: None,
+                source: None,
+                domain: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
         ];
@@ -620,7 +672,9 @@ mod tests {
         let hl = extract_highlights(text, "rust programming", 5);
         // Sentences containing 'rust' or 'programming' should rank higher
         assert!(!hl.is_empty());
-        assert!(hl[0].to_lowercase().contains("rust") || hl[0].to_lowercase().contains("programming"));
+        assert!(
+            hl[0].to_lowercase().contains("rust") || hl[0].to_lowercase().contains("programming")
+        );
     }
 
     #[test]
@@ -633,7 +687,8 @@ mod tests {
     #[test]
     fn extract_highlights_filters_short_sentences() {
         // Sentences shorter than 30 chars are excluded
-        let text = "Short. This is a longer sentence about rust programming that should be included.";
+        let text =
+            "Short. This is a longer sentence about rust programming that should be included.";
         let hl = extract_highlights(text, "rust", 5);
         assert!(!hl.is_empty());
         assert!(hl.iter().all(|s| s.len() > 30));
@@ -650,10 +705,12 @@ mod tests {
                 url: "https://www.bbc.com/news/1".into(),
                 content: Some("content1".into()),
                 score: Some(0.5),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("bbc.com".into()),
-                published_date: None, favicon: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
             WebSearchResult {
@@ -661,10 +718,12 @@ mod tests {
                 url: "https://www.bbc.com/news/2".into(),
                 content: Some("content2".into()),
                 score: Some(0.8),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("bbc.com".into()),
-                published_date: None, favicon: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
         ];
@@ -682,10 +741,12 @@ mod tests {
                 url: "https://bbc.com/1".into(),
                 content: Some("c".into()),
                 score: Some(0.5),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("bbc.com".into()),
-                published_date: None, favicon: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
             WebSearchResult {
@@ -693,10 +754,12 @@ mod tests {
                 url: "https://reuters.com/1".into(),
                 content: Some("c".into()),
                 score: Some(0.6),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("reuters.com".into()),
-                published_date: None, favicon: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
         ];
@@ -713,10 +776,12 @@ mod tests {
                 url: "https://www.bbc.co.uk/news/1".into(),
                 content: Some("c".into()),
                 score: Some(0.4),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("www.bbc.co.uk".into()),
-                published_date: None, favicon: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
             WebSearchResult {
@@ -724,10 +789,12 @@ mod tests {
                 url: "https://bbc.co.uk/sport/1".into(),
                 content: Some("c".into()),
                 score: Some(0.9),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("bbc.co.uk".into()),
-                published_date: None, favicon: None,
+                published_date: None,
+                favicon: None,
                 chunks: None,
             },
         ];
@@ -739,19 +806,19 @@ mod tests {
     #[test]
     fn domain_dedup_no_domain() {
         use super::WebSearchResult;
-        let mut results = vec![
-            WebSearchResult {
-                title: "No domain".into(),
-                url: "https://example.com/1".into(),
-                content: Some("c".into()),
-                score: Some(0.5),
-                highlights: None, raw_content: None,
-                source: Some("ddg".into()),
-                domain: None,
-                published_date: None, favicon: None,
-                chunks: None,
-            },
-        ];
+        let mut results = vec![WebSearchResult {
+            title: "No domain".into(),
+            url: "https://example.com/1".into(),
+            content: Some("c".into()),
+            score: Some(0.5),
+            highlights: None,
+            raw_content: None,
+            source: Some("ddg".into()),
+            domain: None,
+            published_date: None,
+            favicon: None,
+            chunks: None,
+        }];
         domain_dedup(&mut results);
         assert_eq!(results.len(), 1); // no domain = no dedup
     }
@@ -767,20 +834,26 @@ mod tests {
                 url: "https://a.com".into(),
                 content: Some("c".into()),
                 score: Some(0.5),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("a.com".into()),
-                published_date: None, favicon: None, chunks: None,
+                published_date: None,
+                favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "Rust programming language tutorial".into(),
                 url: "https://b.com".into(),
                 content: Some("c".into()),
                 score: Some(0.8),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("b.com".into()),
-                published_date: None, favicon: None, chunks: None,
+                published_date: None,
+                favicon: None,
+                chunks: None,
             },
         ];
         semantic_dedup(&mut results);
@@ -797,20 +870,26 @@ mod tests {
                 url: "https://a.com".into(),
                 content: Some("c".into()),
                 score: Some(0.5),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("a.com".into()),
-                published_date: None, favicon: None, chunks: None,
+                published_date: None,
+                favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "Python tutorial".into(),
                 url: "https://b.com".into(),
                 content: Some("c".into()),
                 score: Some(0.6),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("b.com".into()),
-                published_date: None, favicon: None, chunks: None,
+                published_date: None,
+                favicon: None,
+                chunks: None,
             },
         ];
         semantic_dedup(&mut results);
@@ -827,20 +906,26 @@ mod tests {
                 url: "https://a.com".into(),
                 content: Some("c".into()),
                 score: Some(0.5),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("a.com".into()),
-                published_date: None, favicon: None, chunks: None,
+                published_date: None,
+                favicon: None,
+                chunks: None,
             },
             WebSearchResult {
                 title: "Rust is a fast compiled language".into(),
                 url: "https://b.com".into(),
                 content: Some("c".into()),
                 score: Some(0.6),
-                highlights: None, raw_content: None,
+                highlights: None,
+                raw_content: None,
                 source: Some("ddg".into()),
                 domain: Some("b.com".into()),
-                published_date: None, favicon: None, chunks: None,
+                published_date: None,
+                favicon: None,
+                chunks: None,
             },
         ];
         semantic_dedup(&mut results);
@@ -857,13 +942,20 @@ mod tests {
             url: "https://rust-lang.org".into(),
             content: Some("Rust is a systems programming language.".into()),
             score: None,
-            highlights: None, raw_content: None,
+            highlights: None,
+            raw_content: None,
             source: Some("wikipedia".into()),
             domain: Some("wikipedia.org".into()),
-            published_date: None, favicon: None, chunks: None,
+            published_date: None,
+            favicon: None,
+            chunks: None,
         };
         let score = compute_relevance_score(&result, "rust programming");
-        assert!(score > 0.6, "Expected high score for title match, got {}", score);
+        assert!(
+            score > 0.6,
+            "Expected high score for title match, got {}",
+            score
+        );
     }
 
     #[test]
@@ -874,13 +966,20 @@ mod tests {
             url: "https://cooking.com".into(),
             content: Some("Delicious recipes for dinner.".into()),
             score: None,
-            highlights: None, raw_content: None,
+            highlights: None,
+            raw_content: None,
             source: Some("ddg".into()),
             domain: Some("cooking.com".into()),
-            published_date: None, favicon: None, chunks: None,
+            published_date: None,
+            favicon: None,
+            chunks: None,
         };
         let score = compute_relevance_score(&result, "rust programming");
-        assert!(score < 0.5, "Expected low score for no match, got {}", score);
+        assert!(
+            score < 0.5,
+            "Expected low score for no match, got {}",
+            score
+        );
     }
 
     #[test]
@@ -892,10 +991,13 @@ mod tests {
             url: "https://example.com".into(),
             content: Some("Rust gets new features.".into()),
             score: None,
-            highlights: None, raw_content: None,
+            highlights: None,
+            raw_content: None,
             source: Some("ddg".into()),
             domain: Some("example.com".into()),
-            published_date: Some(today), favicon: None, chunks: None,
+            published_date: Some(today),
+            favicon: None,
+            chunks: None,
         };
         let score = compute_relevance_score(&result, "rust");
         // Fresh content should get a boost
@@ -910,10 +1012,13 @@ mod tests {
             url: "https://doc.rust-lang.org".into(),
             content: Some("Official Rust documentation.".into()),
             score: None,
-            highlights: None, raw_content: None,
+            highlights: None,
+            raw_content: None,
             source: Some("ddg".into()),
             domain: Some("docs.rs".into()),
-            published_date: None, favicon: None, chunks: None,
+            published_date: None,
+            favicon: None,
+            chunks: None,
         };
         let score = compute_relevance_score(&result, "rust docs");
         // docs.rs has high authority (0.85)
@@ -932,8 +1037,10 @@ mod tests {
         let scored = bm25_score_chunks(&chunks, "rust safety", 2);
         assert_eq!(scored.len(), 2);
         // The Python chunk (no query terms) should not be in top 2
-        assert!(scored.iter().all(|c| !c.content.contains("Python")),
-            "Python chunk should rank lower than Rust chunks");
+        assert!(
+            scored.iter().all(|c| !c.content.contains("Python")),
+            "Python chunk should rank lower than Rust chunks"
+        );
         assert!(scored[0].score > 0.0);
     }
 
@@ -976,7 +1083,10 @@ mod tests {
     fn split_paragraphs_filters_short() {
         let text = "A short line.\n\nAnother short one.";
         let paragraphs = super::split_paragraphs(text);
-        assert!(paragraphs.is_empty(), "Short fragments should be filtered out");
+        assert!(
+            paragraphs.is_empty(),
+            "Short fragments should be filtered out"
+        );
     }
 
     #[test]
@@ -987,6 +1097,9 @@ mod tests {
         // but single newlines are collapsed into spaces
         assert_eq!(paragraphs.len(), 1);
         assert!(paragraphs[0].contains("Line one"));
-        assert!(!paragraphs[0].contains('\n'), "Single newlines should be collapsed");
+        assert!(
+            !paragraphs[0].contains('\n'),
+            "Single newlines should be collapsed"
+        );
     }
 }

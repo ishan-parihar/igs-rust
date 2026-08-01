@@ -298,7 +298,12 @@ async fn parse_generic_html(source: &Source, html: &str) -> Vec<NewsItem> {
         let sel = match scraper::Selector::parse(sel_str) {
             Ok(sel) => sel,
             Err(e) => {
-                tracing::warn!("Invalid CSS selector '{}' for source {}: {}", sel_str, source.id, e);
+                tracing::warn!(
+                    "Invalid CSS selector '{}' for source {}: {}",
+                    sel_str,
+                    source.id,
+                    e
+                );
                 continue;
             }
         };

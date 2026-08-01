@@ -6,12 +6,12 @@
 //! - Scheduled report generation: cron-like config for automated briefings
 //! - Export: save articles/reports to file in various formats
 
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use crate::error::{AppError, AppResult};
 
 // ─── Webhook Enrichment ───────────────────────────────────────
 
@@ -36,7 +36,10 @@ pub struct WebhookEnrichOutput {
 /// POST articles to an external webhook for enrichment (e.g., an LLM service,
 /// a custom NLP pipeline, or a third-party API). The webhook should return
 /// enriched JSON that replaces the original articles.
-pub async fn webhook_enrich(input: WebhookEnrichInput, http: &HttpClient) -> AppResult<WebhookEnrichOutput> {
+pub async fn webhook_enrich(
+    input: WebhookEnrichInput,
+    http: &HttpClient,
+) -> AppResult<WebhookEnrichOutput> {
     let body = serde_json::json!({
         "articles": serde_json::from_str::<serde_json::Value>(&input.articles_json)
             .map_err(|e| format!("Invalid articles_json: {}", e))?,

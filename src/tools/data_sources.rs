@@ -6,13 +6,13 @@
 //! - HaveIBeenPwned: breach data for OSINT (freemium)
 //! - ACLED: armed conflict locations & events (free for research)
 
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::LimitInput;
 use crate::tools::types_base::OutputOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::error::{AppError, AppResult};
 
 // ─── OpenAlex ─────────────────────────────────────────────────
 
@@ -46,8 +46,10 @@ pub struct OpenAlexSearchOutput {
 }
 
 /// Search OpenAlex for 250M+ academic works. Free API, no key required.
-pub async fn openalex_search(input: OpenAlexSearchInput, http: &HttpClient) -> AppResult<OpenAlexSearchOutput> {
-
+pub async fn openalex_search(
+    input: OpenAlexSearchInput,
+    http: &HttpClient,
+) -> AppResult<OpenAlexSearchOutput> {
     let limit = input.limit.unwrap_or(25).min(200);
     let query_enc = urlencoding(&input.query);
     let url = format!(
@@ -60,7 +62,9 @@ pub async fn openalex_search(input: OpenAlexSearchInput, http: &HttpClient) -> A
         .await
         .map_err(|e| format!("OpenAlex API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -156,8 +160,10 @@ pub struct ShodanSearchOutput {
 }
 
 /// Search Shodan for exposed services. Requires API key.
-pub async fn shodan_search(input: ShodanSearchInput, http: &HttpClient) -> AppResult<ShodanSearchOutput> {
-
+pub async fn shodan_search(
+    input: ShodanSearchInput,
+    http: &HttpClient,
+) -> AppResult<ShodanSearchOutput> {
     let limit = input.limits.limit.unwrap_or(25).min(100);
     let query_enc = urlencoding(&input.query);
     let url = format!(
@@ -171,7 +177,9 @@ pub async fn shodan_search(input: ShodanSearchInput, http: &HttpClient) -> AppRe
         .await
         .map_err(|e| format!("Shodan API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -245,7 +253,6 @@ pub struct HibpBreachOutput {
 
 /// Check if an email has been in any known data breach via HaveIBeenPwned.
 pub async fn hibp_check(input: HibpBreachInput, http: &HttpClient) -> AppResult<HibpBreachOutput> {
-
     let url = format!(
         "https://haveibeenpwned.com/api/v3/breachedaccount/{}",
         input.email
@@ -260,7 +267,9 @@ pub async fn hibp_check(input: HibpBreachInput, http: &HttpClient) -> AppResult<
         .await
         .map_err(|e| format!("HIBP API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     // 404 means no breaches — that's a success
@@ -345,8 +354,10 @@ pub struct AcledSearchOutput {
 }
 
 /// Search ACLED for armed conflict events. Requires free API key + email.
-pub async fn acled_search(input: AcledSearchInput, http: &HttpClient) -> AppResult<AcledSearchOutput> {
-
+pub async fn acled_search(
+    input: AcledSearchInput,
+    http: &HttpClient,
+) -> AppResult<AcledSearchOutput> {
     let limit = input.limits.limit.unwrap_or(50).min(500);
     let mut url = format!(
         "https://api.acleddata.com/acled/read?key={}&email={}&limit={}",
@@ -372,7 +383,9 @@ pub async fn acled_search(input: AcledSearchInput, http: &HttpClient) -> AppResu
         .await
         .map_err(|e| format!("ACLED API error: {}", e))?;
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let json: serde_json::Value = serde_json::from_str(&resp.body_text)

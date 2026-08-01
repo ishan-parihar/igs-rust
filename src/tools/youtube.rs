@@ -1,6 +1,6 @@
+use crate::error::{AppError, AppResult};
 use crate::tools::types::*;
 use tokio::process::Command;
-use crate::error::{AppError, AppResult};
 
 pub async fn youtube_search(input: YoutubeSearchInput) -> AppResult<YoutubeSearchOutput> {
     let limit = input.limit.unwrap_or(10).min(50);
@@ -60,9 +60,7 @@ pub async fn youtube_search(input: YoutubeSearchInput) -> AppResult<YoutubeSearc
     Ok(YoutubeSearchOutput { videos, count })
 }
 
-pub async fn youtube_metadata(
-    input: YoutubeMetadataInput,
-) -> AppResult<YoutubeMetadataOutput> {
+pub async fn youtube_metadata(input: YoutubeMetadataInput) -> AppResult<YoutubeMetadataOutput> {
     let output = Command::new("yt-dlp")
         .args(["--dump-json", "--no-download", "--no-playlist"])
         .arg(&input.url)
@@ -95,9 +93,7 @@ pub async fn youtube_metadata(
     })
 }
 
-pub async fn youtube_subtitles(
-    input: YoutubeSubtitlesInput,
-) -> AppResult<YoutubeSubtitlesOutput> {
+pub async fn youtube_subtitles(input: YoutubeSubtitlesInput) -> AppResult<YoutubeSubtitlesOutput> {
     let lang = input.language.unwrap_or_else(|| "en".to_string());
 
     let list_output = Command::new("yt-dlp")

@@ -1,7 +1,7 @@
 use super::helpers::urlencoding;
 use super::types::*;
-use crate::http::{self as http_mod, HttpClient};
 use crate::error::{AppError, AppResult};
+use crate::http::{self as http_mod, HttpClient};
 
 pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> AppResult<HealthCdcOutput> {
     let client = reqwest::Client::new();
@@ -29,7 +29,10 @@ pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> AppResult<Healt
         .map_err(|e| format!("CDC API error: {}", e))?;
 
     if !resp.status().is_success() {
-        return Err(AppError::from(format!("CDC API returned {}", resp.status())));
+        return Err(AppError::from(format!(
+            "CDC API returned {}",
+            resp.status()
+        )));
     }
 
     let data: serde_json::Value = resp
@@ -64,7 +67,10 @@ pub async fn health_cdc_leading_causes(input: HealthCdcInput) -> AppResult<Healt
     })
 }
 
-pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient) -> AppResult<HealthWhoOutput> {
+pub async fn health_who_gho(
+    input: HealthWhoInput,
+    http: &HttpClient,
+) -> AppResult<HealthWhoOutput> {
     let indicator = input.indicator.as_deref().unwrap_or("WHOSIS_000001");
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -91,7 +97,9 @@ pub async fn health_who_gho(input: HealthWhoInput, http: &HttpClient) -> AppResu
         .map_err(|e| format!("WHO GHO API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =

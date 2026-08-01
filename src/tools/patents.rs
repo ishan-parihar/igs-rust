@@ -1,9 +1,12 @@
 use super::types::*;
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
-use crate::error::{AppError, AppResult};
 
-pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> AppResult<PatentSearchOutput> {
+pub async fn patents_search(
+    input: PatentSearchInput,
+    http: &HttpClient,
+) -> AppResult<PatentSearchOutput> {
     let office = input.office.as_deref().unwrap_or("USPTO");
     let limit = input.years_back.unwrap_or(20).clamp(1, 100);
 
@@ -27,7 +30,9 @@ pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> AppR
                 .map_err(|e| format!("PatentsView API error: {}", e))?;
 
             let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                return Err(AppError::other("unexpected cached response for bypass mode"));
+                return Err(AppError::other(
+                    "unexpected cached response for bypass mode",
+                ));
             };
 
             let data: serde_json::Value = serde_json::from_str(&resp.body_text)
@@ -59,11 +64,17 @@ pub async fn patents_search(input: PatentSearchInput, http: &HttpClient) -> AppR
                 patents,
             })
         }
-        _ => Err(AppError::from(format!("Unsupported patent office: {}. Use USPTO.", office))),
+        _ => Err(AppError::from(format!(
+            "Unsupported patent office: {}. Use USPTO.",
+            office
+        ))),
     }
 }
 
-pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> AppResult<PatentDetailsOutput> {
+pub async fn patents_details(
+    input: PatentDetailsInput,
+    http: &HttpClient,
+) -> AppResult<PatentDetailsOutput> {
     let query_json = serde_json::json!({"patent_number": input.patent_id});
     let fields =
         r#"["patent_number","patent_title","patent_date","patent_abstract","patent_claims"]"#;
@@ -78,7 +89,9 @@ pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> Ap
         .map_err(|e| format!("PatentsView API error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let data: serde_json::Value =
@@ -97,6 +110,9 @@ pub async fn patents_details(input: PatentDetailsInput, http: &HttpClient) -> Ap
             url: format!("https://patents.google.com/patent/{}", input.patent_id),
         })
     } else {
-        Err(AppError::from(format!("Patent {} not found", input.patent_id)))
+        Err(AppError::from(format!(
+            "Patent {} not found",
+            input.patent_id
+        )))
     }
 }

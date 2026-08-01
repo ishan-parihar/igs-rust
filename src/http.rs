@@ -14,36 +14,39 @@ use url::Url;
 /// Validate that a URL is safe to fetch (SSRF protection).
 /// Rejects non-http(s) schemes, loopback, link-local, private, and reserved IPs.
 pub fn validate_public_url(url_str: &str) -> AppResult<Url> {
-    let url = Url::parse(url_str)
-        .map_err(|e| AppError::validation(format!("invalid URL: {e}")))?;
-    
+    let url = Url::parse(url_str).map_err(|e| AppError::validation(format!("invalid URL: {e}")))?;
+
     // Only allow http/https schemes
     if !matches!(url.scheme(), "http" | "https") {
         return Err(AppError::validation(
-            "only http and https schemes are allowed".to_string()));
+            "only http and https schemes are allowed".to_string(),
+        ));
     }
-    
+
     // Get host and resolve to IP
-    let host = url.host_str().ok_or_else(|| 
-        AppError::validation("URL missing host".to_string()))?;
-    
+    let host = url
+        .host_str()
+        .ok_or_else(|| AppError::validation("URL missing host".to_string()))?;
+
     // Try to parse as IP address first
     if let Ok(ip) = host.parse::<IpAddr>() {
         if is_private_or_reserved_ip(&ip) {
             return Err(AppError::validation(
-                "access to private/reserved IP addresses is not allowed".to_string()));
+                "access to private/reserved IP addresses is not allowed".to_string(),
+            ));
         }
         // IP is public, OK
         return Ok(url);
     }
-    
+
     // Host is a domain name - resolve it
     // We'll do a basic check for obvious internal domains
     if is_obviously_internal_domain(host) {
         return Err(AppError::validation(
-            "access to internal domains is not allowed".to_string()));
+            "access to internal domains is not allowed".to_string(),
+        ));
     }
-    
+
     // For full DNS resolution, we'd need a DNS resolver.
     // For now, allow the request but the HTTP client will resolve at connect time.
     // A production deployment should add a DNS resolution step here.
@@ -321,7 +324,8 @@ impl HttpClient {
     ) -> Result<FetchOutcome> {
         // SSRF protection: validate URL before posting
         let _ = crate::http::validate_public_url(url)?;
-        let _global_permit = self.global_semaphore
+        let _global_permit = self
+            .global_semaphore
             .acquire()
             .await
             .map_err(|e| anyhow::anyhow!("Global semaphore closed: {}", e))?;

@@ -1,19 +1,21 @@
+use crate::error::{AppError, AppResult};
 use crate::http::{self as http_mod, HttpClient};
 use crate::tools::helpers::urlencoding;
 use crate::tools::types::*;
 use crate::types::*;
 use chrono::Datelike;
 use unpdf;
-use crate::error::{AppError, AppResult};
 
 /// Search academic papers across arXiv and Semantic Scholar
-pub async fn research_search(input: ResearchSearchInput, http: &HttpClient) -> AppResult<ResearchSearchOutput> {
+pub async fn research_search(
+    input: ResearchSearchInput,
+    http: &HttpClient,
+) -> AppResult<ResearchSearchOutput> {
     let sources = input
         .sources
         .unwrap_or_else(|| vec!["arxiv".into(), "semanticscholar".into()]);
     let limit = input.limit.unwrap_or(25).clamp(1, 100);
     let query_enc = urlencoding(&input.query);
-
 
     let mut all_papers: Vec<ResearchPaper> = Vec::new();
     let mut total = 0usize;
@@ -292,8 +294,11 @@ type PaperFetchResult = (
 );
 
 /// Get detailed information about a specific paper by ID
-pub async fn research_paper(input: ResearchPaperInput, http: &HttpClient, settings: &crate::types::Settings) -> AppResult<ResearchPaperOutput> {
-
+pub async fn research_paper(
+    input: ResearchPaperInput,
+    http: &HttpClient,
+    settings: &crate::types::Settings,
+) -> AppResult<ResearchPaperOutput> {
     let paper_id = &input.paper_id;
     let (title, authors, abstract_text, year, citations, references, pdf_url, _content): PaperFetchResult =
         if paper_id.starts_with("arxiv:") || !paper_id.contains(':') {
@@ -433,7 +438,6 @@ pub async fn research_pubmed_search(
     input: ResearchPubMedInput,
     http: &HttpClient,
 ) -> AppResult<ResearchPubMedOutput> {
-
     let query = urlencoding(&input.query);
     let limit = input.limits.limit.unwrap_or(20).clamp(1, 100);
 
@@ -448,7 +452,9 @@ pub async fn research_pubmed_search(
         .map_err(|e| format!("PubMed search error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(search_resp, _, _) = search_outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let search_data: serde_json::Value = serde_json::from_str(&search_resp.body_text)
@@ -483,7 +489,9 @@ pub async fn research_pubmed_search(
         .map_err(|e| format!("PubMed detail error: {}", e))?;
 
     let http_mod::FetchOutcome::Response(detail_resp, _, _) = detail_outcome else {
-        return Err(AppError::other("unexpected cached response for bypass mode"));
+        return Err(AppError::other(
+            "unexpected cached response for bypass mode",
+        ));
     };
 
     let detail_data: serde_json::Value = serde_json::from_str(&detail_resp.body_text)
@@ -527,7 +535,6 @@ pub async fn research_download(
     http: &HttpClient,
     settings: &crate::types::Settings,
 ) -> AppResult<ResearchDownloadOutput> {
-
     // Determine the PDF URL based on the paper ID
     let pdf_url = if input.paper_id.starts_with("arxiv:") {
         let id = input.paper_id.trim_start_matches("arxiv:");
@@ -542,7 +549,9 @@ pub async fn research_download(
         match http.fetch(&url, None, "bypass").await {
             Ok(outcome) => {
                 let http_mod::FetchOutcome::Response(resp, _, _) = outcome else {
-                    return Err(AppError::other("unexpected cached response for bypass mode"));
+                    return Err(AppError::other(
+                        "unexpected cached response for bypass mode",
+                    ));
                 };
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.body_text) {
                     json["openAccessPdf"]["url"]
@@ -553,7 +562,12 @@ pub async fn research_download(
                     return Err("Failed to parse Semantic Scholar response".into());
                 }
             }
-            Err(e) => return Err(AppError::other(format!("Failed to fetch paper details: {}", e))),
+            Err(e) => {
+                return Err(AppError::other(format!(
+                    "Failed to fetch paper details: {}",
+                    e
+                )))
+            }
         }
     } else {
         return Err("Unknown paper ID format. Use arxiv:XXXX.XXXXX or semanticscholar:XXXX".into());
