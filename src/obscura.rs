@@ -2,6 +2,7 @@ use crate::config;
 use crate::types::ObscuraSettings;
 use anyhow::{Context, Result};
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -267,9 +268,13 @@ impl ObscuraManager {
             }
         }
 
-        // Make executable
-        std::fs::set_permissions(&self.binary_path, std::fs::Permissions::from_mode(0o755))
-            .context("Failed to set permissions")?;
+        // Make executable (unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&self.binary_path, std::fs::Permissions::from_mode(0o755))
+                .context("Failed to set permissions")?;
+        }
 
         // Cleanup (temp_dir is dropped automatically)
         Ok(())
