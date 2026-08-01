@@ -22,3 +22,7 @@ jobs:
       run: cargo test
     - name: Build
       run: cargo build --release
+    - name: Install cargo-audit
+      run: cargo install cargo-audit --locked
+    - name: Security audit
+      run: cargo audit
