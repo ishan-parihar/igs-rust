@@ -611,14 +611,19 @@ impl InsightStorage {
 // ─── Sync Settings Loader ───────────────────────────────────────
 
 /// Load settings synchronously (for use in non-async constructors).
-/// Replicates config::load_settings() using std::fs.
+/// Falls back to `Settings::default()` when the file is missing (first run).
 fn load_settings_sync() -> Result<Settings, String> {
     let user_dir = config::user_config_dir();
     let _ = std::fs::create_dir_all(&user_dir);
 
     let file = user_dir.join("settings.yml");
-    let raw = std::fs::read_to_string(&file)
-        .map_err(|e| format!("Failed to read {}: {}", file.display(), e))?;
+    let raw = match std::fs::read_to_string(&file) {
+        Ok(r) => r,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Settings::default());
+        }
+        Err(e) => return Err(format!("Failed to read {}: {}", file.display(), e)),
+    };
 
     // Expand env vars via the shared helper in `config`.
     let expanded = config::expand_env_vars(&raw);

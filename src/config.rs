@@ -3,6 +3,20 @@ use crate::types::*;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
+// Embedded default configs — compiled into the binary so bootstrap works
+// even when the source tree isn't present (e.g., installed via curl).
+const DEFAULT_SETTINGS: &str = include_str!("../config/settings.yml");
+const DEFAULT_POOLS: &str = include_str!("../config/pools.yml");
+const DEFAULT_SOURCES: &str = include_str!("../config/sources.yml");
+const DEFAULT_COUNTRIES: &str = include_str!("../config/countries.yml");
+
+const EMBEDDED_DEFAULTS: &[(&str, &str)] = &[
+    ("settings.yml", DEFAULT_SETTINGS),
+    ("pools.yml", DEFAULT_POOLS),
+    ("sources.yml", DEFAULT_SOURCES),
+    ("countries.yml", DEFAULT_COUNTRIES),
+];
+
 /// Determine the user config directory.
 /// Precedence:
 /// 1. env IGS_CONFIG_DIR
@@ -36,15 +50,20 @@ async fn ensure_bootstrapped() -> AppResult<()> {
         .await
         .map_err(AppError::from)?;
 
-    for f in &["pools.yml", "sources.yml", "settings.yml", "countries.yml"] {
-        let target = user_dir.join(f);
+    for &(name, embedded) in EMBEDDED_DEFAULTS {
+        let target = user_dir.join(name);
         if !file_exists(&target).await {
-            let src = pkg_dir.join(f);
-            if file_exists(&src).await {
-                let content = fs::read(&src).await.map_err(AppError::from)?;
-                fs::write(&target, &content).await.map_err(AppError::from)?;
-                tracing::info!("Bootstrapped {} from package config", f);
-            }
+            // Try filesystem first (source tree), fall back to embedded default.
+            let content = {
+                let src = pkg_dir.join(name);
+                if file_exists(&src).await {
+                    fs::read(&src).await.map_err(AppError::from)?
+                } else {
+                    embedded.as_bytes().to_vec()
+                }
+            };
+            fs::write(&target, &content).await.map_err(AppError::from)?;
+            tracing::info!("Bootstrapped {}", name);
         }
     }
     Ok(())
