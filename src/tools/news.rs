@@ -70,6 +70,156 @@ pub async fn news_fetch(
     let mut sources = sf.sources;
     sources.retain(|s| s.is_active.unwrap_or(true));
 
+    // Filter by explicit source IDs — takes precedence over pool/country/city/domain filters.
+    // When --sources (CLI) or `sources` (MCP) is provided we only touch those sources and
+    // skip every other filter so the caller gets exactly what they asked for.
+    if let Some(ref source_ids) = input.filters.sources {
+        if !source_ids.is_empty() {
+            sources.retain(|s| source_ids.iter().any(|id| id == &s.id));
+            // Skip the remaining narrowing filters — source IDs are already maximally specific.
+            sources.truncate(max_sources);
+            // Still partition out platform sources that can't be fetched via parse_by_source.
+            let short_circuited = sources
+                .iter()
+                .filter(|s| matches!(s.platform.as_deref(), Some("reddit") | Some("twitter")))
+                .count();
+            sources.retain(|s| !matches!(s.platform.as_deref(), Some("reddit") | Some("twitter")));
+
+            let mut all_items = Vec::new();
+            let mut source_groups: Vec<(Vec<NewsItem>, f64)> = Vec::new();
+            let mut succeeded = 0usize;
+            let mut failed = 0usize;
+
+            let sem = Arc::new(tokio::sync::Semaphore::new(
+                settings.http.concurrency as usize,
+            ));
+            let total = sources.len() + short_circuited;
+
+            let mut handles = Vec::new();
+            for src in sources.into_iter() {
+                let sem = sem.clone();
+                let http_ref = http.clone();
+                let cm = cache_mode.clone();
+                let weight = src.weight.unwrap_or(1.0);
+                let src_id = src.id.clone();
+                handles.push(tokio::spawn(async move {
+                    let _permit = sem.acquire().await.expect("semaphore closed");
+                    match parsers::parse_by_source(&src, &http_ref, &cm, None).await {
+                        Ok(items) => (src_id, items, weight, true),
+                        Err(_) => (src_id, vec![], weight, false),
+                    }
+                }));
+            }
+
+            for handle in handles {
+                match handle.await {
+                    Ok((_src_id, items, weight, ok)) => {
+                        if ok {
+                            source_groups.push((items.clone(), weight));
+                        }
+                        all_items.extend(items);
+                        if ok {
+                            succeeded += 1;
+                        } else {
+                            failed += 1;
+                        }
+                    }
+                    Err(_) => {
+                        failed += 1;
+                    }
+                }
+            }
+
+            all_items = if source_groups.len() > 1 {
+                fusion::weighted_rrf_fusion(source_groups, 60)
+            } else {
+                all_items.sort_by(|a, b| match (a.freshness_score, b.freshness_score) {
+                    (Some(fa), Some(fb)) => fb.partial_cmp(&fa).unwrap_or(std::cmp::Ordering::Equal),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    _ => b.pub_date.cmp(&a.pub_date),
+                });
+                all_items
+            };
+
+            if input.filters.start.is_some() || input.filters.end.is_some() {
+                all_items = parsers::filter_by_time(
+                    all_items,
+                    input.filters.start.as_deref(),
+                    input.filters.end.as_deref(),
+                );
+            }
+
+            let mut keyword_vec: Vec<String> = Vec::new();
+            if let Some(ref kw) = input.filters.keywords {
+                match kw {
+                    KeywordFilter::Single(s) => keyword_vec.push(s.clone()),
+                    KeywordFilter::Multiple(arr) => keyword_vec.extend(arr.iter().cloned()),
+                    KeywordFilter::Nested(nested) => {
+                        for cluster in nested.iter() {
+                            keyword_vec.extend(cluster.iter().cloned());
+                        }
+                    }
+                }
+            }
+            if !input.discovery_mode.unwrap_or(false) {
+                let exclude = input
+                    .filters
+                    .exclude_keywords
+                    .as_ref()
+                    .cloned()
+                    .unwrap_or_default();
+                all_items = parsers::filter_by_keywords(
+                    all_items,
+                    input.filters.keywords.as_ref(),
+                    &exclude,
+                    input.filters.match_all.unwrap_or(false),
+                );
+            }
+
+            all_items = parsers::batch_similar(all_items, 0.3);
+            all_items = parsers::cap_per_author(all_items, 3);
+            all_items.truncate(limit);
+            let count = all_items.len();
+
+            let meta = NewsFetchMeta {
+                sources_queried: total,
+                sources_succeeded: succeeded,
+                sources_failed: failed,
+                sources_short_circuited: short_circuited,
+                total_sources: total,
+                pool_ids: input.filters.pools.unwrap_or_default(),
+                keywords: keyword_vec,
+                count,
+            };
+
+            let clusters = if depth == "deep" && all_items.len() >= 5 {
+                let article_clusters = clustering::cluster_articles(&all_items, 2);
+                Some(
+                    article_clusters
+                        .into_iter()
+                        .take(20)
+                        .map(|c| ClusterInfo {
+                            representative: c.representative,
+                            member_count: c.members.len(),
+                            entities: c.entities,
+                            source_count: c.source_count,
+                        })
+                        .collect(),
+                )
+            } else {
+                None
+            };
+
+            return Ok(NewsFetchOutput {
+                items: all_items,
+                count,
+                meta,
+                clusters,
+            });
+        }
+    }
+
     // Filter sources by pool
     if let Some(ref pool_ids) = input.filters.pools {
         if !pool_ids.is_empty() {

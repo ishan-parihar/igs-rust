@@ -53,18 +53,59 @@ struct RedditPost {
 
 // ─── Cookie-based Authentication ──────────────────────────────
 
-/// Load Reddit cookie from settings
+const REDDIT_SETUP_HINT: &str = "\
+Reddit requires a browser cookie to bypass bot detection (Akamai/JA3).\n\
+\n\
+To configure:\n\
+  1. Open reddit.com in your browser (sign in or use as guest)\n\
+  2. DevTools → Network → refresh → click any reddit.com request\n\
+  3. Copy the full 'Cookie:' request header value\n\
+  4. In ~/.config/igs-mcp/settings.yml set:\n\
+       reddit:\n\
+         enabled: true\n\
+         cookie: \"<paste here>\"\n\
+  Or set the IGS_REDDIT_COOKIE env var and use: cookie: \"${IGS_REDDIT_COOKIE}\"";
+
+/// Load and validate the Reddit cookie from settings.
+///
+/// Checks (in order):
+///   1. `reddit:` section exists — if missing, the user hasn't bootstrapped yet
+///   2. `reddit.enabled: true`   — explicit opt-in required
+///   3. `reddit.cookie` is non-empty — the actual credential
+///
+/// Returns a clear, actionable error for every failure mode so the user
+/// knows exactly what to do on a fresh system.
 async fn load_reddit_cookie() -> AppResult<String> {
     let settings = config::load_settings()
         .await
-        .map_err(|e| format!("Settings load failed: {}", e))?;
+        .map_err(|e| AppError::config(format!("Could not load settings.yml: {}", e)))?;
 
-    settings
-        .reddit
-        .and_then(|r| r.cookie)
+    let reddit = settings.reddit.as_ref().ok_or_else(|| {
+        AppError::config(format!(
+            "No 'reddit:' section found in ~/.config/igs-mcp/settings.yml.\n{}",
+            REDDIT_SETUP_HINT
+        ))
+    })?;
+
+    if !reddit.enabled {
+        return Err(AppError::config(format!(
+            "Reddit integration is disabled (reddit.enabled: false).\n\
+             Set reddit.enabled: true in ~/.config/igs-mcp/settings.yml and add your cookie.\n\
+             {}",
+            REDDIT_SETUP_HINT
+        )));
+    }
+
+    reddit
+        .cookie
+        .as_deref()
         .filter(|c| !c.is_empty())
+        .map(|c| c.to_string())
         .ok_or_else(|| {
-            AppError::from("Reddit cookie not configured. Add reddit.cookie to settings.yml")
+            AppError::config(format!(
+                "reddit.enabled is true but reddit.cookie is empty.\n{}",
+                REDDIT_SETUP_HINT
+            ))
         })
 }
 
@@ -139,7 +180,9 @@ async fn reddit_get(client: &Client, url: &str) -> AppResult<String> {
 
                 if status == 401 || status == 403 {
                     return Err(AppError::from(format!(
-                        "Reddit auth failed (HTTP {}). Check your cookie in settings.yml.",
+                        "Reddit returned HTTP {} — your cookie is expired or invalid.\n\
+                         Refresh it: open reddit.com → DevTools → Network → copy the Cookie header\n\
+                         and update reddit.cookie in ~/.config/igs-mcp/settings.yml.",
                         status
                     )));
                 }

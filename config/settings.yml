@@ -18,7 +18,7 @@ http:
   perHost: 2
   retries: 2
   timeoutMs: 15000
-  userAgent: IGS/1.0.0 (+https://github.com/ishan-parihar/igs-rust)
+  userAgent: IGS/1.0.1 (+https://github.com/ishan-parihar/igs-rust)
 nlp:
   enabled: true
   max_entities: 20
@@ -30,3 +30,18 @@ output:
 twitter:
   cookie: ""
   enabled: false
+
+# ─── Reddit Integration ───────────────────────────────────────
+# reddit.search and reddit.feed use cookie-based auth to bypass Akamai bot detection.
+# Without a valid cookie both tools will return a clear error explaining what to do.
+#
+# How to get your Reddit cookie:
+#   1. Open reddit.com in your browser and sign in (or use as guest)
+#   2. Open DevTools → Network tab → refresh the page
+#   3. Click any request to reddit.com → Headers → "Cookie:" request header
+#   4. Copy the full value and paste it below
+#
+# Alternatively: set the IGS_REDDIT_COOKIE environment variable and use ${IGS_REDDIT_COOKIE}
+reddit:
+  enabled: false
+  cookie: ""

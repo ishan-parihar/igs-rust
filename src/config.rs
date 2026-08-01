@@ -66,6 +66,80 @@ async fn ensure_bootstrapped() -> AppResult<()> {
             tracing::info!("Bootstrapped {}", name);
         }
     }
+
+    // Migrate stale settings.yml files that predate new top-level sections.
+    // This is additive-only — existing values are never touched.
+    migrate_settings().await?;
+
+    Ok(())
+}
+
+/// Inject missing top-level sections into an existing settings.yml.
+///
+/// Uses a text-level scan (not YAML parse+serialize) so user comments,
+/// ordering, and formatting are completely preserved. Only the missing
+/// stub is appended at the end of the file.
+///
+/// Currently handles:
+/// - `reddit:` — added in v1.0.0; users bootstrapped before that lack it
+async fn migrate_settings() -> AppResult<()> {
+    let settings_file = user_config_dir().join("settings.yml");
+    if !file_exists(&settings_file).await {
+        return Ok(()); // will be written by the bootstrap loop above
+    }
+
+    let content = fs::read_to_string(&settings_file)
+        .await
+        .map_err(|e| AppError::from(format!("Migration read failed: {}", e)))?;
+
+    // Each entry: (top-level YAML key, stub to append when absent).
+    // The stub must start with a newline so it appends cleanly regardless
+    // of whether the file ends with a trailing newline.
+    let migrations: &[(&str, &str)] = &[
+        (
+            "reddit:",
+            "\n\
+# ─── Reddit Integration ───────────────────────────────────────\n\
+# reddit.search and reddit.feed use cookie-based auth to bypass Akamai bot detection.\n\
+# Without a valid cookie both tools will return a clear error explaining what to do.\n\
+#\n\
+# How to get your Reddit cookie:\n\
+#   1. Open reddit.com in your browser and sign in (or use as guest)\n\
+#   2. Open DevTools → Network tab → refresh the page\n\
+#   3. Click any request to reddit.com → Headers → copy the 'Cookie:' request header value\n\
+#   4. Paste it below (or set IGS_REDDIT_COOKIE env var and use: cookie: \"${IGS_REDDIT_COOKIE}\")\n\
+reddit:\n\
+  enabled: false\n\
+  cookie: \"\"\n",
+        ),
+    ];
+
+    let mut appended: Vec<&str> = Vec::new();
+
+    // Build the new content incrementally; only write if something changed.
+    let mut new_content = content.clone();
+    for &(key, stub) in migrations {
+        // A top-level key appears at column 0, not indented.
+        // Match `key` at the start of any line (handles both "reddit:" and "reddit: ...").
+        let present = new_content
+            .lines()
+            .any(|line| line.starts_with(key) || line == key.trim_end_matches(':'));
+        if !present {
+            new_content.push_str(stub);
+            appended.push(key);
+        }
+    }
+
+    if !appended.is_empty() {
+        tracing::info!(
+            "settings.yml migration: added missing section(s): {}",
+            appended.join(", ")
+        );
+        fs::write(&settings_file, new_content.as_bytes())
+            .await
+            .map_err(|e| AppError::from(format!("Migration write failed: {}", e)))?;
+    }
+
     Ok(())
 }
 
