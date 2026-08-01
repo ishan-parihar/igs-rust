@@ -834,7 +834,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "sources.upsert",
-        description = "Create or update a news source. Required: name, type, url. Optional: id, headers, parser, pools, countries, cities, domains, is_active."
+        description = "Create or update a news source. Required: name, type, url. Optional: id, parser, pools, countries."
     )]
     async fn sources_upsert(
         &self,
@@ -940,7 +940,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "parsers.list",
-        description = "List available source parser keys (rss, generic_html, semantic_scholar, etc.). Auto-detects if parser not specified in sources.upsert."
+        description = "List available parser keys (rss, generic_html, semantic_scholar, etc.). Auto-detects if not specified."
     )]
     async fn parsers_list(
         &self,
@@ -961,7 +961,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "news.fetch",
-        description = "Fetch news from configured sources. Filter by pools, countries, domains, keywords. depth='deep' runs full intelligence pipeline."
+        description = "Fetch news from configured sources. Filter by pools, countries, keywords. depth='deep' runs full pipeline."
     )]
     async fn news_fetch(
         &self,
@@ -1030,7 +1030,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "news.enrich",
-        description = "Offline NLP enrichment for news items. Extracts topics, entities, sentiment, and summary. No external API calls. Use with insights.index_articles for cross-article analysis."
+        description = "Offline NLP enrichment for news items. Extracts topics, entities, sentiment. No external API."
     )]
     async fn news_enrich(
         &self,
@@ -1474,7 +1474,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.search",
-        description = "Real-time web search across multiple engines (DDG, Wikipedia, GitHub, HackerNews, StackOverflow). Use for general web queries, code search, news lookup, and research. For RSS/web-crawl pipeline from configured sources, use news.fetch instead. Supports content depth control, highlight extraction, answer synthesis, time-range filtering, and smart engine routing by topic. Zero API keys required."
+        description = "Real-time web search across DDG, Wikipedia, GitHub, HackerNews, StackOverflow. Zero API keys needed."
     )]
     async fn web_search(
         &self,
@@ -1489,7 +1489,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.scrape",
-        description = "Scrape a URL and return structured markdown with metadata. Supports Obscura for JS rendering and stealth."
+        description = "Scrape a URL to structured markdown. Supports Obscura for JS rendering."
     )]
     async fn web_scrape(
         &self,
@@ -1534,7 +1534,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.extract",
-        description = "Extract structured content from a URL using Obscura. Supports full extraction (text, metadata, links, images, structured data) or selector-based extraction."
+        description = "Extract structured content from a URL using Obscura. Supports text, metadata, links, images, structured data."
     )]
     async fn web_extract(&self, params: Parameters<WebExtractInput>) -> Result<CallToolResult, String> {
         let format = self.resolve_format(&params.0.output);
@@ -1548,7 +1548,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "web.screenshot",
-        description = "Capture a screenshot of a URL using Obscura headless browser via CDP. Returns base64-encoded PNG or JPEG. Useful for visual verification, capturing dynamic content (charts, maps), and archiving page snapshots."
+        description = "Capture a screenshot of a URL via Obscura CDP. Returns base64-encoded PNG or JPEG."
     )]
     async fn web_screenshot(
         &self,
