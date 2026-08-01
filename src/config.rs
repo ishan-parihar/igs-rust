@@ -98,19 +98,21 @@ async fn migrate_settings() -> AppResult<()> {
     let migrations: &[(&str, &str)] = &[
         (
             "reddit:",
-            "\n\
-# ─── Reddit Integration ───────────────────────────────────────\n\
-# reddit.search and reddit.feed use cookie-based auth to bypass Akamai bot detection.\n\
-# Without a valid cookie both tools will return a clear error explaining what to do.\n\
-#\n\
-# How to get your Reddit cookie:\n\
-#   1. Open reddit.com in your browser and sign in (or use as guest)\n\
-#   2. Open DevTools → Network tab → refresh the page\n\
-#   3. Click any request to reddit.com → Headers → copy the 'Cookie:' request header value\n\
-#   4. Paste it below (or set IGS_REDDIT_COOKIE env var and use: cookie: \"${IGS_REDDIT_COOKIE}\")\n\
-reddit:\n\
-  enabled: false\n\
-  cookie: \"\"\n",
+            concat!(
+                "\n",
+                "# \u{2500}\u{2500}\u{2500} Reddit Integration \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n",
+                "# reddit.search and reddit.feed use cookie-based auth to bypass Akamai bot detection.\n",
+                "# Without a valid cookie both tools will return a clear error explaining what to do.\n",
+                "#\n",
+                "# How to get your Reddit cookie:\n",
+                "#   1. Open reddit.com in your browser and sign in (or use as guest)\n",
+                "#   2. Open DevTools -> Network tab -> refresh the page\n",
+                "#   3. Click any request to reddit.com -> Headers -> copy the 'Cookie:' request header value\n",
+                "#   4. Paste it below (or set IGS_REDDIT_COOKIE env var and use: cookie: \"${IGS_REDDIT_COOKIE}\")\n",
+                "reddit:\n",
+                "  enabled: false\n",
+                "  cookie: \"\"\n",
+            ),
         ),
     ];
 
