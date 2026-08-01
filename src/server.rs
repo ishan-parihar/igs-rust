@@ -961,7 +961,7 @@ impl IgsMcpServer {
 
     #[tool(
         name = "news.fetch",
-        description = "Fetch news from configured RSS/web-crawl source pipeline. Filter by pools, countries, domains, keywords. depth='deep' runs fetch+enrich+index pipeline. For real-time web search across engines, use web.search instead."
+        description = "Fetch news from configured sources. Filter by pools, countries, domains, keywords. depth='deep' runs full intelligence pipeline."
     )]
     async fn news_fetch(
         &self,
@@ -1559,6 +1559,8 @@ impl IgsMcpServer {
             .unwrap_or_else(|_| params.0.url.clone());
         let output = web::web_screenshot(params.0, &self.settings).await?;
         self.dump("web.screenshot", &_subject, &output);
+        // WebScreenshotInput has no OutputOptions (format is image format, not output format)
+        // Always return JSON since the output contains base64 image data
         Ok(format_output(&output, "json"))
     }
 
