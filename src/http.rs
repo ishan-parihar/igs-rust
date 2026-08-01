@@ -312,7 +312,7 @@ impl HttpClient {
         ))
     }
 
-    /// POST JSON body to a URL. No caching — used for API calls (Tavily, Firecrawl, etc.)
+    /// POST JSON body to a URL. No caching — used for API calls (webhooks, external APIs).
     pub async fn post_json(
         &self,
         url: &str,

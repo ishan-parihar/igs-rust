@@ -1,4 +1,4 @@
-# IGS — Intelligence Gathering System
+# IGS — Intelligence Gathering System v1.0.0
 
 [![GitHub](https://img.shields.io/badge/GitHub-ishan--parihar/igs--rust-181717?logo=github)](https://github.com/ishan-parihar/igs-rust)
 [![GitLab](https://img.shields.io/badge/GitLab-ishan--parihar/igs--rust-FC6D26?logo=gitlab)](https://gitlab.com/ishan-parihar/igs-rust)
@@ -13,7 +13,7 @@ MCP server + CLI for intelligence gathering. 64 tools, 411 sources, 47 countries
 | Pools | 14 (geopolitics, tech, India, defense, health, etc.) |
 | Binary | Single `igs` binary (~26 MB musl static) |
 | Output | TOON (default, ~40% fewer tokens) or JSON |
-
+| API Keys | **None required** — all web search uses Obscura + DuckDuckGo |
 ---
 
 ## Installation
@@ -117,19 +117,19 @@ igs news fetch --pools GLOBAL_TECH_CYBER --limit 10
 igs reddit search --query "AI safety"
 
 # Search academic papers
-igs research search --query "transformer architecture"
-
-# Web search (requires Tavily API key)
+# Search web (zero API keys — uses DuckDuckGo via Obscura)
 igs web search --query "rust async runtime"
 
 # Scrape a URL to markdown
 igs web scrape --url https://example.com
 
-# Crawl a website (requires Lightpanda enabled)
+# Crawl a website (requires Obscura enabled)
 igs web crawl --url https://example.com --max-depth 2
 
-# Browser automation (requires Lightpanda enabled)
+# Browser automation (requires Obscura enabled)
 igs browser goto --url https://example.com
+igs browser markdown
+igs browser links
 igs browser markdown
 igs browser links
 
@@ -175,7 +175,7 @@ Override with: `export IGS_CONFIG_DIR=/path/to/config`
 ```yaml
 # HTTP client
 http:
-  userAgent: IGS-MCP/0.5
+  userAgent: IGS/1.0.0 (+https://github.com/ishan-parihar/igs-rust)
   timeoutMs: 15000
   retries: 2
   concurrency: 6
@@ -187,23 +187,46 @@ cache:
   ttlMs: 1800000        # 30 minutes
   queryTtlMs: 600000    # 10 minutes
 
-# Web search (requires API key)
-tavily:
-  enabled: false
-  apiKey: ${TAVILY_API_KEY}
-
-firecrawl:
-  enabled: false
-  apiKey: ${FIRECRAWL_API_KEY}
-
-# Lightpanda headless browser (auto-downloads binary)
+# Obscura headless browser (auto-downloads binary)
+# Powers: web.search (via DDG), web.scrape (JS rendering), web.crawl, browser.*
 browser:
-  enabled: false
+  enabled: true
+  default: obscura
   auto_update: true
   obey_robots: true
   timeout_ms: 30000
   max_concurrent: 10
 
+# NLP enrichment (offline, no API calls)
+nlp:
+  enabled: true
+  max_topics: 8
+  max_entities: 20
+  dedup_threshold: 0.3
+
+# Intelligence pipeline
+pipeline:
+  default_pool: GLOBAL_TECH_CYBER
+  default_limit: 50
+  persist_insights: true
+
+# Output format
+output:
+  default_format: toon  # "toon" or "json"
+
+# API Keys (optional — tools work without them)
+openweather:
+  enabled: false
+  apiKey: ${OPENWEATHER_API_KEY}
+
+noaa:
+  enabled: false
+  apiKey: ${NOAA_API_KEY}
+
+courtlistener:
+  enabled: false
+  apiKey: ${COURTLISTENER_API_KEY}
+```
 # NLP enrichment (offline, no API calls)
 nlp:
   enabled: true
@@ -235,14 +258,10 @@ courtlistener:
   apiKey: ${COURTLISTENER_API_KEY}
 ```
 
-### Environment Variables
-
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `IGS_CONFIG_DIR` | `~/.config/igs-mcp/` | Config directory |
 | `RUST_LOG` | `info` | Log level (`debug`, `trace`) |
-| `TAVILY_API_KEY` | — | Tavily web search API key |
-| `FIRECRAWL_API_KEY` | — | Firecrawl API key |
 | `OPENWEATHER_API_KEY` | — | OpenWeatherMap API key (free tier: 1000/day) |
 | `NOAA_API_KEY` | — | NOAA Climate Data Online API key (free) |
 | `COURTLISTENER_API_KEY` | — | CourtListener API token (free) |
@@ -289,10 +308,9 @@ courtlistener:
 ### Web (4 tools)
 
 | Tool | Description |
-|------|-------------|
-| `web.search` | Real-time web search (Tavily) |
-| `web.scrape` | Scrape URL to markdown |
-| `web.crawl` | BFS crawl website |
+| `web.search` | Real-time web search (DDG + Wikipedia + GitHub + HN + StackOverflow) |
+| `web.scrape` | Scrape URL to markdown (HTTP or Obscura JS rendering) |
+| `web.crawl` | BFS crawl website via Obscura |
 | `web.map` | Discover URLs from sitemap |
 
 ### Insights (5 tools)
@@ -445,7 +463,8 @@ courtlistener:
 | OpenWeatherMap | Weather data | 1000 calls/day | Yes |
 | NOAA CDO | Climate data | 10,000 req/day | Yes |
 | CourtListener | Case law | 125 req/day | Yes |
-| Tavily | Web search | 1000 req/month | Yes |
+| DuckDuckGo | Web search | Unlimited | No |
+| Obscura | JS rendering | Unlimited | No |
 | Yahoo Finance | Stock quotes | Unlimited | No |
 | CoinGecko | Crypto prices | 30 req/min | No |
 | NVD | CVE vulnerabilities | Rate-limited | No |

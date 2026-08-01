@@ -1,13 +1,5 @@
 browser:
   default: obscura
-  lightpanda:
-    auto_update: true
-    enabled: true
-    headless: true
-    max_concurrent: 10
-    obey_robots: true
-    stealth: true
-    timeout_ms: 30000
   obscura:
     auto_update: true
     enabled: true
@@ -19,15 +11,6 @@ cache:
   dir: cache
   enabled: true
   ttlMs: 1800000
-firecrawl:
-  apiKey: ${FIRECRAWL_API_KEY}
-  defaultFormats:
-  - markdown
-  - html
-  - screenshot
-  - links
-  enabled: true
-  timeoutMs: 60000
 http:
   backoffBaseMs: 500
   backoffFactor: 2.0
@@ -35,7 +18,7 @@ http:
   perHost: 2
   retries: 2
   timeoutMs: 15000
-  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust-mcp)
+  userAgent: IGS/1.0.0 (+https://github.com/ishan-parihar/igs-rust)
 nlp:
   enabled: true
   max_entities: 20
@@ -44,12 +27,6 @@ output:
   default_format: toon
   dump_dir: ~/Documents/IGS
   dump_enabled: false
-tavily:
-  apiKey: ${TAVILY_API_KEY}
-  defaultTopic: general
-  enabled: true
-  searchDepth: basic
-  timeoutMs: 30000
 twitter:
   cookie: guest_id=v1%3A177910199735927032; auth_token=6713a2bae6fd0795213b1be68fab64fa0db77465;
     ct0=8d2f549c7cf852a378d5cfe9978d04f881600c43c474648fdb23840ac1bf5a90a8709cb5d9a8fd3e7855b12389b33582779feee0c2c82ceeb74539dd52934e3def7fbf14c2413494c983c8a831cb36cd;

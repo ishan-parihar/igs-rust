@@ -1,4 +1,4 @@
-# AGENTS.md — IGS MCP Server
+# AGENTS.md — IGS MCP Server v1.0.0
 
 Guide for AI agents using IGS as an intelligence gathering tool.
 
@@ -72,7 +72,7 @@ Tools are organized into 20 domain groups. Load only the groups you need to cons
 | **Environment** | `env.epa_facilities`, `env.epa_emissions`, `satellite.firms_fires` |
 
 | **SOP** | `sop.list`, `sop.execute` |
-| **Browser** | `browser.goto`, `browser.markdown`, `browser.links`, `browser.evaluate`, ``, ``, ``, `browser.click`, `browser.fill`, `browser.scroll`, `browser.wait_for_selector`, `` |
+| **Browser** | `browser.goto`, `browser.markdown`, `browser.links`, `browser.evaluate`, `browser.click`, `browser.fill`, `browser.scroll`, `browser.wait_for_selector` |
 
 ## Recommended Workflows
 
@@ -106,9 +106,9 @@ insights.index_articles(articles=<enriched items>)
 
 ```
 web.search(query="quantum computing breakthroughs", max_results=10)
-→ Returns web search results
+→ Returns web search results (DDG + Wikipedia + GitHub + HN + StackOverflow — zero API keys)
 
-web.scrape(url=<interesting_url>, provider="browser")
+web.scrape(url=<interesting_url>, provider="obscura")
 → Returns structured markdown with metadata
 
 web.crawl(url=<site>, max_depth=3, max_pages=50)
@@ -141,17 +141,20 @@ news.fetch(cities=["Delhi","Mumbai"], limit=10)
 → Fetch news from specific cities
 ```
 
-### 6. Browser Automation (Lightpanda MCP)
+### 6. Browser Automation (Obscura MCP)
 
 ```
 browser.goto(url="https://example.com", wait_until="networkidle")
 → Navigate to page, render JavaScript
 
-()
-→ Extract JSON-LD, OpenGraph, microdata
+browser.markdown()
+→ Get page content as structured markdown
 
-()
-→ Find forms on the page
+browser.links()
+→ Extract all links from current page
+
+browser.evaluate(expression="document.title")
+→ Execute JavaScript and get result
 
 browser.fill(selector="input[name=email]", value="user@example.com")
 → Fill form field
@@ -159,11 +162,11 @@ browser.fill(selector="input[name=email]", value="user@example.com")
 browser.click(selector="button[type=submit]", wait_for_navigation=true)
 → Click submit button
 
-browser.markdown()
-→ Get page content as structured markdown
+browser.scroll(direction="down", pixels=500)
+→ Scroll page
 
-browser.evaluate(expression="document.title")
-→ Execute JavaScript and get result
+browser.wait_for_selector(selector="#content", timeout_ms=5000)
+→ Wait for element to appear
 ```
 
 ## Tool Details
@@ -189,9 +192,8 @@ Available pools: `GLOBAL_BREAKING`, `GLOBAL_GEOECON`, `GLOBAL_LAW_REG`, `GLOBAL_
 | Provider | Tool | Requires |
 |----------|------|----------|
 | `default` | `web.scrape` | HTTP + html-to-markdown-rs |
-| `browser` | `web.scrape`, `web.crawl` | `browser.enabled=true` in settings |
-| `tavily` | `web.search` | `tavily.enabled=true` + API key |
-| `firecrawl` | `web.search` | `firecrawl.enabled=true` + API key |
+| `obscura` | `web.search`, `web.scrape`, `web.crawl` | `browser.enabled=true` in settings |
+| `duckduckgo` | `web.search` | Built-in via Obscura (no API key) |
 
 ### web.crawl Options
 
@@ -210,32 +212,27 @@ Available pools: `GLOBAL_BREAKING`, `GLOBAL_GEOECON`, `GLOBAL_LAW_REG`, `GLOBAL_
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `provider` | "default" | "default" (HTTP) or "browser" (JS rendering) |
-| `wait_selector` | — | CSS selector to wait for (Lightpanda only) |
-| `strip_mode` | — | Strip content (Lightpanda only) |
-| `wait_until` | "networkidle" | When to capture (Lightpanda only) |
-| `include_frames` | false | Include iframes (Lightpanda only) |
+| `provider` | "default" | "default" (HTTP) or "obscura" (JS rendering) |
+| `wait_selector` | — | CSS selector to wait for (Obscura only) |
+| `strip_mode` | — | Strip content (Obscura only) |
+| `wait_until` | "networkidle" | When to capture (Obscura only) |
+| `include_frames` | false | Include iframes (Obscura only) |
 
-### Lightpanda MCP Browser Tools
+### Obscura MCP Browser Tools
+### Obscura MCP Browser Tools
 
 These tools use a persistent browser session via `browser mcp`. The page stays loaded between calls — navigate first, then interact.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `browser.goto` | `url`, `wait_until?` | Navigate to URL. Renders JavaScript. |
-| `browser.markdown` | `strip_mode?` | Get current page as markdown. |
-| `browser.links` | `selector?` | Extract links from current page. |
+| `browser.goto` | `url`, `wait_until?` | Navigate to URL. Renders JS, spawns session. |
+| `browser.markdown` | `strip_mode?` | Get page content as markdown. |
+| `browser.links` | `selector?` | Extract all links from current page. |
 | `browser.evaluate` | `expression` | Execute JavaScript. Returns result. |
-| `` | `include_text?` | Get AI-friendly DOM tree. |
-| `` | `jsonld?`, `opengraph?`, `microdata?` | Extract JSON-LD, OpenGraph, microdata. |
-| `` | `selector?` | Find forms on current page. |
 | `browser.click` | `selector`, `wait_for_navigation?` | Click element by CSS selector. |
 | `browser.fill` | `selector`, `value` | Fill form field. |
 | `browser.scroll` | `direction?`, `pixels?` | Scroll page (up/down/left/right). |
 | `browser.wait_for_selector` | `selector`, `timeout_ms?` | Wait for element to appear. |
-| `` | `selector?` | Find clickable/fillable elements. |
-
-### NLP Enrichment
 
 `news.enrich` performs offline NLP (no external API calls):
 
@@ -264,9 +261,8 @@ The insight engine persists to SQLite at `~/.config/igs-mcp/insights.db`.
 IGS provides actionable error messages:
 
 | Pattern | Example |
-|---------|---------|
-| Prerequisite | "Lightpanda is not enabled. Set browser.enabled=true in settings.yml" |
-| Configuration | "No web search provider available. Configure Tavily or Firecrawl in settings.yml." |
+|---------|--------|
+| Prerequisite | "Obscura is not enabled. Set browser.enabled=true in settings.yml" |
 | Input validation | "Invalid URL 'not-a-url': relative URL without a base" |
 | HTTP errors | "HTTP 404 for URL: https://example.com/missing" |
 | Paper ID format | "Unknown paper ID format. Use arxiv:XXXX.XXXXX or semanticscholar:XXXX" |
@@ -276,17 +272,12 @@ IGS provides actionable error messages:
 Edit `~/.config/igs-mcp/settings.yml`:
 
 ```yaml
-# Enable Lightpanda for JS-rendered crawling
+# Enable Obscura for JS-rendered crawling and web search
 browser:
   enabled: true
   auto_update: true
   obey_robots: true
   timeout_ms: 30000
-
-# Enable Tavily for web search
-tavily:
-  enabled: true
-  apiKey: "tvly-YOUR_KEY"
 
 # Restrict loaded tool groups (default: all)
 tool_groups:

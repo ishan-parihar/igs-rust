@@ -4,7 +4,7 @@
 
 # ─── HTTP Client ──────────────────────────────────────────────
 http:
-  userAgent: IGS/0.5.2 (+https://github.com/ishan-parihar/igs-rust)
+  userAgent: IGS/1.0.0 (+https://github.com/ishan-parihar/igs-rust)
 
   timeoutMs: 15000
   retries: 2
@@ -18,32 +18,31 @@ cache:
   enabled: true
   dir: cache
   ttlMs: 1800000
-  # Removed (YAGNI): honorEtags, queryTtlMs, maxItemsPerSource
-  # These fields are still accepted in settings.yml for backward compat
-  # but are no longer read by any code path.
 
 # ─── Obscura Headless Browser ─────────────────────────────────
-obscura:
+# Powers: web.search (via DDG), web.scrape (JS rendering), web.crawl, browser.*
+browser:
   enabled: true
-  auto_update: true
-  obey_robots: true
-  timeout_ms: 30000
-  max_concurrent: 10
-  stealth: true
+  default: obscura
+  obscura:
+    enabled: true
+    auto_update: true
+    obey_robots: true
+    timeout_ms: 30000
+    max_concurrent: 10
+    stealth: true
 
-# ─── NLP Enrichment ──────────────────────────────────────────
+# ─── NLP Enrichment (offline, no API calls) ──────────────────
 nlp:
   enabled: true
   max_topics: 8
   max_entities: 20
-  # Removed (YAGNI): min_entity_length, dedup_threshold
 
 # ─── Output Format ────────────────────────────────────────────
 output:
   default_format: toon
   dump_enabled: false
   dump_dir: "~/Documents/IGS"
-  # Removed (YAGNI): toon_indent, max_items_per_response
 
 # ─── Tool Groups ───────────────────────────────────────────────
 tool_groups: ["discovery", "news", "research", "web", "insights"]
