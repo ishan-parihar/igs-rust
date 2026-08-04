@@ -18,7 +18,7 @@ http:
   perHost: 2
   retries: 2
   timeoutMs: 15000
-  userAgent: IGS/1.0.1 (+https://github.com/ishan-parihar/igs-rust)
+  userAgent: IGS/1.0.2 (+https://github.com/ishan-parihar/igs-rust)
 nlp:
   enabled: true
   max_entities: 20
