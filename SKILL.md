@@ -1,14 +1,14 @@
 ---
 name: igs
 description: >
-  Intelligence Gathering System — 64 tools, 411 sources, 47 countries.
+  Intelligence Gathering System — 91 tools, 418 sources, 45 countries.
   Fetch news, search research, browse web, analyze insights, and monitor
   geopolitics, tech, defense, health, and more.
 ---
 
 # IGS Skill
 
-Intelligence Gathering System — 64 tools across 20 domains for comprehensive intelligence collection.
+Intelligence Gathering System — 91 tools across 25 domains for comprehensive intelligence collection.
 
 <!-- Static skill — regenerate from CLI: igs --help -->
 <!-- Install: npx skills add ishan-parihar/igs-rust --skill igs -->
@@ -38,7 +38,7 @@ igs news fetch --pools GLOBAL_TECH_CYBER --limit 10
 }
 ```
 
-## Key Tools (64 total)
+## Key Tools (91 total)
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -61,9 +61,9 @@ igs news fetch --pools GLOBAL_TECH_CYBER --limit 10
 | SOP | 2 | List/execute workflows |
 | Browser | 8 | Headless browsing (Lightpanda) |
 
-## Intelligence Pools (14)
+## Intelligence Pools (18)
 
-GLOBAL_TECH_CYBER, INDIA_FOCUS, DEFENSE_SECURITY, HEALTH_MEDICAL, ENERGY_CLIMATE, FINANCE_CRYPTO, LEGAL_REGULATORY, POLITICS_GOVERNMENT, SOCIAL_MEDIA, SCIENCE_RESEARCH, ENVIRONMENT, PATENTS_IP, EMERGING_TECH, GEOPOLITICS
+GLOBAL_BREAKING, GLOBAL_GEOECON, GLOBAL_LAW_REG, GLOBAL_TECH_CYBER, GLOBAL_ENV_HEALTH, GLOBAL_CULT_SOC, INDIA_NATIONAL_BASE, INDIA_WATCHDOG, INDIA_FACTCHECK_DATA, INDIA_BUSINESS_REG, INDIA_REGION, INDIA_CITIES, GLOBAL_COUNTRIES, GLOBAL_CITIES, GLOBAL_HEALTH, GLOBAL_ENVIRONMENT, GLOBAL_SCIENCE, GLOBAL_DEFENSE_SECURITY
 
 ## Configuration
 
@@ -72,7 +72,7 @@ GLOBAL_TECH_CYBER, INDIA_FOCUS, DEFENSE_SECURITY, HEALTH_MEDICAL, ENERGY_CLIMATE
 ~/.config/igs-mcp/
 ├── settings.yml      # Main config
 ├── pools.yml         # Pool definitions
-├── sources.yml       # 411 source definitions
-└── countries.yml     # 47 country metadata
+├── sources.yml       # 418 source definitions
+└── countries.yml     # 45 country metadata
 ```
 
